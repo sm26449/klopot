@@ -44,7 +44,7 @@ dependencies = [
     # Cron parsing (schedules in S7)
     "croniter>=3.0.0,<4",
     # Logging
-    "structlog>=24.4.0,<25",
+    "structlog>=24.4.0,<27",
     # Email channel (S6)
     "aiosmtplib>=5.1.2,<6",
     # Web Push channel (S6)
