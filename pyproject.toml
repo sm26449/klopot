@@ -52,7 +52,7 @@ dependencies = [
     # Config import/export (S8)
     "pyyaml>=6.0,<7",
     # Metrics (S12)
-    "prometheus-client>=0.21.0,<0.22",
+    "prometheus-client>=0.21.0,<0.27",
 ]
 
 [project.optional-dependencies]
