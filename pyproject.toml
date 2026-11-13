@@ -64,7 +64,7 @@ dev = [
     "aiosqlite>=0.20.0,<0.22",  # in-memory test DB (S12c)
     "ruff>=0.7.0,<0.8",
     "black>=24.10.0,<25",
-    "mypy>=1.13.0,<2",
+    "mypy>=1.13.0,<3",
     "mypy-baseline>=0.7,<1",
     "types-croniter",
     "types-PyYAML",
