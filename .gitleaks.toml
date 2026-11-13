@@ -1,0 +1,23 @@
+# gitleaks config — default rules plus an allowlist for the credentials that
+# are deliberately in the tree (CI service passwords, test/smoke keys, throwaway
+# containers, documentation placeholders). A real secret in these files is still
+# caught — only these exact strings are excused.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test, CI and documentation credentials — not real secrets."
+regexes = [
+  # CI / smoke / test API keys and passwords.
+  '''alertd_(ci_smoke|test|dev)_key''',
+  '''ci-admin-bootstrap-pw-123''',
+  '''ci-new-password-456789''',
+  '''ci-root''',
+  # MySQL service / throwaway-container credentials (user:pass = alertd:alertd,
+  # root password "test").
+  '''alertd:alertd@''',
+  '''MYSQL_ROOT_PASSWORD[:=] ?(ci-root|devroot|change-me-root|test)\b''',
+  # Documentation placeholders (masked example keys).
+  '''alertd_x{8,}''',
+  '''alertd_xxxxxxxxxxxxxxxx''',
+]

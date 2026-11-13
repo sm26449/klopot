@@ -1,0 +1,47 @@
+# Klopot — local development overlay.
+#
+#   docker compose -f docker-compose.yml -f compose.dev.yml up --build
+#
+# Differences from production:
+#   • always builds the image from this checkout (no registry pull);
+#   • bundles a Mosquitto broker on 127.0.0.1:1883 (anonymous, dev only);
+#   • plain-HTTP login works (insecure cookies), /docs and /v1/metrics open,
+#     DEBUG logging with human-readable output;
+#   • MySQL published on 127.0.0.1:3306, root password defaults to a dev
+#     value; no backup sidecar (enable it with `--profile backup`).
+# For running the app straight from source with hot reload, see CONTRIBUTING.md.
+services:
+  alertd:
+    image: klopot:dev
+    pull_policy: build
+    depends_on:
+      mosquitto:
+        condition: service_started
+    environment:
+      ALERTD_MQTT_HOST: mosquitto
+      ALERTD_LOG_LEVEL: DEBUG
+      ALERTD_LOG_FORMAT: console
+      ALERTD_COOKIE_SECURE: "false"
+      ALERTD_DOCS_ENABLED: "true"
+      ALERTD_METRICS_REQUIRE_AUTH: "false"
+      ALERTD_ADMIN_BOOTSTRAP_PASSWORD: ${ALERTD_ADMIN_BOOTSTRAP_PASSWORD:-change-me-dev-only}
+
+  mysql:
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-devroot}
+    # Published on localhost so alertd can also run from source (see
+    # CONTRIBUTING.md) against the containerised database.
+    ports:
+      - "127.0.0.1:${KLOPOT_DEV_MYSQL_PORT:-3306}:3306"
+
+  backup:
+    profiles: ["backup"]
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    command: ["mosquitto", "-c", "/mosquitto-no-auth.conf"]
+    ports:
+      - "127.0.0.1:${KLOPOT_DEV_MQTT_PORT:-1883}:1883"
+    networks:
+      - internal

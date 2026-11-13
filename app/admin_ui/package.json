@@ -1,0 +1,5 @@
+{
+  "private": true,
+  "type": "module",
+  "description": "Marks the admin-UI ES modules under static/ so Node tooling (e.g. `node --test`) treats the .js files as ESM for unit testing. Lives outside static/ so it is never served to browsers; browsers ignore it anyway."
+}

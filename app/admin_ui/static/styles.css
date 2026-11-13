@@ -1,0 +1,757 @@
+/* alertd admin — hand-written, token-based, no build step.
+   Light/dark follow the OS unless the user toggles (data-theme on <html>). */
+
+:root {
+  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* Klopot palette — ADR-0001. Indigo = interaction, amber --signal = "live"
+     indicators only, ok/warn/crit = semantics only. */
+  --bg: #f6f7fb;
+  --surface: #ffffff;
+  --surface-2: #eef0f6;
+  --border: #d8dce6;
+  --text: #111827;
+  --text-muted: #5b6475;
+  /* Placeholder text — AA 4.5:1 on --surface, dimmer than real input (V15). */
+  --placeholder: #646c7a;
+  --accent: #4f46e5;
+  --accent-text: #ffffff;
+  --accent-soft: #e8e7fd;
+  --signal: #c2660a;
+  --ok: #136129;
+  --ok-soft: #dcf5e3;
+  --warn: #8a5a0d;
+  --warn-soft: #fff1d6;
+  --crit: #b02a25;
+  --crit-soft: #fde3e1;
+  --focus: #4f46e566;
+  --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .1);
+  --radius: 10px;
+  --sidebar-w: 232px;
+
+  /* Brand wordmark — ADR-0001. The sidebar embeds the outlined klopot signal
+     wordmark (docs/brand/); letters take the theme text colour, the two "o"
+     marks (source disc + open ring with satellite) are the brand amber. */
+  --wm-amber: #ffb31a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface-2: #1f262e;
+    --border: #2b3440;
+    --text: #e6edf3;
+    --text-muted: #94a3b8;
+    --placeholder: #808d9f;
+    --accent: #818cf8;
+    --accent-text: #0d1117;
+    --accent-soft: #1e1b4b;
+    --signal: #fbbf24;
+    --ok: #3fb950;
+    --ok-soft: #12351f;
+    --warn: #d29922;
+    --warn-soft: #3a2d10;
+    --crit: #f85149;
+    --crit-soft: #3d1414;
+    --focus: #818cf866;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --surface-2: #1f262e;
+  --border: #2b3440;
+  --text: #e6edf3;
+  --text-muted: #94a3b8;
+  --placeholder: #808d9f;
+  --accent: #818cf8;
+  --accent-text: #0d1117;
+  --accent-soft: #1e1b4b;
+  --signal: #fbbf24;
+  --ok: #3fb950;
+  --ok-soft: #12351f;
+  --warn: #d29922;
+  --warn-soft: #3a2d10;
+  --crit: #f85149;
+  --crit-soft: #3d1414;
+  --focus: #818cf866;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+}
+
+/* ──────────────────────────────────────────────────────────────────
+   OS-native theme families (ADR-0002). The Klopot family above stays the
+   DEFAULT and the brand (ADR-0001); these are opt-in alternatives that
+   borrow chrome + accent from the host OS palettes. Semantic tokens
+   (--ok/--warn/--crit/--signal) stay Klopot's across every family so an
+   alert's severity reads the same everywhere. app.js resolves family × mode
+   and writes `data-theme="<family>-<mode>"`. Every block below meets the same
+   AA pairs as Klopot — enforced by tests/js/contrast.test.mjs.
+   ────────────────────────────────────────────────────────────────── */
+
+/* macOS — light */
+:root[data-theme="macos-light"] {
+  --bg: #ececee;
+  --surface: #ffffff;
+  --surface-2: #f2f2f5;
+  --border: #dedee2;
+  --text: #1d1d1f;
+  --text-muted: #525258;
+  --placeholder: #626268;
+  --accent: #0052aa;
+  --accent-text: #ffffff;
+  --accent-soft: #e6eef6;
+  --signal: #c2660a;
+  --ok: #136129;
+  --ok-soft: #dcf5e3;
+  --warn: #8a5a0d;
+  --warn-soft: #fff1d6;
+  --crit: #b02a25;
+  --crit-soft: #fde3e1;
+  --focus: #007aff66;
+  --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .1);
+}
+
+/* macOS — dark */
+:root[data-theme="macos-dark"] {
+  --bg: #1e1e20;
+  --surface: #28282a;
+  --surface-2: #323235;
+  --border: #424246;
+  --text: #f5f5f7;
+  --text-muted: #a0a0a6;
+  --placeholder: #9c9ca2;
+  --accent: #80baff;
+  --accent-text: #1e1e20;
+  --accent-soft: #334864;
+  --signal: #fbbf24;
+  --ok: #3fb950;
+  --ok-soft: #12351f;
+  --warn: #d29922;
+  --warn-soft: #3a2d10;
+  --crit: #f85149;
+  --crit-soft: #3d1414;
+  --focus: #0a84ff66;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+}
+
+/* Windows 11 — light */
+:root[data-theme="win-light"] {
+  --bg: #f3f3f3;
+  --surface: #ffffff;
+  --surface-2: #f0f0f0;
+  --border: #e5e5e5;
+  --text: #1a1a1a;
+  --text-muted: #545454;
+  --placeholder: #606060;
+  --accent: #003e92;
+  --accent-text: #ffffff;
+  --accent-soft: #e6ecf4;
+  --signal: #c2660a;
+  --ok: #136129;
+  --ok-soft: #dcf5e3;
+  --warn: #8a5a0d;
+  --warn-soft: #fff1d6;
+  --crit: #b02a25;
+  --crit-soft: #fde3e1;
+  --focus: #005fb866;
+  --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .1);
+}
+
+/* Windows 11 — dark */
+:root[data-theme="win-dark"] {
+  --bg: #202020;
+  --surface: #2b2b2b;
+  --surface-2: #323232;
+  --border: #3d3d3d;
+  --text: #ffffff;
+  --text-muted: #a5a5a5;
+  --placeholder: #a0a0a0;
+  --accent: #99ebff;
+  --accent-text: #202020;
+  --accent-soft: #446672;
+  --signal: #fbbf24;
+  --ok: #3fb950;
+  --ok-soft: #12351f;
+  --warn: #d29922;
+  --warn-soft: #3a2d10;
+  --crit: #f85149;
+  --crit-soft: #3d1414;
+  --focus: #ffffff66;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+}
+
+/* GNOME — light */
+:root[data-theme="gnome-light"] {
+  --bg: #ebebed;
+  --surface: #ffffff;
+  --surface-2: #f2f2f4;
+  --border: #dedee2;
+  --text: #1e1e22;
+  --text-muted: #54545a;
+  --placeholder: #626268;
+  --accent: #15539e;
+  --accent-text: #ffffff;
+  --accent-soft: #e8eef5;
+  --signal: #c2660a;
+  --ok: #136129;
+  --ok-soft: #dcf5e3;
+  --warn: #8a5a0d;
+  --warn-soft: #fff1d6;
+  --crit: #b02a25;
+  --crit-soft: #fde3e1;
+  --focus: #3584e466;
+  --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .1);
+}
+
+/* GNOME — dark */
+:root[data-theme="gnome-dark"] {
+  --bg: #222226;
+  --surface: #2e2e32;
+  --surface-2: #38383c;
+  --border: #48484d;
+  --text: #ffffff;
+  --text-muted: #aaaaaf;
+  --placeholder: #a6a6ac;
+  --accent: #99c1f1;
+  --accent-text: #222226;
+  --accent-soft: #3b4b5f;
+  --signal: #fbbf24;
+  --ok: #3fb950;
+  --ok-soft: #12351f;
+  --warn: #d29922;
+  --warn-soft: #3a2d10;
+  --crit: #f85149;
+  --crit-soft: #3d1414;
+  --focus: #78aeed66;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+}
+
+/* KDE Plasma — light */
+:root[data-theme="kde-light"] {
+  --bg: #eff0f1;
+  --surface: #fcfcfc;
+  --surface-2: #f3f4f5;
+  --border: #dcdee0;
+  --text: #232629;
+  --text-muted: #50565c;
+  --placeholder: #5e646a;
+  --accent: #115478;
+  --accent-text: #ffffff;
+  --accent-soft: #e7eef2;
+  --signal: #c2660a;
+  --ok: #136129;
+  --ok-soft: #dcf5e3;
+  --warn: #8a5a0d;
+  --warn-soft: #fff1d6;
+  --crit: #b02a25;
+  --crit-soft: #fde3e1;
+  --focus: #2980b966;
+  --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .1);
+}
+
+/* KDE Plasma — dark */
+:root[data-theme="kde-dark"] {
+  --bg: #202326;
+  --surface: #292c30;
+  --surface-2: #31363b;
+  --border: #40464c;
+  --text: #fcfcfc;
+  --text-muted: #aaafb4;
+  --placeholder: #a6abb0;
+  --accent: #93cef0;
+  --accent-text: #202326;
+  --accent-soft: #3c5363;
+  --signal: #fbbf24;
+  --ok: #3fb950;
+  --ok-soft: #12351f;
+  --warn: #d29922;
+  --warn-soft: #3a2d10;
+  --crit: #f85149;
+  --crit-soft: #3d1414;
+  --focus: #3daee966;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font: 14px/1.5 var(--font);
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+/* Links inside running text carry a permanent underline so they are
+   distinguishable without relying on colour (WCAG 1.4.1, audit UX-005). Nav,
+   action and card links sit outside <p> and keep their own styling. */
+p a { text-decoration: underline; text-underline-offset: 2px; }
+/* A button that reads as plain cell text but is a real, keyboard-operable
+   control — used for the row "open details" affordance so table semantics stay
+   intact (audit UX-002). The global :focus-visible ring makes it visible. */
+.cell-btn { background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; cursor: pointer; text-align: left; }
+.cell-btn:hover { text-decoration: underline; }
+code, .mono { font-family: var(--mono); font-size: 12.5px; }
+h1 { font-size: 20px; margin: 0 0 4px; font-weight: 650; letter-spacing: -.01em; }
+h2 { font-size: 15px; margin: 0 0 12px; font-weight: 600; }
+p { margin: 0 0 10px; }
+.muted { color: var(--text-muted); }
+.small { font-size: 12.5px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+
+/* ── Layout ─────────────────────────────────────────────── */
+.app-root { min-height: 100%; }
+.shell { display: grid; grid-template-columns: var(--sidebar-w) 1fr; min-height: 100vh; }
+.sidebar {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 16px 12px;
+  display: flex; flex-direction: column; gap: 14px;
+  position: sticky; top: 0; height: 100vh; overflow-y: auto;
+}
+.brand { display: flex; align-items: center; gap: 9px; padding: 4px 8px 10px; }
+.brand img { width: 26px; height: 26px; }
+.brand b { font-size: 15px; letter-spacing: -.01em; }
+.brand-icon svg { display: block; width: 24px; height: 24px; }
+.brand .nav-toggle { margin-left: auto; }
+
+/* Wordmark (sidebar brand) — ADR-0001. The embedded outlined signal wordmark:
+   letters are currentColor, the "o" marks are --wm-amber. */
+.wm { display: inline-flex; align-items: center; color: var(--text); }
+.wm svg { display: block; width: auto; }
+.brand .wm svg { height: 20px; }
+
+/* Version pinned to the sidebar bottom; click opens the "what's new" modal. */
+.ver-btn {
+  margin-top: auto; display: flex; align-items: baseline; gap: 8px;
+  width: 100%; padding: 8px 10px; border: 1px solid transparent;
+  border-radius: 8px; background: none; cursor: pointer; font: inherit;
+  text-align: left; color: var(--text-muted);
+}
+.ver-btn:hover, .ver-btn:focus-visible { background: var(--surface-2); border-color: var(--border); }
+.ver-btn .ver { font-size: 12px; font-family: var(--mono); }
+.ver-btn .ver-whats { font-size: 12px; }
+.ver-btn:hover .ver-whats, .ver-btn:focus-visible .ver-whats { color: var(--accent); }
+
+/* Health badge with its label in the topbar. */
+.health { display: inline-flex; align-items: center; gap: 7px; }
+
+/* "What's new" modal body. */
+.cl-group { display: flex; flex-direction: column; gap: 8px; }
+.cl-ver { font-size: 12px; color: var(--text-muted); }
+.cl-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 7px; }
+.cl-list li { color: var(--text); }
+.nav-group { display: flex; flex-direction: column; gap: 2px; }
+.nav-title {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--text-muted); padding: 8px 10px 4px; font-weight: 600;
+}
+.nav a {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 10px; border-radius: 8px; color: var(--text);
+}
+.nav a:hover { background: var(--surface-2); text-decoration: none; }
+.nav a.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.nav a .soon { margin-left: auto; font-size: 10.5px; color: var(--text-muted); font-weight: 500; }
+
+.main { display: flex; flex-direction: column; min-width: 0; }
+.topbar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 24px; border-bottom: 1px solid var(--border);
+  background: var(--surface); position: sticky; top: 0; z-index: 5;
+}
+.topbar .spacer { flex: 1; }
+.content { padding: 24px; max-width: 1280px; width: 100%; }
+.page-head { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 18px; flex-wrap: wrap; }
+.page-head .actions { margin-left: auto; display: flex; gap: 8px; }
+
+/* ── Cards / grid ───────────────────────────────────────── */
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow);
+}
+.grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; }
+.kv dt { color: var(--text-muted); }
+.kv dd { margin: 0; }
+
+/* ── Badges / status ────────────────────────────────────── */
+.badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  background: var(--surface-2); color: var(--text-muted);
+}
+.badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.badge.ok { background: var(--ok-soft); color: var(--ok); }
+.badge.degraded, .badge.warning { background: var(--warn-soft); color: var(--warn); }
+.badge.down, .badge.critical { background: var(--crit-soft); color: var(--crit); }
+.badge.plain::before { display: none; }
+
+/* ── Forms ──────────────────────────────────────────────── */
+.field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+.field label { font-weight: 600; font-size: 13px; }
+.field .hint { color: var(--text-muted); font-size: 12px; }
+input, select, textarea {
+  font: inherit; color: var(--text); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; width: 100%;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--focus); }
+/* The translucent halo above is a pointer-focus companion only; a keyboard user
+   must still get the app's solid, AA-contrast indicator, so restore the outline
+   for :focus-visible (the input:focus rule's outline:none would otherwise strip
+   it on these controls) — audit UX-004. */
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+input[aria-invalid="true"] { border-color: var(--crit); }
+/* Placeholder text must clear AA 4.5:1 on the input surface in both themes —
+   the browser default greys it below that, and Firefox dims it further via
+   opacity, so set both explicitly (audit V15). */
+input::placeholder, textarea::placeholder { color: var(--placeholder); opacity: 1; }
+.btn {
+  font: inherit; font-weight: 600; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  border-radius: 8px; padding: 7px 14px; display: inline-flex; align-items: center; gap: 8px;
+}
+.btn:hover { background: var(--surface-2); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.btn.primary:hover { filter: brightness(1.05); }
+.btn.danger { color: var(--crit); border-color: var(--crit); }
+.btn.danger:hover { background: var(--crit-soft); }
+.btn.ghost { border-color: transparent; background: transparent; }
+.btn.ghost:hover { background: var(--surface-2); }
+.btn[disabled] { opacity: .55; cursor: not-allowed; }
+.btn.sm { padding: 4px 10px; font-size: 12.5px; }
+.form-actions { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+.error { color: var(--crit); font-size: 13px; }
+.alert {
+  border: 1px solid var(--border); border-left: 4px solid var(--accent);
+  background: var(--surface); border-radius: 8px; padding: 10px 14px; margin-bottom: 14px;
+}
+.alert.warn { border-left-color: var(--warn); }
+.alert.crit { border-left-color: var(--crit); }
+
+/* ── Tables ─────────────────────────────────────────────── */
+table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tbl th, .tbl td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.tbl th { color: var(--text-muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.tbl tr:last-child td { border-bottom: 0; }
+.tbl td.num { text-align: right; font-family: var(--mono); }
+
+/* ── Auth screens ───────────────────────────────────────── */
+.auth-wrap { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+.auth-card { width: 100%; max-width: 380px; }
+.auth-card .brand { padding: 0 0 14px; }
+
+/* ── Toasts ─────────────────────────────────────────────── */
+.toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 50; max-width: 420px; }
+.toast {
+  background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent);
+  border-radius: 8px; padding: 10px 14px; box-shadow: var(--shadow); font-size: 13px;
+}
+.toast.ok { border-left-color: var(--ok); }
+.toast.error { border-left-color: var(--crit); }
+.toast .mono { display: block; margin-top: 4px; color: var(--text-muted); }
+
+/* ── F4: data views ─────────────────────────────────────── */
+.nowrap { white-space: nowrap; }
+
+/* Filters bar */
+.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px 14px; }
+.filters input, .filters select { width: auto; min-width: 120px; padding: 6px 9px; }
+.filters .grow { flex: 1; min-width: 180px; }
+
+/* Chips */
+.chip {
+  display: inline-block; padding: 1px 8px; margin: 0 4px 2px 0; border-radius: 999px;
+  background: var(--surface-2); color: var(--text-muted); font-size: 11.5px; font-weight: 600;
+}
+.chip.crit { background: var(--crit-soft); color: var(--crit); }
+.badge.sev { text-transform: capitalize; }
+
+/* Log table live row highlight */
+.tbl.log tr:hover { background: var(--surface-2); }
+.live-row { animation: flash 1.4s ease-out; }
+.new-banner { display: block; width: 100%; margin-top: 12px; text-align: center;
+  background: var(--accent-soft); color: var(--accent); border-color: var(--accent); font-weight: 600; }
+@keyframes flash { from { background: color-mix(in srgb, var(--signal) 22%, transparent); } to { background: transparent; } }
+
+/* Pager */
+.pager { display: flex; align-items: center; gap: 8px; }
+.pager .spacer { flex: 1; }
+
+/* Live toggle */
+.live-toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; }
+.live-toggle input { width: auto; }
+.live-toggle .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); }
+.live-toggle .dot.on { background: var(--signal); box-shadow: 0 0 0 3px color-mix(in srgb, var(--signal) 25%, transparent); }
+/* Stream-health dot colours (audit UX-013 / ADR-0001): ok=connected,
+   warn=connecting/reconnecting, crit=session ended. */
+.live-toggle .dot.ok { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent); }
+.live-toggle .dot.warn { background: var(--warn); }
+.live-toggle .dot.crit { background: var(--crit); }
+.live-status { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Drawer */
+.drawer-overlay { position: fixed; inset: 0; background: rgba(8, 12, 20, .42); display: flex; justify-content: flex-end; z-index: 40; }
+.drawer { background: var(--surface); height: 100%; box-shadow: -8px 0 24px rgba(0, 0, 0, .18); display: flex; flex-direction: column; animation: slidein .16s ease-out; }
+@keyframes slidein { from { transform: translateX(16px); opacity: .6; } to { transform: none; opacity: 1; } }
+.drawer-head { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+.drawer-head h2 { margin: 0; flex: 1; }
+.drawer-body { padding: 16px 18px; overflow-y: auto; }
+.why-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.why-msg { background: var(--surface-2); border-radius: 8px; padding: 10px 12px; }
+.why-h { font-size: 13px; margin: 14px 0 6px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
+.why-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.json { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-family: var(--mono); font-size: 12px; overflow-x: auto; max-height: 340px; }
+
+/* Stat tiles */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.tile { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); }
+.tile-n { font-size: 26px; font-weight: 700; letter-spacing: -.02em; }
+.tile-l { color: var(--text-muted); font-size: 12.5px; margin-top: 2px; }
+.tile.crit { border-color: var(--crit); }
+.tile.crit .tile-n { color: var(--crit); }
+
+/* Mini bar charts */
+.mini-h { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); font-weight: 600; margin-bottom: 6px; }
+.bar-row { display: grid; grid-template-columns: 70px 1fr 32px; align-items: center; gap: 8px; margin-bottom: 5px; }
+.bar-label { font-size: 12px; color: var(--text-muted); text-transform: capitalize; }
+.bar-track { background: var(--surface-2); border-radius: 999px; height: 8px; overflow: hidden; }
+.bar-fill { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
+.bar-fill.warning { background: var(--warn); }
+.bar-fill.critical { background: var(--crit); }
+.bar-val { font-size: 12px; text-align: right; color: var(--text-muted); }
+
+/* Snooze form */
+.snooze-form { display: flex; flex-wrap: wrap; gap: 0 16px; align-items: flex-end; }
+.snooze-form .field { min-width: 160px; margin-bottom: 10px; }
+.snooze-form .field.grow { flex: 1; min-width: 200px; }
+.snooze-form .quick { display: flex; gap: 4px; margin-top: 4px; }
+.maint-row { background: var(--crit-soft); }
+.maint-row td { border-color: var(--crit); }
+
+/* ── F5: config editors ─────────────────────────────────── */
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.ch-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); cursor: pointer; }
+.ch-card:hover { border-color: var(--accent); }
+.ch-top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.ch-top .spacer { flex: 1; }
+.ch-icon { font-size: 18px; }
+.ch-meta { margin-bottom: 2px; }
+
+.editor { display: flex; flex-direction: column; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+.req { color: var(--crit); }
+.chk { display: inline-flex; align-items: center; gap: 8px; font-weight: 500; cursor: pointer; }
+.chk input { width: auto; }
+.editor-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.editor-actions .spacer { flex: 1; }
+.result { margin-top: 12px; padding: 10px 12px; background: var(--surface-2); border-radius: 8px; }
+textarea.invalid, input.invalid, .mono.invalid { border-color: var(--crit); }
+
+/* Secret field */
+.field.secret .secret-state { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.btn.sm.ghost.danger { color: var(--crit); }
+
+/* Template live preview */
+.preview { border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 14px; background: var(--surface-2); }
+.preview-head { margin-bottom: 6px; }
+.preview-out { margin-top: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+.pv-title { font-weight: 650; }
+.pv-msg { margin-top: 4px; white-space: pre-wrap; }
+.warn-text { color: var(--warn); margin-top: 6px; }
+
+/* Routing table */
+.tbl.routing th, .tbl.routing td { padding: 6px 8px; }
+.tbl.routing select { width: auto; padding: 4px 8px; }
+.tbl.routing input[type=checkbox] { width: auto; }
+.tmpl-group { margin-bottom: 16px; }
+
+/* Modal */
+.modal-overlay { position: fixed; inset: 0; background: rgba(8, 12, 20, .45); display: grid; place-items: center; z-index: 60;
+  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+/* Cap the modal to the overlay's content box and scroll inside it, so on a
+   short/landscape viewport it never overflows off-screen (audit UX-021). */
+.modal { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px 22px;
+  max-block-size: 100%; overflow: auto; overscroll-behavior: contain; }
+.modal h2 { margin-bottom: 12px; }
+
+/* ── F6: rules / variables / inputs / schedules / state ──── */
+.validation { margin-top: 8px; padding: 8px 10px; background: var(--surface-2); border-radius: 8px; }
+.chip.warn { background: var(--warn-soft); color: var(--warn); }
+details.cheat { margin: 0 0 14px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+details.cheat summary { cursor: pointer; font-weight: 600; font-size: 13px; }
+details.cheat table { margin-top: 8px; }
+details.cheat td { padding: 3px 8px; border: 0; }
+
+/* Per-kind tiered help panel at the bottom of an editor (lead + Details). */
+.kind-help { margin-top: 16px; padding: 12px 14px; background: var(--surface-2); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 8px; }
+.kind-help-lead { margin: 0; font-size: 13px; color: var(--text); line-height: 1.5; }
+.kind-help-icon { margin-right: 3px; }
+.kind-help-details { margin-top: 8px; }
+.kind-help-details summary { cursor: pointer; font-weight: 600; font-size: 12.5px; color: var(--accent); }
+.kind-help-details > p { margin: 8px 0 0; font-size: 13px; color: var(--text-muted); line-height: 1.55; }
+.kind-help-fields { margin: 10px 0 0; display: grid; gap: 6px; }
+.kind-help-fields > div { display: grid; grid-template-columns: minmax(110px, 160px) 1fr; gap: 10px; align-items: baseline; }
+.kind-help-fields dt { font-weight: 600; font-size: 12.5px; color: var(--text); }
+.kind-help-fields dd { margin: 0; font-size: 12.5px; color: var(--text-muted); line-height: 1.5; }
+.kind-help-example { margin: 10px 0 0; font-size: 12.5px; color: var(--text-muted); }
+.kind-help-example code { background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 1px 5px; font-family: var(--mono); font-size: 12px; color: var(--text); }
+.kind-help-tips { margin: 10px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--text-muted); line-height: 1.55; }
+.kind-help-tips li { margin: 3px 0; }
+@media (max-width: 520px) { .kind-help-fields > div { grid-template-columns: 1fr; gap: 1px; } }
+
+.taginput { border: 1px solid var(--border); border-radius: 8px; padding: 6px; }
+.taginput .tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
+.taginput .tags:empty { margin-bottom: 0; }
+.chip.tag { display: inline-flex; align-items: center; gap: 5px; background: var(--accent-soft); color: var(--accent); }
+.chip.tag .x { border: 0; background: none; color: inherit; cursor: pointer; padding: 0; font-size: 11px; line-height: 1; }
+.taginput input { border: 0; padding: 4px 6px; }
+.taginput input:focus { box-shadow: none; }
+
+.cron-next { margin: 6px 0 0; padding-left: 18px; }
+.cron-next li { font-family: var(--mono); font-size: 12px; }
+
+.firehose { max-height: 420px; overflow-y: auto; }
+.fh-row { display: flex; gap: 8px; padding: 4px 14px; border-bottom: 1px solid var(--border); }
+.fh-row:first-child { background: var(--accent-soft); }
+
+/* ── F7: api keys / audit / config ──────────────────────── */
+.key-box { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; word-break: break-all; font-size: 13px; }
+.scope-row { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 6px; font-weight: 500; }
+.scope-row input { width: auto; margin-top: 3px; }
+.editor-actions .sep { width: 1px; height: 22px; background: var(--border); margin: 0 4px; }
+.badge.small { font-size: 10.5px; padding: 1px 7px; }
+
+.tbl.diff td { vertical-align: top; }
+.diff-add td { background: var(--ok-soft); }
+.diff-del td { background: var(--crit-soft); }
+.diff-chg td { background: var(--warn-soft); }
+
+/* Visually-hidden text for screen readers (audit A27/A36). */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+/* The hamburger only appears on small screens (see the media query). */
+.nav-toggle { display: none; margin-left: auto; background: none; border: 0;
+  color: var(--text); font-size: 20px; cursor: pointer; padding: 4px 8px; border-radius: 8px; }
+.nav-toggle:focus-visible { outline: 2px solid var(--accent); }
+/* Wide tables scroll horizontally inside their card instead of being
+   clipped off-screen on mobile (audit A27). */
+.card:has(> table.tbl), .card:has(> .tbl-wrap) { overflow-x: auto; }
+.tbl-wrap { overflow-x: auto; }
+/* A horizontally-scrollable region a keyboard user can focus and arrow-scroll
+   (WCAG 2.1.1) — otherwise the content past the edge is unreachable without a
+   mouse/touch (audit V14). The outline shows the region has focus. */
+.scroll-x { overflow-x: auto; }
+.scroll-x:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* Never let the page itself scroll sideways. */
+html, body { overflow-x: hidden; }
+
+/* ── Responsive ─────────────────────────────────────────── */
+@media (max-width: 860px) {
+  .shell { grid-template-columns: 1fr; }
+  .sidebar { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--border); }
+  .brand { display: flex; align-items: center; }
+  .nav-toggle { display: inline-flex; align-items: center; gap: 4px; }
+  /* Collapse the menu by default so it doesn't consume the first screen;
+     the hamburger toggles `.nav-open` on the shell (audit A27). */
+  .nav { display: none; }
+  .nav-open .nav { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 2px 10px; margin-top: 8px; }
+  .nav-title { grid-column: 1 / -1; }
+  .content { padding: 16px; }
+  .topbar { padding: 10px 16px; flex-wrap: wrap; }
+  .row2 { grid-template-columns: 1fr; }
+  .filters { flex-wrap: wrap; }
+  .filters input, .filters select { width: 100%; }
+  .grid[style] { grid-template-columns: 1fr !important; }
+  .page-head { flex-wrap: wrap; gap: 8px; }
+}
+
+/* ── Accessibility (audit A25/A36) ─────────────────────────────── */
+/* Skip link — visually hidden until focused, then pinned top-left. */
+.skip-link {
+  position: absolute; left: 8px; top: -48px; z-index: 1000;
+  background: var(--accent); color: var(--accent-text);
+  padding: 8px 14px; border-radius: 8px; font-weight: 600;
+  transition: top .12s ease-out;
+}
+.skip-link:focus { top: 8px; outline: 2px solid var(--accent); }
+/* The main region is programmatically focused on route change (tabindex=-1)
+   — don't paint a persistent focus box for that. */
+.content:focus { outline: none; }
+/* Dialog containers are focused on open; keep that quiet too. */
+.drawer:focus, .modal:focus { outline: none; }
+
+/* Respect reduced-motion: drop the slide-in and the live-row flash. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .drawer { animation: none; }
+  .live-row { animation: none; }
+}
+
+/* List count / truncation notice (audit A30). */
+.list-meta { padding: 6px 2px 10px; }
+.list-meta.warn { color: var(--warn); font-weight: 600; }
+
+/* Persistent load-error with retry (audit UX-006). */
+.error-state { padding: 20px 16px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.error-state-msg { margin: 0; color: var(--crit); font-weight: 600; }
+
+/* Stale-data notice: a refresh failed but the last-good data is still shown
+   (audit UX-006 / R1). Warn tone — recoverable, not a hard failure. */
+.stale-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
+  margin: 0 0 10px; padding: 8px 12px; background: var(--warn-soft);
+  border: 1px solid var(--warn); border-radius: 8px; }
+.stale-banner-msg { color: var(--warn); font-weight: 600; }
+.stale-banner .btn { margin-left: auto; }
+
+/* Unsaved-draft recovery strip at the top of an editor (audit UX-007). Accent
+   (informational) tone — an offer, not an error. */
+.draft-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  margin: 0 0 14px; padding: 8px 12px; background: var(--accent-soft);
+  border: 1px solid var(--accent); border-radius: 8px; }
+.draft-banner-msg { font-weight: 600; }
+.draft-banner .spacer { flex: 1 1 auto; }
+
+/* Server field-error summary at the top of an editor (audit UX-018). */
+.field-error-summary { margin: 0 0 14px; padding: 10px 12px; background: var(--crit-soft); border: 1px solid var(--crit); border-radius: 8px; color: var(--crit); }
+.field-error-summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Each summary entry focuses its control (audit UX-018/R8). */
+.field-error-summary .link-btn { background: none; border: 0; padding: 0; margin: 0; cursor: pointer;
+  color: inherit; font: inherit; text-decoration: underline; }
+.field-error-summary .link-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.field.has-error textarea, .field.has-error input, .field.has-error select { border-color: var(--crit); }
+.field-error-summary ul { margin: 6px 0 0; padding-left: 18px; }
+.field-error-summary li { color: var(--text); font-size: 13px; }
+
+/* Touch targets (audit UX-019). On a coarse pointer (touch), the small controls
+   get at least a 44x44 hit area without changing the visual density on the
+   desktop. Tiny inline controls (the tag remove) grow their hit area with
+   negative margins so the chip itself stays compact. */
+@media (pointer: coarse) {
+  .btn, .btn.sm, .cell-btn { min-height: 44px; }
+  .btn.sm { padding-block: 8px; }
+  .nav a { min-height: 44px; }
+  .nav-toggle { min-width: 44px; min-height: 44px; justify-content: center; }
+  .chk { min-height: 44px; }
+  .chip.tag .x { min-width: 44px; min-height: 44px; display: inline-flex;
+    align-items: center; justify-content: center; margin: -12px -12px -12px -4px; }
+  /* Icon-only close needs a 44px-WIDE hit area, not just 44px tall (audit
+     UX-019/R9) — the ✕ is otherwise ~32px across. */
+  .drawer-head .btn, .modal .btn.ghost.sm { min-width: 44px; justify-content: center; }
+  /* Text-like form controls meet the 44px touch target in height — number/text/
+     datetime inputs, selects, textareas and the tag input field. */
+  input:not([type="checkbox"]):not([type="radio"]), textarea, select { min-height: 44px; }
+}

@@ -1,0 +1,57 @@
+# Example config pack — service uptime (heartbeat staleness)
+#
+# A service publishes a heartbeat value to MQTT on a timer; alertd fires a
+# critical alert when the heartbeat goes stale (the service stopped publishing).
+# Delivered to the built-in `ui_default` channel — no external channel needed.
+#
+# Import (dry-run, then apply):
+#   curl -H "X-API-Key: $KEY" -H 'Content-Type: application/yaml' \
+#        --data-binary @examples/uptime/uptime.yaml \
+#        "https://host/v1/config/import"            # validate only
+#   ...append ?apply=true to apply.
+#
+# Customise: point `host` at your broker and `topic` at your heartbeat topic.
+version: "1.0"
+
+inputs:
+  - name: heartbeats_mqtt
+    kind: mqtt
+    config:
+      host: mqtt.example.com
+      port: 1883
+
+variables:
+  - name: api_heartbeat
+    source: mqtt
+    input: heartbeats_mqtt
+    config:
+      topic: services/api/heartbeat
+      type: number
+      # Older than this with no new message = stale (the service is down).
+      stale_after_sec: 90
+    description: Monotonic heartbeat the API service publishes every ~30s.
+
+templates:
+  - type: service_down
+    severity: critical
+    icon: "🔴"
+    title_template: "Service DOWN — no heartbeat"
+    message_template: >-
+      No heartbeat from the API service for over 90 seconds. It has likely
+      stopped. Check the process and its MQTT connection.
+    min_repeat_min: 15
+
+rules:
+  - name: api_no_heartbeat
+    template_type: service_down
+    # var_age() is seconds since the variable last updated.
+    condition_expr: "var_age('api_heartbeat') > 90"
+    persist_n: 2
+    eval_interval_sec: 30
+    vars_extract: ["api_heartbeat"]
+    trigger_summary: "No API heartbeat for >90s on two consecutive checks"
+
+routes:
+  - template: service_down
+    channel: ui_default
+    severity_min: info

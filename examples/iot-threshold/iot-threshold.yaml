@@ -1,0 +1,66 @@
+# Example config pack — IoT sensor threshold → ntfy
+#
+# An MQTT sensor publishes a numeric reading; alertd fires when it crosses a
+# threshold and pushes the alert to an ntfy topic (phone notification) via a
+# webhook channel configured with the ntfy preset.
+#
+# Import (dry-run, then apply):
+#   curl -H "X-API-Key: $KEY" -H 'Content-Type: application/yaml' \
+#        --data-binary @examples/iot-threshold/iot-threshold.yaml \
+#        "https://host/v1/config/import?apply=true"
+#
+# Customise: set `host` (broker), the sensor `topic`, the ntfy `url`
+# (https://ntfy.sh/<your-topic>), and the threshold in condition_expr.
+version: "1.0"
+
+inputs:
+  - name: sensors_mqtt
+    kind: mqtt
+    config:
+      host: mqtt.example.com
+      port: 1883
+
+channels:
+  - name: ntfy_alerts
+    kind: webhook
+    config:
+      # ntfy preset: the message goes in the body as plain text.
+      url: https://ntfy.sh/replace-with-your-topic
+      method: POST
+      content_type: text/plain
+      body_template: "{message}"
+      expected_status: 200
+
+variables:
+  - name: freezer_temp_c
+    source: mqtt
+    input: sensors_mqtt
+    config:
+      topic: home/freezer/temperature
+      type: number
+      stale_after_sec: 300
+    description: Freezer temperature in °C.
+
+templates:
+  - type: freezer_too_warm
+    severity: critical
+    icon: "🌡️"
+    title_template: "Freezer too warm: {freezer_temp_c}°C"
+    message_template: >-
+      Freezer temperature is {freezer_temp_c}°C (threshold -10°C). Check the
+      door seal and the compressor.
+    min_repeat_min: 30
+
+rules:
+  - name: freezer_temp_high
+    template_type: freezer_too_warm
+    condition_expr: "freezer_temp_c > -10"
+    persist_n: 3
+    eval_interval_sec: 30
+    vars_extract: ["freezer_temp_c"]
+    trigger_summary: "Freezer above -10°C for three consecutive checks"
+
+routes:
+  - template: freezer_too_warm
+    channel: ntfy_alerts
+    severity_min: warning

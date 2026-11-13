@@ -1,0 +1,750 @@
+{
+  "channels": {
+    "ui": {
+      "fields": []
+    },
+    "banner": {
+      "fields": []
+    },
+    "telegram": {
+      "fields": [
+        {
+          "name": "chat_id",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "default": null,
+          "help": "Target chat / channel id."
+        },
+        {
+          "name": "bot_token",
+          "type": "string",
+          "required": false,
+          "secret": true,
+          "default": null,
+          "help": "Bot API token (write-only).",
+          "ref_field": "bot_token_ref"
+        },
+        {
+          "name": "parse_mode",
+          "type": "select",
+          "required": false,
+          "secret": false,
+          "default": "HTML",
+          "help": "Telegram message formatting.",
+          "options": [
+            "HTML",
+            "MarkdownV2",
+            ""
+          ]
+        }
+      ]
+    },
+    "sms": {
+      "fields": [
+        {
+          "name": "phone",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "default": null,
+          "help": "Destination E.164 number."
+        },
+        {
+          "name": "gateway_url",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "default": null,
+          "help": "SMS gateway base URL (http://sms-gateway:5080)."
+        },
+        {
+          "name": "gateway_api_key",
+          "type": "string",
+          "required": false,
+          "secret": true,
+          "default": null,
+          "help": "Gateway API key (write-only).",
+          "ref_field": "gateway_api_key_ref"
+        }
+      ]
+    },
+    "email": {
+      "fields": [
+        {
+          "name": "to",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "default": null,
+          "help": "Recipient address(es), comma-separated."
+        },
+        {
+          "name": "smtp_host",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "default": null,
+          "help": ""
+        },
+        {
+          "name": "smtp_port",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 587,
+          "help": ""
+        },
+        {
+          "name": "username",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": ""
+        },
+        {
+          "name": "password",
+          "type": "string",
+          "required": false,
+          "secret": true,
+          "default": null,
+          "help": "SMTP password (write-only).",
+          "ref_field": "password_ref"
+        },
+        {
+          "name": "from_addr",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Envelope sender (canonical). Defaults to username if blank."
+        },
+        {
+          "name": "use_tls",
+          "type": "bool",
+          "required": false,
+          "secret": false,
+          "default": true,
+          "help": ""
+        }
+      ]
+    },
+    "push": {
+      "fields": [
+        {
+          "name": "vapid_public",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": ""
+        },
+        {
+          "name": "vapid_private",
+          "type": "string",
+          "required": false,
+          "secret": true,
+          "default": null,
+          "help": "VAPID private key (write-only).",
+          "ref_field": "vapid_private_ref"
+        },
+        {
+          "name": "vapid_subject",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "mailto: or https: contact for VAPID (required to send)."
+        }
+      ]
+    },
+    "webhook": {
+      "fields": [
+        {
+          "name": "url",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "default": null,
+          "help": "Target URL."
+        },
+        {
+          "name": "method",
+          "type": "select",
+          "required": false,
+          "secret": false,
+          "default": "POST",
+          "help": "",
+          "options": [
+            "POST",
+            "PUT",
+            "GET"
+          ]
+        },
+        {
+          "name": "content_type",
+          "type": "select",
+          "required": false,
+          "secret": false,
+          "default": "application/json",
+          "help": "",
+          "options": [
+            "application/json",
+            "application/x-www-form-urlencoded",
+            "text/plain"
+          ]
+        },
+        {
+          "name": "body_template",
+          "type": "text",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Payload template; {title} {message} {severity} {type} placeholders. For JSON, wrap embedded text with the | jsonstr filter (e.g. {\"text\": \"{title | jsonstr}\"}). Leave blank for a default JSON body."
+        },
+        {
+          "name": "auth_kind",
+          "type": "select",
+          "required": false,
+          "secret": false,
+          "default": "",
+          "help": "How auth_value is applied.",
+          "options": [
+            "",
+            "bearer",
+            "basic",
+            "header"
+          ]
+        },
+        {
+          "name": "auth_header",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": "Authorization",
+          "help": "Header name when auth_kind=header."
+        },
+        {
+          "name": "auth_value",
+          "type": "string",
+          "required": false,
+          "secret": true,
+          "default": null,
+          "help": "Token / credential (write-only).",
+          "ref_field": "auth_value_ref"
+        },
+        {
+          "name": "expected_status",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 200,
+          "help": "HTTP status treated as success."
+        },
+        {
+          "name": "timeout_sec",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 10,
+          "help": ""
+        }
+      ]
+    }
+  },
+  "inputs": {
+    "mqtt": {
+      "fields": [
+        {
+          "name": "host",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "default": null,
+          "help": "Broker host."
+        },
+        {
+          "name": "port",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 1883,
+          "help": ""
+        },
+        {
+          "name": "username",
+          "type": "string",
+          "required": false,
+          "secret": true,
+          "default": null,
+          "help": "Broker username (write-only).",
+          "ref_field": "username_ref"
+        },
+        {
+          "name": "password",
+          "type": "string",
+          "required": false,
+          "secret": true,
+          "default": null,
+          "help": "Broker password (write-only).",
+          "ref_field": "password_ref"
+        },
+        {
+          "name": "client_id",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "MQTT client id; defaults to alertd-<input>."
+        },
+        {
+          "name": "keepalive",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 60,
+          "help": ""
+        }
+      ]
+    },
+    "http_poll": {
+      "fields": [
+        {
+          "name": "url",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "default": null,
+          "help": ""
+        },
+        {
+          "name": "method",
+          "type": "select",
+          "required": false,
+          "secret": false,
+          "default": "GET",
+          "help": "",
+          "options": [
+            "GET",
+            "POST"
+          ]
+        },
+        {
+          "name": "params",
+          "type": "json",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Query params as a JSON object."
+        },
+        {
+          "name": "headers",
+          "type": "json",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Extra request headers as a JSON object."
+        },
+        {
+          "name": "interval_sec",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 60,
+          "help": ""
+        },
+        {
+          "name": "timeout_sec",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 10,
+          "help": ""
+        },
+        {
+          "name": "auth_kind",
+          "type": "select",
+          "required": false,
+          "secret": false,
+          "default": "",
+          "help": "",
+          "options": [
+            "",
+            "bearer",
+            "basic",
+            "header"
+          ]
+        },
+        {
+          "name": "auth_value",
+          "type": "string",
+          "required": false,
+          "secret": true,
+          "default": null,
+          "help": "Token / credential (write-only).",
+          "ref_field": "auth_value_ref"
+        }
+      ]
+    },
+    "webhook": {
+      "fields": [
+        {
+          "name": "auth_required",
+          "type": "bool",
+          "required": false,
+          "secret": false,
+          "default": true,
+          "help": "Require X-Input-Token on POST /v1/inputs/{id}/webhook."
+        },
+        {
+          "name": "auth_token",
+          "type": "string",
+          "required": false,
+          "secret": true,
+          "default": null,
+          "help": "Expected inbound token (write-only).",
+          "ref_field": "auth_token_ref"
+        }
+      ]
+    },
+    "sms_inbox": {
+      "fields": [
+        {
+          "name": "auth_required",
+          "type": "bool",
+          "required": false,
+          "secret": false,
+          "default": true,
+          "help": "Require X-Input-Token on the inbound POST /v1/inputs/{id}/webhook. Set False to opt out explicitly."
+        },
+        {
+          "name": "auth_token",
+          "type": "string",
+          "required": false,
+          "secret": true,
+          "default": null,
+          "help": "Expected inbound token (write-only), checked when auth_required is true.",
+          "ref_field": "auth_token_ref"
+        }
+      ]
+    },
+    "schedule": {
+      "fields": []
+    },
+    "email_imap": {
+      "fields": [
+        {
+          "name": "host",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "default": null,
+          "help": ""
+        },
+        {
+          "name": "port",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 993,
+          "help": ""
+        },
+        {
+          "name": "username",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "default": null,
+          "help": ""
+        },
+        {
+          "name": "password",
+          "type": "string",
+          "required": false,
+          "secret": true,
+          "default": null,
+          "help": "IMAP password (write-only).",
+          "ref_field": "password_ref"
+        },
+        {
+          "name": "mailbox",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": "INBOX",
+          "help": ""
+        },
+        {
+          "name": "poll_interval_sec",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 60,
+          "help": ""
+        }
+      ]
+    }
+  },
+  "variables": {
+    "mqtt": {
+      "fields": [
+        {
+          "name": "input_id",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Owning MQTT input id."
+        },
+        {
+          "name": "topic",
+          "type": "topic",
+          "required": true,
+          "secret": false,
+          "default": null,
+          "help": "MQTT topic (supports + / # wildcards)."
+        },
+        {
+          "name": "json_path",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Dot-path within a JSON payload (e.g. battery.soc)."
+        },
+        {
+          "name": "type",
+          "type": "select",
+          "required": false,
+          "secret": false,
+          "default": "number",
+          "help": "Coercion applied to the extracted value.",
+          "options": [
+            "number",
+            "bool",
+            "string",
+            "json"
+          ]
+        },
+        {
+          "name": "stale_after_sec",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 300,
+          "help": "Value is considered stale past this age; rules gate on it."
+        }
+      ]
+    },
+    "aggregate": {
+      "fields": [
+        {
+          "name": "topics",
+          "type": "json",
+          "required": true,
+          "secret": false,
+          "default": null,
+          "help": "Member topics as a JSON array."
+        },
+        {
+          "name": "aggregate",
+          "type": "select",
+          "required": false,
+          "secret": false,
+          "default": "sum",
+          "help": "",
+          "options": [
+            "sum",
+            "avg",
+            "max",
+            "min"
+          ]
+        },
+        {
+          "name": "json_path",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Dot-path within each member payload."
+        },
+        {
+          "name": "type",
+          "type": "select",
+          "required": false,
+          "secret": false,
+          "default": "number",
+          "help": "",
+          "options": [
+            "number",
+            "bool",
+            "string",
+            "json"
+          ]
+        },
+        {
+          "name": "stale_after_sec",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 300,
+          "help": ""
+        }
+      ]
+    },
+    "constant": {
+      "fields": [
+        {
+          "name": "value",
+          "type": "json",
+          "required": true,
+          "secret": false,
+          "default": null,
+          "help": "Static value (never goes stale)."
+        },
+        {
+          "name": "type",
+          "type": "select",
+          "required": false,
+          "secret": false,
+          "default": "number",
+          "help": "",
+          "options": [
+            "number",
+            "bool",
+            "string",
+            "json"
+          ]
+        }
+      ]
+    },
+    "computed": {
+      "fields": [
+        {
+          "name": "formula",
+          "type": "text",
+          "required": true,
+          "secret": false,
+          "default": null,
+          "help": "Expression over other variables (expression language)."
+        },
+        {
+          "name": "type",
+          "type": "select",
+          "required": false,
+          "secret": false,
+          "default": "number",
+          "help": "",
+          "options": [
+            "number",
+            "bool",
+            "string",
+            "json"
+          ]
+        },
+        {
+          "name": "stale_after_sec",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 300,
+          "help": ""
+        }
+      ]
+    },
+    "schedule": {
+      "fields": [
+        {
+          "name": "cron",
+          "type": "cron",
+          "required": true,
+          "secret": false,
+          "default": null,
+          "help": "Cron expression for the slot value."
+        },
+        {
+          "name": "value",
+          "type": "json",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Value to set while the slot is active."
+        }
+      ]
+    }
+  },
+  "webhook_presets": [
+    {
+      "id": "discord",
+      "label": "Discord",
+      "config": {
+        "content_type": "application/json",
+        "expected_status": 204,
+        "body_template": "{\"content\": \"**{title | jsonstr}**\\n{message | jsonstr}\"}"
+      },
+      "help": "Channel webhook URL (\u2026/api/webhooks/<id>/<token>)."
+    },
+    {
+      "id": "slack",
+      "label": "Slack",
+      "config": {
+        "content_type": "application/json",
+        "expected_status": 200,
+        "body_template": "{\"text\": \"*{title | jsonstr}*\\n{message | jsonstr}\"}"
+      },
+      "help": "Incoming webhook URL (hooks.slack.com/services/\u2026)."
+    },
+    {
+      "id": "teams",
+      "label": "Microsoft Teams",
+      "config": {
+        "content_type": "application/json",
+        "expected_status": 200,
+        "body_template": "{\"title\": \"{title | jsonstr}\", \"text\": \"{message | jsonstr}\"}"
+      },
+      "help": "Teams incoming webhook / workflow URL."
+    },
+    {
+      "id": "mattermost",
+      "label": "Mattermost",
+      "config": {
+        "content_type": "application/json",
+        "expected_status": 200,
+        "body_template": "{\"text\": \"**{title | jsonstr}**\\n{message | jsonstr}\"}"
+      },
+      "help": "Incoming webhook URL (\u2026/hooks/<token>)."
+    },
+    {
+      "id": "home_assistant",
+      "label": "Home Assistant",
+      "config": {
+        "content_type": "application/json",
+        "expected_status": 200,
+        "body_template": "{\"title\": \"{title | jsonstr}\", \"message\": \"{message | jsonstr}\"}",
+        "auth_kind": "bearer"
+      },
+      "help": "Webhook (/api/webhook/<id>) or REST (/api/services/notify/*) with a long-lived token in auth_value."
+    },
+    {
+      "id": "ntfy",
+      "label": "ntfy",
+      "config": {
+        "content_type": "text/plain",
+        "expected_status": 200,
+        "body_template": "{message}"
+      },
+      "help": "Topic URL (https://ntfy.sh/<topic>). Title goes in the body."
+    },
+    {
+      "id": "generic",
+      "label": "Generic JSON",
+      "config": {
+        "content_type": "application/json",
+        "expected_status": 200,
+        "body_template": "{\"title\": \"{title | jsonstr}\", \"message\": \"{message | jsonstr}\", \"severity\": \"{severity}\", \"type\": \"{type}\"}"
+      },
+      "help": "Plain JSON POST with the standard fields."
+    }
+  ]
+}

@@ -1,0 +1,71 @@
+# Backup sidecar — uses the same mysql:8.0 base as the DB so the
+# dump tool natively supports caching_sha2_password (alpine's
+# mariadb-client doesn't ship the auth plugin shared lib and fails
+# against MySQL 8 with default auth). We don't install cron — too
+# fragile inside containers (setpgid issues on dcron, full apt-get
+# at every restart on debian cron). A tiny shell loop that wakes
+# every minute, checks the schedule, fires the dump, sleeps, is
+# trivial and reliable.
+FROM mysql:8.0
+
+# scripts/backup.sh is the actual dump+rotate routine; the
+# entrypoint loop matches the cron expression and invokes it.
+COPY scripts/backup.sh /usr/local/bin/backup.sh
+RUN chmod +x /usr/local/bin/backup.sh
+
+COPY <<'ENTRYPOINT' /usr/local/bin/entrypoint.sh
+#!/bin/sh
+# Tiny in-image scheduler. BACKUP_CRON is a "minute hour"
+# expression (the day-of-month / month / day-of-week fields are
+# accepted but only minute + hour are honored — the daily backup
+# pattern is the use case). Stars match anything.
+#
+# Format: "<MIN> <HOUR> [* * *]" — e.g. "0 2 * * *" → 02:00 daily.
+set -eu
+
+: "${BACKUP_CRON:=0 2 * * *}"
+: "${BACKUP_DIR:=/backups}"
+mkdir -p "$BACKUP_DIR"
+
+cron_min=$(echo "$BACKUP_CRON" | awk '{print $1}')
+cron_hr=$(echo "$BACKUP_CRON" | awk '{print $2}')
+
+echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] sidecar starting; schedule=$cron_min $cron_hr * * *"
+
+# First-run sanity backup. Exit-code-tolerant — if MySQL isn't ready
+# yet the next scheduled tick will retry.
+/usr/local/bin/backup.sh >> "$BACKUP_DIR/backup.log" 2>&1 || \
+    echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] initial backup failed; will retry on schedule"
+
+last_fire_min=""
+while true; do
+    cur_min=$(date -u +%M)
+    cur_hr=$(date -u +%H)
+    # Date prefix so the dedup key resets each day. Without it,
+    # `last_fire_min="03-00"` survives 24h+ in memory and blocks the
+    # next morning's 03:00 fire — silent no-op until container restart.
+    cur_key="$(date -u +%Y-%m-%d)-$cur_hr-$cur_min"
+
+    # Numeric compare — `date +%M` returns zero-padded ("00", "02"),
+    # while user cron typically writes "0", "2". String compare
+    # would silently never match. `10#NN` forces base-10 so leading
+    # zeros don't trigger octal parsing. Stars match anything.
+    min_match=0; [ "$cron_min" = "*" ] && min_match=1
+    [ "$cron_min" != "*" ] && [ "$((10#$cron_min))" = "$((10#$cur_min))" ] && min_match=1
+    hr_match=0;  [ "$cron_hr" = "*" ] && hr_match=1
+    [ "$cron_hr" != "*" ] && [ "$((10#$cron_hr))" = "$((10#$cur_hr))" ] && hr_match=1
+
+    if [ "$min_match" = "1" ] && [ "$hr_match" = "1" ] && [ "$cur_key" != "$last_fire_min" ]; then
+        /usr/local/bin/backup.sh >> "$BACKUP_DIR/backup.log" 2>&1 || \
+            echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] scheduled backup failed"
+        last_fire_min="$cur_key"
+    fi
+
+    sleep 30
+done
+ENTRYPOINT
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+VOLUME /backups
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

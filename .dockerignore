@@ -1,0 +1,48 @@
+# VCS
+.git/
+.github/
+
+# Python build artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+.tox/
+.venv/
+venv/
+env/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Local secrets / data — must NEVER ship into image
+.env
+.env.local
+*.pem
+*.key
+
+# Docs / dev-only
+docs/
+tests/
+README.md
+CLAUDE.md
+
+# scripts/ is needed at runtime (seed) — DO NOT exclude
+
+# Local DB / backups
+*.db
+*.sqlite*
+data/
+backups/
+
+# Logs
+*.log
+logs/

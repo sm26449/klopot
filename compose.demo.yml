@@ -1,0 +1,69 @@
+# Self-contained Klopot demo stack.
+#
+#   docker compose -f compose.demo.yml up -d --build
+#   ./demo/smoke.sh                 # asserts one notification within 2 minutes
+#   docker compose -f compose.demo.yml down -v
+#
+# A sine-wave publisher feeds MQTT; Klopot fires a rule when it crosses a
+# threshold and POSTs the alert to a webhook sink. Nothing leaves the host:
+# ports are bound to 127.0.0.1, the MySQL data is tmpfs (ephemeral).
+name: klopot-demo
+
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: demoroot
+      MYSQL_DATABASE: alertd
+      MYSQL_USER: alertd
+      MYSQL_PASSWORD: alertd
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "alertd", "-palertd"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    volumes:
+      - ./demo/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+
+  klopot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # Retry if it loses the first-connect race with MySQL (prod uses
+    # restart: always; the demo just needs it to come up).
+    restart: on-failure
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      ALERTD_DATABASE_URL: mysql+aiomysql://alertd:alertd@mysql:3306/alertd
+      ALERTD_MQTT_HOST: mosquitto
+      ALERTD_MQTT_PORT: "1883"
+      ALERTD_BOOTSTRAP_ADMIN_KEY: alertd_demo_key_please_change
+      ALERTD_BIND_HOST: 0.0.0.0
+      ALERTD_BIND_PORT: "5090"
+      ALERTD_LOG_LEVEL: INFO
+    ports:
+      - "127.0.0.1:${DEMO_KLOPOT_PORT:-8090}:5090"
+
+  publisher:
+    image: eclipse-mosquitto:2
+    depends_on:
+      - mosquitto
+    volumes:
+      - ./demo/publisher.sh:/app/publisher.sh:ro
+    command: ["sh", "/app/publisher.sh"]
+
+  sink:
+    image: python:3.12-slim
+    volumes:
+      - ./demo/sink.py:/app/sink.py:ro
+    command: ["python", "/app/sink.py"]
+    ports:
+      - "127.0.0.1:${DEMO_SINK_PORT:-8091}:8080"

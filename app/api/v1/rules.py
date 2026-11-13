@@ -1,0 +1,416 @@
+"""``/v1/rules`` — rule CRUD + test/eval-now actions."""
+from __future__ import annotations
+
+import asyncio
+import re
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
+from sqlalchemy import or_
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ...audit import model_to_dict, record_change
+from ...auth import Actor, require_scope
+from ...config import get_settings
+from ...core import dispatcher as dispatcher_module
+from ...core import eval as eval_module
+from ...core.engine import get_engine
+from ...core.rule_state_ops import reset_streak_on_reconfig
+from ...core.state_cache import get_state_cache
+from ...db import get_session
+from ...db.models import Rule, RuleState
+from ...schemas.common import Page
+from ...schemas.fire import FireResponse
+from ...schemas.rule import RuleCreate, RuleRead, RuleUpdate
+from ...utils.like import like_escape
+from ._crud import crud_get_or_404, crud_list, enforce_create_cap, flush_or_409
+
+router = APIRouter()
+
+# Wall-clock budget for a single /rules/validate evaluation (audit R08).
+_VALIDATE_EVAL_BUDGET_SEC = 2.0
+
+
+class TestRuleBody(BaseModel):
+    """``POST /v1/rules/{id}/test`` body — supply mock context."""
+
+    context: dict[str, Any] = Field(default_factory=dict)
+
+
+class EvalRuleResult(BaseModel):
+    """``POST /v1/rules/{id}/eval-now`` response."""
+
+    matched: bool
+    error: str | None = None
+    missing_vars: list[str] | None = None
+    context: dict[str, Any]
+    consecutive_match_count: int
+
+
+class ValidateRuleBody(BaseModel):
+    """``POST /v1/rules/validate`` body."""
+
+    # Bounded so a read-scoped caller can't submit a huge expression that
+    # amplifies a pathological regex (audit R08).
+    condition_expr: str = Field(min_length=1, max_length=2000)
+    vars_extract: list[str] | None = None
+
+
+class ReferencedVar(BaseModel):
+    name: str
+    live_value: Any = None
+    age_sec: float | None = None
+    is_stale: bool = False
+    present: bool = True
+
+
+class ValidateRuleResult(BaseModel):
+    ok: bool
+    error: str | None = None
+    result: Any = None
+    referenced_vars: list[ReferencedVar] = Field(default_factory=list)
+    unknown_vars: list[str] = Field(default_factory=list)
+
+
+# Expression tokens that are language keywords / literals, never variables.
+_EXPR_KEYWORDS = frozenset({
+    "and", "or", "not", "in", "is", "if", "else", "true", "false",
+    "none", "null", "True", "False", "None", "AND", "OR", "NOT",
+})
+_NAME_RE = re.compile(r"[A-Za-z_][\w.]*")
+
+
+def _referenced_names(expr: str) -> list[str]:
+    """Variable-ish names in an expression (dedup, order-preserving).
+
+    Excludes language keywords and function calls (a name immediately
+    followed by ``(``), so only value references remain — close enough
+    to what the engine treats as variables for a validate preview.
+    """
+    seen: dict[str, None] = {}
+    for m in _NAME_RE.finditer(expr):
+        name = m.group(0)
+        if name in _EXPR_KEYWORDS:
+            continue
+        # Skip function calls: the next non-space char after the name is '('.
+        if expr[m.end():].lstrip().startswith("("):
+            continue
+        seen.setdefault(name, None)
+    return list(seen)
+
+
+def _validate_expr_or_422(expr: str) -> None:
+    """Refuse an expression outside the language contract at write time, so a
+    dangerous one is never stored (audit A-01)."""
+    try:
+        eval_module.validate_expression(expr)
+    except eval_module.ExpressionError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"invalid expression: {e}",
+        ) from e
+
+
+@router.get("", response_model=Page[RuleRead], summary="List rules")
+async def list_rules(
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=500),
+    template_type: str | None = None,
+    enabled: bool | None = None,
+    has_error: bool | None = Query(
+        default=None,
+        description="true → only rules with eval errors (consecutive_eval_errors>0).",
+    ),
+    search: str | None = Query(
+        default=None, description="Free-text match on name / condition / summary.",
+    ),
+    session: AsyncSession = Depends(get_session),
+    actor: Actor = Depends(require_scope("read")),
+) -> Page[RuleRead]:
+    filters = []
+    if template_type is not None:
+        filters.append(Rule.template_type == template_type)
+    if enabled is not None:
+        filters.append(Rule.enabled.is_(enabled))
+    if has_error is True:
+        filters.append(Rule.consecutive_eval_errors > 0)
+    elif has_error is False:
+        filters.append(Rule.consecutive_eval_errors == 0)
+    if search:
+        like = f"%{like_escape(search)}%"
+        filters.append(or_(
+            Rule.name.like(like, escape="\\"),
+            Rule.condition_expr.like(like, escape="\\"),
+            Rule.trigger_summary.like(like, escape="\\"),
+        ))
+    items, total = await crud_list(
+        session, Rule, skip=skip, limit=limit, filters=filters,
+        order_by=(Rule.sort_order.asc(), Rule.name.asc()),
+    )
+    return Page(
+        items=[RuleRead.model_validate(i) for i in items],
+        total=total, limit=limit, offset=skip,
+    )
+
+
+@router.post(
+    "", response_model=RuleRead, status_code=status.HTTP_201_CREATED,
+    summary="Create rule",
+)
+async def create_rule(
+    body: RuleCreate,
+    session: AsyncSession = Depends(get_session),
+    actor: Actor = Depends(require_scope("admin")),
+) -> RuleRead:
+    _validate_expr_or_422(body.condition_expr)
+    await enforce_create_cap(session, Rule, get_settings().max_rules, entity="Rule")
+    obj = Rule(**body.model_dump())
+    session.add(obj)
+    await flush_or_409(session, "Rule create")
+    await session.refresh(obj)
+    await record_change(
+        session, actor, "rule.create",
+        resource_kind="rule", resource_id=str(obj.id),
+        after=model_to_dict(obj),
+    )
+    await session.commit()
+    await get_engine().reload_rules()
+    return RuleRead.model_validate(obj)
+
+
+@router.get(
+    "/by-name/{name}",
+    response_model=RuleRead,
+    summary="Get rule by name",
+    description=(
+        "Companion to ``GET /v1/rules/{rule_id}`` for callers that hold the "
+        "rule name (config files, log analysis, UI URL routing) but not the "
+        "auto-increment id. Mounted under ``/by-name/`` so it never collides "
+        "with the integer-id route."
+    ),
+)
+async def get_rule_by_name(
+    name: str,
+    session: AsyncSession = Depends(get_session),
+    actor: Actor = Depends(require_scope("read")),
+) -> RuleRead:
+    from sqlalchemy import select
+    obj = (
+        await session.execute(select(Rule).where(Rule.name == name))
+    ).scalar_one_or_none()
+    if obj is None:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Rule not found: {name}",
+        )
+    return RuleRead.model_validate(obj)
+
+
+@router.get("/{rule_id}", response_model=RuleRead, summary="Get rule")
+async def get_rule(
+    rule_id: int,
+    session: AsyncSession = Depends(get_session),
+    actor: Actor = Depends(require_scope("read")),
+) -> RuleRead:
+    obj = await crud_get_or_404(session, Rule, rule_id)
+    return RuleRead.model_validate(obj)
+
+
+@router.patch("/{rule_id}", response_model=RuleRead, summary="Update rule")
+async def update_rule(
+    rule_id: int,
+    body: RuleUpdate,
+    session: AsyncSession = Depends(get_session),
+    actor: Actor = Depends(require_scope("admin")),
+) -> RuleRead:
+    obj = await crud_get_or_404(session, Rule, rule_id)
+    before = model_to_dict(obj)
+    prev_expr = obj.condition_expr
+    fields = body.model_dump(exclude_unset=True)
+    if "condition_expr" in fields:
+        _validate_expr_or_422(fields["condition_expr"])
+    for k, v in fields.items():
+        setattr(obj, k, v)
+    # Durably reset the match streak if the condition expression changed, in
+    # this same transaction, so a restart can't restore a streak counted
+    # against the old expression (audit B-06).
+    await reset_streak_on_reconfig(session, obj, previous_condition_expr=prev_expr)
+    await flush_or_409(session, "Rule update")
+    await session.refresh(obj)
+    await record_change(
+        session, actor, "rule.update",
+        resource_kind="rule", resource_id=str(obj.id),
+        before=before, after=model_to_dict(obj),
+    )
+    await session.commit()
+    await get_engine().reload_rules()
+    return RuleRead.model_validate(obj)
+
+
+@router.delete("/{rule_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete rule")
+async def delete_rule(
+    rule_id: int,
+    session: AsyncSession = Depends(get_session),
+    actor: Actor = Depends(require_scope("admin")),
+):
+    obj = await crud_get_or_404(session, Rule, rule_id)
+    before = model_to_dict(obj)
+    await session.delete(obj)
+    await record_change(
+        session, actor, "rule.delete",
+        resource_kind="rule", resource_id=str(rule_id), before=before,
+    )
+    await session.commit()
+    await get_engine().reload_rules()
+
+
+# ── Actions ────────────────────────────────────────────────────────
+
+
+@router.post(
+    "/{rule_id}/test",
+    response_model=FireResponse,
+    summary="Test fire — bypass throttle/quiet, dry-run on mock context",
+    description=(
+        "Fires the rule's template with caller-supplied context. The "
+        "envelope is marked test=True so throttle and quiet hours are "
+        "skipped (template.enabled and snooze still apply). Useful from "
+        "the UI to preview a rendered title/message."
+    ),
+)
+async def test_rule(
+    rule_id: int,
+    body: TestRuleBody,
+    session: AsyncSession = Depends(get_session),
+    actor: Actor = Depends(require_scope("admin")),
+) -> FireResponse:
+    rule = await crud_get_or_404(session, Rule, rule_id)
+    envelope = dispatcher_module.FireEnvelope(
+        type=rule.template_type,
+        context=dict(body.context),
+        test=True,
+        source=f"test:{actor.name}",
+        rule_id=rule.id,
+    )
+    result = await dispatcher_module.fire(envelope, session)
+    await session.commit()
+    return FireResponse(**result.as_dict())
+
+
+@router.post(
+    "/{rule_id}/eval-now",
+    response_model=EvalRuleResult,
+    summary="Force evaluate rule against current state cache (no fire)",
+    description=(
+        "Builds the rule's context from the live state cache, runs the "
+        "condition expression once, and returns the outcome. Does NOT "
+        "increment persist counters or dispatch — diagnostic only."
+    ),
+)
+async def eval_now(
+    rule_id: int,
+    session: AsyncSession = Depends(get_session),
+    actor: Actor = Depends(require_scope("read")),
+) -> EvalRuleResult:
+    rule = await crud_get_or_404(session, Rule, rule_id)
+    cache = get_state_cache()
+    snap = cache.snapshot()
+    # Mirror engine._build_context including staleness filtering
+    # (audit H-4). Stale variables are dropped so eval-now reflects
+    # exactly what the engine tick would see — surfacing stale-driven
+    # eval errors during diagnostics instead of letting the variable
+    # silently leak into the rule's match decision.
+    if rule.vars_extract:
+        wanted = set(rule.vars_extract)
+        items = ((k, v) for k, v in snap.items() if k in wanted)
+    else:
+        items = snap.items()
+    ctx = {k: v.value for k, v in items if not v.is_stale()}
+
+    settings = get_settings()
+    res = eval_module.evaluate(
+        rule.condition_expr, ctx,
+        timezone=settings.tz, state_cache=cache,
+    )
+
+    state = (
+        await session.execute(
+            __import__("sqlalchemy").select(RuleState).where(RuleState.rule_id == rule.id)
+        )
+    ).scalar_one_or_none()
+    counter = state.consecutive_match_count if state else 0
+
+    return EvalRuleResult(
+        matched=bool(res.value) if res.ok else False,
+        error=res.error,
+        missing_vars=res.missing_vars,
+        context=ctx,
+        consecutive_match_count=counter,
+    )
+
+
+@router.post(
+    "/validate",
+    response_model=ValidateRuleResult,
+    summary="Parse + check a condition expression (no rule, no side effects)",
+    description=(
+        "Evaluates the expression against the live state cache so the UI "
+        "editor can show whether it parses, which variables it references "
+        "(with their current value / age / staleness) and which names are "
+        "unknown. Does not create or modify any rule."
+    ),
+)
+async def validate_rule(
+    body: ValidateRuleBody,
+    session: AsyncSession = Depends(get_session),
+    actor: Actor = Depends(require_scope("read")),
+) -> ValidateRuleResult:
+    cache = get_state_cache()
+    snap = cache.snapshot()
+    ctx = {k: v.value for k, v in snap.items() if not v.is_stale()}
+
+    settings = get_settings()
+    # User regexes compile under RE2 (audit V10), which matches in linear time,
+    # so a catastrophic pattern can no longer block the loop. This off-thread
+    # wall-clock budget stays as defense-in-depth for any other costly
+    # expression, returning a clean 422 instead of hanging the request.
+    try:
+        res = await asyncio.wait_for(
+            asyncio.to_thread(
+                eval_module.evaluate,
+                body.condition_expr, ctx,
+                timezone=settings.tz, state_cache=cache,
+            ),
+            timeout=_VALIDATE_EVAL_BUDGET_SEC,
+        )
+    except TimeoutError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="expression too expensive to evaluate (possible catastrophic regex)",
+        ) from None
+
+    referenced: list[ReferencedVar] = []
+    unknown: list[str] = []
+    for name in _referenced_names(body.condition_expr):
+        vs = snap.get(name)
+        if vs is None:
+            unknown.append(name)
+            referenced.append(ReferencedVar(name=name, present=False))
+        else:
+            referenced.append(ReferencedVar(
+                name=name,
+                live_value=vs.value,
+                age_sec=round(vs.age_sec(), 3),
+                is_stale=vs.is_stale(),
+                present=True,
+            ))
+
+    return ValidateRuleResult(
+        ok=res.ok,
+        error=res.error,
+        result=res.value if res.ok else None,
+        referenced_vars=referenced,
+        unknown_vars=unknown,
+    )

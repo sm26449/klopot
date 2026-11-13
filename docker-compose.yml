@@ -1,0 +1,160 @@
+# Klopot — production stack (no reverse proxy).
+#
+#   cp .env.example .env            # then edit: passwords, MQTT broker, secrets
+#   docker compose up -d
+#
+# Variants (overlays on top of this file):
+#   docker compose -f docker-compose.yml -f compose.traefik.yml up -d   # behind traefik (TLS)
+#   docker compose -f docker-compose.yml -f compose.dev.yml up --build  # local development
+#   docker compose -f compose.demo.yml up -d --build                    # self-contained demo
+# Tip: put the -f list in .env as COMPOSE_FILE=docker-compose.yml:compose.traefik.yml
+# so a plain `docker compose up -d` picks the right variant.
+#
+# The HTTP port binds 127.0.0.1 only. Expose Klopot beyond the host through a
+# TLS reverse proxy (see compose.traefik.yml and docs/DEPLOY.md).
+name: ${KLOPOT_PROJECT_NAME:-klopot}
+
+services:
+  alertd:
+    # CI publishes this image on every green main build. With both image: and
+    # build: present, `docker compose pull` fetches the prebuilt image and
+    # `docker compose build` still works as the local fallback.
+    image: ${KLOPOT_IMAGE:-ghcr.io/sm26449/klopot:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${KLOPOT_HTTP_PORT:-5090}:5090"
+    # Lets ALERTD_MQTT_HOST=host.docker.internal reach a broker on the host.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      # ── Database ────────────────────────────────────────────
+      ALERTD_DATABASE_URL: ${ALERTD_DATABASE_URL:-mysql+aiomysql://alertd:alertd@mysql:3306/alertd}
+      # ── MQTT ────────────────────────────────────────────────
+      ALERTD_MQTT_HOST: ${ALERTD_MQTT_HOST:-host.docker.internal}
+      ALERTD_MQTT_PORT: ${ALERTD_MQTT_PORT:-1883}
+      ALERTD_MQTT_USERNAME: ${ALERTD_MQTT_USERNAME:-}
+      ALERTD_MQTT_PASSWORD: ${ALERTD_MQTT_PASSWORD:-}
+      ALERTD_MQTT_CLIENT_ID: ${ALERTD_MQTT_CLIENT_ID:-alertd}
+      # ── Service ─────────────────────────────────────────────
+      ALERTD_LOG_LEVEL: ${ALERTD_LOG_LEVEL:-INFO}
+      ALERTD_BIND_HOST: 0.0.0.0
+      ALERTD_BIND_PORT: 5090
+      ALERTD_TZ: ${ALERTD_TZ:-UTC}
+      # OS-level TZ — naive datetime.now() in quiet-hours evaluation must
+      # return local time, not UTC.
+      TZ: ${TZ:-${ALERTD_TZ:-UTC}}
+      # ── Bootstrap admin API key (optional, written to DB on first run) ─
+      ALERTD_BOOTSTRAP_ADMIN_KEY: ${ALERTD_BOOTSTRAP_ADMIN_KEY:-}
+      # ── Admin UI (static SPA at /admin) ─────────────────────
+      ALERTD_ADMIN_UI_ENABLED: ${ALERTD_ADMIN_UI_ENABLED:-true}
+      # ── Admin UI login (first-boot password + session/lockout knobs) ─
+      ALERTD_ADMIN_BOOTSTRAP_PASSWORD: ${ALERTD_ADMIN_BOOTSTRAP_PASSWORD:-}
+      # false only for plain-HTTP localhost; compose.traefik.yml forces true.
+      ALERTD_COOKIE_SECURE: ${ALERTD_COOKIE_SECURE:-false}
+      ALERTD_SESSION_IDLE_HOURS: ${ALERTD_SESSION_IDLE_HOURS:-12}
+      ALERTD_SESSION_MAX_DAYS: ${ALERTD_SESSION_MAX_DAYS:-7}
+      ALERTD_LOGIN_MAX_FAILURES: ${ALERTD_LOGIN_MAX_FAILURES:-5}
+      ALERTD_LOGIN_MAX_FAILURES_PER_IP: ${ALERTD_LOGIN_MAX_FAILURES_PER_IP:-20}
+      ALERTD_LOGIN_LOCKOUT_MIN: ${ALERTD_LOGIN_LOCKOUT_MIN:-15}
+      # ── Reverse proxy, API surface & secret-ref policy ──────
+      ALERTD_TRUSTED_PROXY_CIDRS: ${ALERTD_TRUSTED_PROXY_CIDRS:-}
+      ALERTD_SECRET_REF_ALLOW: ${ALERTD_SECRET_REF_ALLOW:-}
+      # docs/metrics: blank = auto (off / read-key-required under cookie_secure).
+      ALERTD_DOCS_ENABLED: ${ALERTD_DOCS_ENABLED:-}
+      ALERTD_METRICS_REQUIRE_AUTH: ${ALERTD_METRICS_REQUIRE_AUTH:-}
+      ALERTD_ADAPTER_SEND_TIMEOUT_SEC: ${ALERTD_ADAPTER_SEND_TIMEOUT_SEC:-30}
+      # ── Entity admission caps (raise via .env if you outgrow them) ─
+      ALERTD_MAX_RULES: ${ALERTD_MAX_RULES:-100}
+      ALERTD_MAX_INPUTS: ${ALERTD_MAX_INPUTS:-50}
+      ALERTD_MAX_CHANNELS: ${ALERTD_MAX_CHANNELS:-20}
+      # ── Channel secrets (referenced via *_ref in channels.config) ─
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMS_GATEWAY_API_KEY: ${SMS_GATEWAY_API_KEY:-}
+      # ── Input secrets (referenced via *_ref in inputs.config) ──
+      # The MQTT input reuses ALERTD_MQTT_USERNAME / ALERTD_MQTT_PASSWORD
+      # above through username_ref / password_ref.
+      ALERTD_EXTERNAL_ALARM_TOKEN: ${ALERTD_EXTERNAL_ALARM_TOKEN:-}
+    networks:
+      - internal
+    volumes:
+      - alertd-data:/app/data
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # ── Backup sidecar — scheduled mysqldump with rotation ────────
+  # Runs scripts/backup.sh per BACKUP_CRON (default daily 02:00) via a small
+  # in-image scheduler (Dockerfile.backup, base mysql:8.0 so
+  # caching_sha2_password works natively). Dumps land in ./backups (host
+  # mount), kept for BACKUP_KEEP_DAYS. Restore steps: docs/DEPLOY.md.
+  backup:
+    build:
+      context: .
+      dockerfile: Dockerfile.backup
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_USER: ${MYSQL_USER:-alertd}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-alertd}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-alertd}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-30}
+      BACKUP_DIR: /backups
+      BACKUP_CRON: ${BACKUP_CRON:-0 2 * * *}
+      TZ: ${ALERTD_TZ:-UTC}
+    volumes:
+      - ./backups:/backups
+    networks:
+      - internal
+    logging: *logging
+
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    command:
+      - "--character-set-server=utf8mb4"
+      - "--collation-server=utf8mb4_unicode_ci"
+      - "--default-authentication-plugin=caching_sha2_password"
+      - "--innodb-buffer-pool-size=${MYSQL_INNODB_BUFFER_POOL_SIZE:-256M}"
+    environment:
+      # Required (set in .env); MySQL refuses to initialise without it.
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-alertd}
+      MYSQL_USER: ${MYSQL_USER:-alertd}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-alertd}
+      TZ: ${ALERTD_TZ:-UTC}
+    networks:
+      - internal
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test:
+        ["CMD", "mysqladmin", "ping", "-h", "localhost",
+         "-u", "${MYSQL_USER:-alertd}",
+         "-p${MYSQL_PASSWORD:-alertd}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    # MySQL is never published on the host — reachable only on `internal`.
+    logging: *logging
+
+volumes:
+  alertd-data:
+  mysql-data:
+
+networks:
+  # alertd ↔ mysql ↔ backup only.
+  internal:
+    driver: bridge

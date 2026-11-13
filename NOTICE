@@ -1,0 +1,18 @@
+Klopot
+Copyright 2026 Stefan Maldaianu
+
+Licensed under the Apache License, Version 2.0. See the LICENSE file.
+
+------------------------------------------------------------------------
+Third-party components
+
+This product bundles the following third-party software, vendored under
+app/admin_ui/static/vendor/, each under its own license:
+
+- Preact (https://preactjs.com) — MIT License.
+  Copyright (c) 2015-present Jason Miller.
+  Full text: app/admin_ui/static/vendor/preact.LICENSE
+
+- htm (https://github.com/developit/htm) — Apache License, Version 2.0.
+  Copyright (c) Jason Miller and contributors.
+  Full text: app/admin_ui/static/vendor/htm.LICENSE

@@ -1,0 +1,474 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel an in-progress run when a newer commit lands on the same branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: build + smoke (S12b)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      mysql:
+        image: mysql:8.0
+        ports:
+          - "3306:3306"
+        env:
+          MYSQL_ROOT_PASSWORD: ci-root
+          MYSQL_DATABASE: alertd
+          MYSQL_USER: alertd
+          MYSQL_PASSWORD: alertd
+        options: >-
+          --health-cmd "mysqladmin ping -h localhost -u alertd -palertd"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+          --health-start-period 30s
+
+    env:
+      ALERTD_DATABASE_URL: mysql+aiomysql://alertd:alertd@127.0.0.1:3306/alertd
+      ALERTD_BIND_HOST: 127.0.0.1
+      ALERTD_BIND_PORT: "5090"
+      ALERTD_LOG_LEVEL: WARNING
+      # MQTT disabled for CI — no broker, no MQTT-backed inputs in the
+      # smoke flow. /v1/health degrades to "ok" minus the mqtt component.
+      ALERTD_MQTT_HOST: ""
+      ALERTD_BOOTSTRAP_ADMIN_KEY: alertd_ci_smoke_key
+      # Seed the browser-login admin on boot so the session-auth smoke can
+      # log in. Plain HTTP in CI, so cookies must drop the Secure flag.
+      ALERTD_ADMIN_BOOTSTRAP_PASSWORD: ci-admin-bootstrap-pw-123
+      ALERTD_COOKIE_SECURE: "false"
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install runtime deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Wait for MySQL
+        run: |
+          for i in $(seq 1 30); do
+            if mysqladmin ping -h 127.0.0.1 -u alertd -palertd --silent; then
+              echo "MySQL ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "MySQL never became ready" >&2
+          exit 1
+
+      - name: Apply migrations
+        run: alembic upgrade head
+
+      - name: Boot alertd
+        run: |
+          # Spawn in background; capture pid so the smoke step can stop it
+          nohup uvicorn app.main:app --host 127.0.0.1 --port 5090 \
+              > alertd.log 2>&1 &
+          echo $! > alertd.pid
+          # Wait for /v1/health
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:5090/v1/health > /dev/null; then
+              echo "alertd ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "--- alertd.log ---"
+          cat alertd.log
+          exit 1
+
+      - name: Smoke — health, fire, log roundtrip, metrics
+        run: |
+          set -e
+          KEY="alertd_ci_smoke_key"
+
+          # 1. Health responds
+          curl -fsS http://127.0.0.1:5090/v1/health | tee /dev/stderr | grep -q '"status":"ok"'
+
+          # 2. Create a template
+          curl -fsS -X POST http://127.0.0.1:5090/v1/templates \
+              -H "X-API-Key: $KEY" -H 'Content-Type: application/json' \
+              -d '{"type":"ci_smoke","severity":"info","icon":"🟢",
+                   "title_template":"CI smoke test","message_template":"hello",
+                   "min_repeat_min":0,"enabled":true}'
+
+          # 3. Fire it
+          FIRE=$(curl -fsS -X POST http://127.0.0.1:5090/v1/fire \
+              -H "X-API-Key: $KEY" -H 'Content-Type: application/json' \
+              -d '{"type":"ci_smoke","vars":{},"test":true}')
+          echo "fire: $FIRE"
+          ID=$(echo "$FIRE" | python -c "import sys,json; print(json.load(sys.stdin)['id'])")
+
+          # 4. Log row exists
+          curl -fsS -H "X-API-Key: $KEY" \
+              "http://127.0.0.1:5090/v1/log/$ID" \
+              | tee /dev/stderr \
+              | grep -q '"type":"ci_smoke"'
+
+          # 5. Metrics endpoint exposes the fire counter
+          curl -fsS http://127.0.0.1:5090/v1/metrics \
+              | grep -E '^alertd_fires_total\{.*ci_smoke' \
+              | head -1
+
+      - name: Smoke — browser session auth (login → CSRF → logout)
+        run: |
+          set -e
+          BASE="http://127.0.0.1:5090"
+          J=cookies.txt
+
+          # 1. login seeds the cookie jar (session + csrf). The bootstrap
+          #    admin boots with must_change_password=1.
+          curl -fsS -c "$J" -X POST "$BASE/v1/auth/login" \
+              -H 'Content-Type: application/json' \
+              -d '{"username":"admin","password":"ci-admin-bootstrap-pw-123"}' \
+              | tee /dev/stderr | grep -q '"username":"admin"'
+
+          CSRF=$(awk '/alertd_csrf/ {print $NF}' "$J")
+          [ -n "$CSRF" ] || { echo "no csrf cookie"; exit 1; }
+
+          # 2. clear must_change_password (the only write allowed while the
+          #    flag is set); the current session stays valid afterwards.
+          curl -fsS -b "$J" -X POST "$BASE/v1/auth/password" \
+              -H 'Content-Type: application/json' -H "X-CSRF-Token: $CSRF" \
+              -d '{"current_password":"ci-admin-bootstrap-pw-123","new_password":"ci-new-password-456789"}'
+
+          # 3. authenticated whoami
+          curl -fsS -b "$J" "$BASE/v1/auth/me" | grep -q '"username":"admin"'
+
+          # 4. a cookie-authed write WITHOUT the CSRF header is refused
+          code=$(curl -s -o /dev/null -w '%{http_code}' -b "$J" -X POST "$BASE/v1/snooze" \
+              -H 'Content-Type: application/json' \
+              -d '{"scope":"type","target":"ci_smoke","until":"2099-01-01T00:00:00Z"}')
+          [ "$code" = "403" ] || { echo "expected 403 without CSRF, got $code"; exit 1; }
+
+          # 5. the same write WITH the CSRF header succeeds
+          curl -fsS -b "$J" -X POST "$BASE/v1/snooze" \
+              -H 'Content-Type: application/json' -H "X-CSRF-Token: $CSRF" \
+              -d '{"scope":"type","target":"ci_smoke","until":"2099-01-01T00:00:00Z"}' \
+              | grep -q '"target":"ci_smoke"'
+
+          # 6. logout → the session is dead (401)
+          curl -fsS -b "$J" -X POST "$BASE/v1/auth/logout" -H "X-CSRF-Token: $CSRF"
+          code=$(curl -s -o /dev/null -w '%{http_code}' -b "$J" "$BASE/v1/auth/me")
+          [ "$code" = "401" ] || { echo "expected 401 after logout, got $code"; exit 1; }
+          echo "browser-session smoke OK"
+
+      - name: Stop alertd
+        if: always()
+        run: kill $(cat alertd.pid) 2>/dev/null || true
+
+      - name: Upload alertd log on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: alertd-log
+          path: alertd.log
+
+  lint:
+    name: ruff lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install "ruff>=0.7,<0.8"
+      - run: ruff check app scripts
+
+  # ── Type check with a frozen baseline ────────────────────────────
+  # mypy runs strict; the repo carries a set of pre-existing errors in
+  # mypy-baseline.txt. The job fails only on NEW errors (mypy-baseline
+  # filter is robust to line-number shifts). Chip away at the baseline
+  # over time; never let it grow.
+  mypy:
+    name: mypy (baseline)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Type check (fail on new errors only)
+        # mypy exits non-zero whenever it prints any error, and it prints every
+        # baseline error before `mypy-baseline filter` removes them. Under the
+        # runner's default `-o pipefail` that would fail the step even with zero
+        # NEW errors, so decouple: swallow mypy's own exit and let the filter
+        # (non-zero only on new errors) be the sole gate.
+        run: |
+          mypy app > mypy-report.txt || true
+          mypy-baseline filter < mypy-report.txt
+
+  # ── Admin-UI JS tests ────────────────────────────────────────────
+  # Front-end logic (JSON-field validator, response-race guard, …) and
+  # the accessibility sweep (jsdom + axe-core rendering the real views,
+  # audit V13) run under the Node built-in test runner. The shipped UI
+  # stays build-less ESM; the dev-only jsdom/axe-core tooling installs
+  # from package-lock. `tests/js/*.mjs` is a GLOB — the bare directory
+  # form `node --test tests/js/` fails on Node 22.
+  js-test:
+    name: admin-ui js tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - run: node --test tests/js/*.mjs
+
+  # ── Pytest with coverage gate (S12c) ─────────────────────────────
+  # Runs the full test suite against an in-memory SQLite DB. No
+  # MySQL service needed — the conftest patches the engine. The
+  # coverage gate is set just below the current measured floor so
+  # PRs can't silently regress; raise it as more modules get tested
+  # (engine, scheduler, manager — see S12d in ROADMAP).
+  test:
+    name: pytest + coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Run tests with coverage
+        env:
+          # Quoted: the trailing colon makes unquoted YAML unparseable
+          # (this exact line silently killed every CI run for 3 weeks)
+          ALERTD_DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+          ALERTD_MQTT_HOST: ""
+          ALERTD_BOOTSTRAP_ADMIN_KEY: alertd_test_key
+          ALERTD_LOG_LEVEL: WARNING
+        run: |
+          pytest -ra -m "not mysql" \
+            --cov=app/core --cov=app/channels \
+            --cov-report=term-missing \
+            --cov-report=xml \
+            --cov-fail-under=80
+      - name: Upload coverage XML
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-xml
+          path: coverage.xml
+
+  # ── Pytest on MySQL (native types + concurrency) ─────────────────
+  # The authoritative DB gate: runs the suite against real MySQL 8 so
+  # native types and row-locking behaviour are exercised, including the
+  # independent-session concurrency tests (mysql marker). Tests that only
+  # work under the in-memory SQLite harness (sqlite marker) are excluded.
+  # The SQLite `test` job stays for speed + the coverage gate.
+  test-mysql:
+    name: pytest (mysql)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.0
+        ports:
+          - "3306:3306"
+        env:
+          MYSQL_ROOT_PASSWORD: ci-root
+          MYSQL_DATABASE: alertd
+          MYSQL_USER: alertd
+          MYSQL_PASSWORD: alertd
+        options: >-
+          --health-cmd "mysqladmin ping -h localhost -u alertd -palertd"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+          --health-start-period 30s
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Wait for MySQL
+        run: |
+          for i in $(seq 1 30); do
+            mysqladmin ping -h 127.0.0.1 -u alertd -palertd --silent && exit 0
+            sleep 2
+          done
+          echo "MySQL never became ready" >&2; exit 1
+      - name: Run tests on MySQL (native types + concurrency)
+        env:
+          # The conftest runs the DB fixtures against this engine (native
+          # MySQL types, no BIGINT->INTEGER rewrite), recreating the schema
+          # per test for isolation.
+          ALERTD_TEST_DATABASE_URL: "mysql+aiomysql://alertd:alertd@127.0.0.1:3306/alertd"
+          ALERTD_MQTT_HOST: ""
+          ALERTD_BOOTSTRAP_ADMIN_KEY: alertd_test_key
+          ALERTD_LOG_LEVEL: WARNING
+        run: pytest -ra -m "not sqlite"
+
+  # ── OpenAPI snapshot: drift + breaking changes ───────────────────
+  # The committed openapi/v1.json is the canonical /v1 contract (and the
+  # input for generated SDKs). Regenerate it; fail if it drifts from the
+  # commit (so an API change must update it in the same PR) and fail if
+  # the change removes a path, operation or response the base promised.
+  openapi:
+    name: openapi drift + breaking
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+      - name: Regenerate the spec
+        run: python scripts/dump_openapi.py
+      - name: Fail on uncommitted drift
+        run: |
+          git diff --exit-code -- openapi/v1.json \
+            || { echo "::error::openapi/v1.json is stale — run scripts/dump_openapi.py and commit it"; exit 1; }
+      - name: Breaking-change check vs the base spec
+        run: |
+          base="${{ github.event.pull_request.base.sha || github.event.before }}"
+          old=$(mktemp)
+          if [ -n "$base" ] && git show "$base:openapi/v1.json" > "$old" 2>/dev/null && [ -s "$old" ]; then
+            python scripts/openapi_breaking.py "$old" openapi/v1.json
+          else
+            echo "no base spec to compare against — skipping breaking check"
+          fi
+
+  # ── Secret scanning ──────────────────────────────────────────────
+  # gitleaks on every PR and on pushes; fetch-depth 0 so pushes scan the
+  # full history, not just the new commits. Exceptions live in
+  # .gitleaks.toml with a reason.
+  security:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Demo end-to-end smoke ────────────────────────────────────────
+  # Brings up the self-contained demo stack (Klopot + MySQL + Mosquitto +
+  # sine publisher + webhook sink), imports the demo pack, and asserts one
+  # notification reaches the sink within two minutes. The acceptance test
+  # for "it actually works on a clean machine".
+  demo-smoke:
+    name: demo e2e smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Start the demo stack
+        run: docker compose -f compose.demo.yml up -d --build
+      - name: Run the demo smoke
+        env:
+          ALERTD_BOOTSTRAP_ADMIN_KEY: alertd_demo_key_please_change
+        run: bash demo/smoke.sh
+      - name: Logs on failure
+        if: failure()
+        run: docker compose -f compose.demo.yml logs --tail 120
+      - name: Tear down
+        if: always()
+        run: docker compose -f compose.demo.yml down -v
+
+  # ── Publish image to GHCR ─────────────────────────────────────────
+  # Only on pushes to main, after EVERY gate is green. The image is built
+  # and loaded locally, scanned by trivy (fail on fixable HIGH/CRITICAL),
+  # and only then pushed. Tags: :latest, :v<pyproject version>, :sha.
+  # NOTE (release): the plan's edge-on-main / versioned-on-tags split is
+  # deferred to the public-repo build — it is entangled with the compose
+  # image tag and this repo deploys by local build.
+  publish:
+    name: publish image (GHCR)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [smoke, lint, mypy, js-test, test, test-mysql, openapi, security, demo-smoke]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Read version from pyproject.toml
+        id: ver
+        run: |
+          v=$(grep -m1 '^version' pyproject.toml | cut -d'"' -f2)
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "publishing version $v"
+      - name: Build image (load locally for scanning)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: alertd:scan
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Scan image (trivy — fail on fixable HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: alertd:scan
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          trivyignores: .trivyignore
+      - name: Push image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:v${{ steps.ver.outputs.version }}
+            ghcr.io/${{ github.repository }}:sha-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
