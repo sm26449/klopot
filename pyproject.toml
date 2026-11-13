@@ -37,7 +37,7 @@ dependencies = [
     # backtracking, so a rule regex can't freeze the event loop (audit V10)
     "google-re2>=1.1,<2",
     # Crypto for API keys
-    "bcrypt>=4.2.0,<5",
+    "bcrypt>=4.2.0,<6",
     # Password hashing for admin_users (argon2id — memory-hard; bcrypt
     # stays for high-entropy API keys)
     "argon2-cffi>=23.1.0,<24",
