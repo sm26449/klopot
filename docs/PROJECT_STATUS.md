@@ -1,9 +1,10 @@
 # Project status — 2026-11-15
 
-**1.1.0** (2026-11-15) is the current release; `pyproject.toml` and
-`GET /v1/version` say `1.1.0`. The [changelog](../CHANGELOG.md) has its
-upgrade notes, and builds of later commits are grouped there under
-**Unreleased** (they still report `1.1.0` until the next release). See
+**1.1.1** (2026-11-15) is the current release; `pyproject.toml` and
+`GET /v1/version` say `1.1.1`. The [changelog](../CHANGELOG.md) has its
+upgrade notes (no default passwords; escalation needs a named channel), and
+builds of later commits are grouped there under **Unreleased** (they still
+report `1.1.1` until the next release). See
 [INTEGRATIONS_ROADMAP.md](INTEGRATIONS_ROADMAP.md) for the remaining
 integrations.
 

@@ -1,6 +1,6 @@
 [project]
 name = "alertd"
-version = "1.1.0"
+version = "1.1.1"
 description = "Notification microservice — declarative inputs, rules, templates, channels"
 readme = "README.md"
 requires-python = ">=3.12"

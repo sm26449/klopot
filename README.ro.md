@@ -29,7 +29,9 @@
 > Klopot s-a născut ca serviciul de alertare al unui sistem de monitorizare a
 > energiei de acasă, dar nimic din el nu este specific unui domeniu.
 
-**Starea versiunii.** 1.1.0 (2026-11-15) este versiunea curentă: peste
+**Starea versiunii.** 1.1.1 (2026-11-15) este versiunea curentă — o versiune
+de consolidare peste 1.1.0 (fără parole implicite; citește notele de
+actualizare). 1.1.0, peste
 escaladările durabile, incidentele de regulă, acțiunile Telegram, ieșirea MQTT
 și monitorizarea operațională din 1.0.x aduce receiver-ul Alertmanager/Grafana,
 ntfy / Gotify / Pushover native, furnizorii SMS, pachetele, ghidul de

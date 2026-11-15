@@ -35,14 +35,14 @@ class HealthResponse:
             status (HealthResponseStatus):
             docs_enabled (bool | Unset):  Default: True.
             service (str | Unset):  Default: 'alertd'.
-            version (str | Unset):  Default: '1.1.0'.
+            version (str | Unset):  Default: '1.1.1'.
      """
 
     components: HealthResponseComponents
     status: HealthResponseStatus
     docs_enabled: bool | Unset = True
     service: str | Unset = 'alertd'
-    version: str | Unset = '1.1.0'
+    version: str | Unset = '1.1.1'
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
 

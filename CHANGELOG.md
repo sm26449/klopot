@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.1.1] — 2026-11-15
+
+Hardening after the pre-open-source audits: no publicly known default
+credential, provider settings that were fixed in the code, a UI that says
+when something failed to load. Read the upgrade notes before upgrading.
+
 ### Upgrade notes
 
 - **No default database password.** `ALERTD_DATABASE_URL`, `MYSQL_PASSWORD`
@@ -693,5 +699,6 @@ iterations; that history is not carried over.
 - **Examples.** Importable config packs in `examples/` (uptime monitoring and
   an IoT threshold alert).
 
-[Unreleased]: https://github.com/sm26449/klopot/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/sm26449/klopot/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/sm26449/klopot/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/sm26449/klopot/releases/tag/v1.1.0

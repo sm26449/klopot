@@ -1,6 +1,6 @@
 [project]
 name = "klopot-client"
-version = "1.1.0"
+version = "1.1.1"
 description = "A client library for accessing alertd"
 authors = []
 readme = "README.md"

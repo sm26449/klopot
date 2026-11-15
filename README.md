@@ -29,7 +29,9 @@
 > born as the alerting service of a home-energy monitoring stack, but nothing
 > in it is domain-specific.
 
-**Release status.** 1.1.0 (2026-11-15) is the current release: on top of the
+**Release status.** 1.1.1 (2026-11-15) is the current release — a hardening
+release on top of 1.1.0 (no default passwords, read its upgrade notes). 1.1.0,
+on top of the
 1.0.x durable escalation, rule incidents, Telegram actions, MQTT output and
 operational monitoring it adds Alertmanager/Grafana ingestion, native ntfy /
 Gotify / Pushover, SMS providers, packs, a setup guide, the activity log, Web

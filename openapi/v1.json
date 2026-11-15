@@ -1675,7 +1675,7 @@
             "type": "string"
           },
           "version": {
-            "default": "1.1.0",
+            "default": "1.1.1",
             "title": "Version",
             "type": "string"
           }
@@ -6456,7 +6456,7 @@
             "type": "string"
           },
           "version": {
-            "default": "1.1.0",
+            "default": "1.1.1",
             "title": "Version",
             "type": "string"
           }
@@ -6477,7 +6477,7 @@
   "info": {
     "description": "Notification microservice \u2014 declarative inputs, rules, templates, channels. See /docs for the full API surface.",
     "title": "alertd",
-    "version": "1.1.0"
+    "version": "1.1.1"
   },
   "openapi": "3.1.0",
   "paths": {

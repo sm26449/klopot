@@ -3,6 +3,16 @@
 // root. English only (release notes are not translated per-line).
 export const CHANGELOG = [
   {
+    version: "1.1.1",
+    items: [
+      "No default passwords: the database URL and MySQL passwords must be set, and escalation is off until you name a channel — read the upgrade notes.",
+      "Telegram (self-hosted Bot API server), Pushover and Twilio take an api_url; timeouts and the snooze-until-morning hour are settings.",
+      "The template preview prints numbers and accepts icons exactly as the server does.",
+      "A list that fails to load says so instead of looking empty; pickers and search load every item.",
+      "Phone layout: list tables become one card per row.",
+    ],
+  },
+  {
     version: "1.1.0",
     items: [
       "Alertmanager / Grafana receiver, and native ntfy, Gotify and Pushover channels (Pushover emergency cancelled on acknowledgement).",
