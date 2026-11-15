@@ -15,6 +15,18 @@ from app.db.models import Delivery, DeliveryState, DeliveryStatus, NotificationL
 from app.utils.time import utc_now
 
 
+@pytest.fixture(autouse=True)
+def _escalation_channel():
+    """Escalation is off by default (no channel); these tests escalate to sms_main."""
+    from app.config import get_settings
+
+    settings = get_settings()
+    old = settings.escalation_channel
+    object.__setattr__(settings, "escalation_channel", "sms_main")
+    yield
+    object.__setattr__(settings, "escalation_channel", old)
+
+
 def _row(
     *,
     id_: str,
@@ -384,3 +396,17 @@ async def test_disabled_when_channel_empty(db_session, fake_manager):
         assert await _sweep(fake_manager) == 0
     finally:
         object.__setattr__(settings, "escalation_channel", old)
+
+
+async def test_no_channel_by_default_means_escalation_is_off():
+    """Pre-open-source audit: the default named a channel ("sms_main") that a
+    fresh install does not have, so criticals were queued to nothing."""
+    from app.config import Settings
+    from app.core import escalation as esc
+
+    assert Settings.model_fields["escalation_channel"].default == ""
+    settings = esc.get_settings()
+    object.__setattr__(settings, "escalation_channel", "")
+    svc = EscalationService()
+    await svc.start()
+    assert svc._task is None

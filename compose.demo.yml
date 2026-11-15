@@ -1,5 +1,6 @@
 # Self-contained Klopot demo stack.
 #
+#   export ALERTD_BOOTSTRAP_ADMIN_KEY="alertd_$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
 #   docker compose -f compose.demo.yml up -d --build
 #   ./demo/smoke.sh                 # asserts one notification within 2 minutes
 #   docker compose -f compose.demo.yml down -v
@@ -7,6 +8,10 @@
 # A sine-wave publisher feeds MQTT; Klopot fires a rule when it crosses a
 # threshold and POSTs the alert to a webhook sink. Nothing leaves the host:
 # ports are bound to 127.0.0.1, the MySQL data is tmpfs (ephemeral).
+# The admin API key is yours (exported above), never a constant from this
+# file: a published key would open any demo left running. The demo MySQL
+# passwords stay fixed — the database has no port outside the demo network
+# and lives in tmpfs.
 name: klopot-demo
 
 services:
@@ -20,7 +25,7 @@ services:
     tmpfs:
       - /var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "alertd", "-palertd"]
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_PASSWORD\" mysqladmin ping -h localhost -u \"$$MYSQL_USER\""]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -45,7 +50,7 @@ services:
       ALERTD_DATABASE_URL: mysql+aiomysql://alertd:alertd@mysql:3306/alertd
       ALERTD_MQTT_HOST: mosquitto
       ALERTD_MQTT_PORT: "1883"
-      ALERTD_BOOTSTRAP_ADMIN_KEY: alertd_demo_key_please_change
+      ALERTD_BOOTSTRAP_ADMIN_KEY: ${ALERTD_BOOTSTRAP_ADMIN_KEY:?export a random ALERTD_BOOTSTRAP_ADMIN_KEY first - see the top of compose.demo.yml}
       ALERTD_BIND_HOST: 0.0.0.0
       ALERTD_BIND_PORT: "5090"
       ALERTD_LOG_LEVEL: INFO

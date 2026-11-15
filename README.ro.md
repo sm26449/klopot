@@ -93,6 +93,7 @@ care declanșează o alertă reală cap-coadă:
 ```bash
 git clone https://github.com/sm26449/klopot.git
 cd klopot
+export ALERTD_BOOTSTRAP_ADMIN_KEY="alertd_$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
 docker compose -f compose.demo.yml up -d --build
 ./demo/smoke.sh          # verifică o notificare la sink în sub 2 min
 docker compose -f compose.demo.yml down -v

@@ -44,10 +44,10 @@ docker compose -f docker-compose.yml -f compose.dev.yml logs -f alertd
 
 ```bash
 docker compose -f docker-compose.yml -f compose.dev.yml up -d mysql mosquitto
+set -a; . ./.env; set +a          # MYSQL_PASSWORD from your .env
+export ALERTD_DATABASE_URL="mysql+aiomysql://alertd:$MYSQL_PASSWORD@localhost:3306/alertd"
 alembic upgrade head
-ALERTD_BOOTSTRAP_ADMIN_KEY=alertd_dev_key \
-ALERTD_DATABASE_URL=mysql+aiomysql://alertd:alertd@localhost:3306/alertd \
-uvicorn app.main:app --reload
+ALERTD_BOOTSTRAP_ADMIN_KEY=alertd_dev_key uvicorn app.main:app --reload
 ```
 
 ## Project layout

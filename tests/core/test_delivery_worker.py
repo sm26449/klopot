@@ -96,9 +96,13 @@ async def test_worker_delivers_a_pending_delivery(template_with_channel, db_sess
     assert c.name in row.dispatched_to
 
 
-async def test_initial_retry_rollup_ignores_pending_escalation(template_with_channel, db_session):
+async def test_initial_retry_rollup_ignores_pending_escalation(template_with_channel, db_session, monkeypatch):
     """An escalation still waiting must not keep the initial delivery pending."""
+    from app.config import get_settings
     from app.core.escalation import EscalationService
+
+    # Escalation is off by default (no channel); this test escalates.
+    monkeypatch.setattr(get_settings(), "escalation_channel", "sms_main")
 
     t, c = template_with_channel
     with patch("app.channels.manager.ChannelManager.dispatch", new=_retry_fail):

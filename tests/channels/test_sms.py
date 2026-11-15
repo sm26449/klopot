@@ -213,3 +213,14 @@ def test_validate_config_names_what_is_missing(cfg, missing):
 def test_validate_config_accepts_refs_and_skips_secrets_for_exports():
     validate_config({"provider": "twilio", "phone": "+1", "account_sid": "A", "from_number": "+2", "auth_token_ref": "T"})
     validate_config({"provider": "twilio", "phone": "+1", "account_sid": "A", "from_number": "+2"}, require_secrets=False)
+
+
+async def test_a_failed_healthcheck_does_not_return_the_url():
+    """Pre-open-source audit: the healthcheck stored str(e), and httpx quotes
+    the URL — a health URL with ?token= reached read-scoped keys."""
+    leaky = httpx.ConnectError("connect failed: http://gw/api/health?token=s3cr3t-value")
+    patcher, _ = _patch_send(leaky)
+    with patcher:
+        h = await SMSChannel().healthcheck({**HTTP, "health_url": "http://gw/api/health?token=s3cr3t-value"})
+    assert h["reachable"] is False
+    assert "s3cr3t-value" not in h["error"]

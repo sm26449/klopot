@@ -52,6 +52,20 @@ class Settings(BaseSettings):
     # L-3 found it stuck at 1.0.4 while CHANGELOG was on 1.0.8+).
     version: str = ""
 
+    def require_database_url(self) -> str:
+        """The database URL, or a clear error when it is not configured."""
+        if not self.database_url.strip():
+            raise RuntimeError(
+                "ALERTD_DATABASE_URL is not set — set it in .env, e.g. "
+                "mysql+aiomysql://alertd:<MYSQL_PASSWORD>@mysql:3306/alertd (see .env.example)"
+            )
+        if "<MYSQL_PASSWORD>" in self.database_url:
+            raise RuntimeError(
+                "ALERTD_DATABASE_URL still holds the <MYSQL_PASSWORD> placeholder from "
+                ".env.example — put the database password in its place"
+            )
+        return self.database_url
+
     def model_post_init(self, __context):
         if not self.version:
             from . import __version__
@@ -63,7 +77,9 @@ class Settings(BaseSettings):
 
     # ── Database (async SQLAlchemy URL) ───────────────────────
     # Format: mysql+aiomysql://user:pass@host:port/db
-    database_url: str = "mysql+aiomysql://alertd:alertd@mysql:3306/alertd"
+    # Required, no default: a default would carry a publicly known password.
+    # Use require_database_url() where a connection is made.
+    database_url: str = ""
     database_pool_size: int = 10
     database_max_overflow: int = 5
     database_echo: bool = False
@@ -149,9 +165,10 @@ class Settings(BaseSettings):
     eval_error_disable_threshold: int = Field(default=50, ge=0, le=100000)
     # Escalation: re-page a dispatched critical that is still
     # unacknowledged after N minutes, once, via escalation_channel.
-    # 0 disables escalation entirely.
+    # 0 — or no channel (the default: no install has a channel by a fixed
+    # name) — disables escalation entirely.
     escalation_after_min: int = Field(default=15, ge=0, le=1440)
-    escalation_channel: str = "sms_main"
+    escalation_channel: str = ""
     # Daily suppressed-alerts digest, fired at this local hour
     # (settings.tz). -1 disables.
     digest_hour: int = Field(default=21, ge=-1, le=23)

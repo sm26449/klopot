@@ -41,7 +41,10 @@ services:
         required: false
     environment:
       # ── Database ────────────────────────────────────────────
-      ALERTD_DATABASE_URL: ${ALERTD_DATABASE_URL:-mysql+aiomysql://alertd:alertd@mysql:3306/alertd}
+      # Required, no default (a default would be a publicly known password):
+      # Klopot refuses to start without it. Bundled MySQL:
+      # mysql+aiomysql://alertd:<MYSQL_PASSWORD>@mysql:3306/alertd
+      ALERTD_DATABASE_URL: ${ALERTD_DATABASE_URL:-}
       # ── MQTT ────────────────────────────────────────────────
       ALERTD_MQTT_HOST: ${ALERTD_MQTT_HOST:-host.docker.internal}
       ALERTD_MQTT_PORT: ${ALERTD_MQTT_PORT:-1883}
@@ -96,7 +99,7 @@ services:
       ALERTD_CIRCUIT_BREAKER_THRESHOLD: ${ALERTD_CIRCUIT_BREAKER_THRESHOLD:-3}
       ALERTD_CIRCUIT_BREAKER_OPEN_SEC: ${ALERTD_CIRCUIT_BREAKER_OPEN_SEC:-60}
       ALERTD_ESCALATION_AFTER_MIN: ${ALERTD_ESCALATION_AFTER_MIN:-15}
-      ALERTD_ESCALATION_CHANNEL: ${ALERTD_ESCALATION_CHANNEL:-sms_main}
+      ALERTD_ESCALATION_CHANNEL: ${ALERTD_ESCALATION_CHANNEL:-}
       ALERTD_DIGEST_HOUR: ${ALERTD_DIGEST_HOUR:-21}
       # ── Retention (days) ────────────────────────────────────
       ALERTD_LOG_RETENTION_DAYS: ${ALERTD_LOG_RETENTION_DAYS:-90}
@@ -150,7 +153,7 @@ services:
     environment:
       MYSQL_HOST: mysql
       MYSQL_USER: ${MYSQL_USER:-alertd}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-alertd}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-}
       MYSQL_DATABASE: ${MYSQL_DATABASE:-alertd}
       BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-30}
       BACKUP_DIR: /backups
@@ -171,21 +174,24 @@ services:
       - "--default-authentication-plugin=caching_sha2_password"
       - "--innodb-buffer-pool-size=${MYSQL_INNODB_BUFFER_POOL_SIZE:-256M}"
     environment:
-      # Required (set in .env); MySQL refuses to initialise without it.
+      # Both required (set in .env), no defaults. Not `:?` here: compose
+      # interpolates this service even when compose.external-db.yml turns it
+      # off, and that setup has no MYSQL_* passwords. MySQL refuses to
+      # initialise without a root password, and Klopot without its URL.
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-}
       MYSQL_DATABASE: ${MYSQL_DATABASE:-alertd}
       MYSQL_USER: ${MYSQL_USER:-alertd}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-alertd}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-}
       TZ: ${ALERTD_TZ:-UTC}
     networks:
       - internal
     volumes:
       - mysql-data:/var/lib/mysql
     healthcheck:
-      test:
-        ["CMD", "mysqladmin", "ping", "-h", "localhost",
-         "-u", "${MYSQL_USER:-alertd}",
-         "-p${MYSQL_PASSWORD:-alertd}"]
+      # The password goes through MYSQL_PWD, read from the container's own
+      # environment ($$ = not interpolated by compose), never as a -p
+      # argument that `ps` on the host shows.
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_PASSWORD\" mysqladmin ping -h localhost -u \"$$MYSQL_USER\""]
       interval: 10s
       timeout: 5s
       retries: 10

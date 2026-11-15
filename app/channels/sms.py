@@ -165,7 +165,9 @@ class SMSChannel(BaseChannel):
         except EgressBlocked as e:
             return {"reachable": False, "error": e.reason}
         except Exception as e:
-            return {"reachable": False, "error": str(e)[:200]}
+            # Not str(e): httpx quotes the URL, and a health or router URL may
+            # carry a token (?token=, user:pass@). Read-scoped keys see this.
+            return {"reachable": False, "error": transport_error_text(e)[:200]}
 
 
 async def _send_http(notif: Notification, config: dict[str, Any], phone: str, text: str, block: bool,

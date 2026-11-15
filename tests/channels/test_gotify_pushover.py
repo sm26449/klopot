@@ -96,3 +96,22 @@ def test_test_notifications_open_the_channels_page_real_alerts_their_log_entry()
     assert admin_link(cfg, n("disk_full")) == "https://alerts.example.com/admin/#/log?id=ntf_1"
     assert admin_link(cfg, n(CHANNEL_TEST_TYPE)) == "https://alerts.example.com/admin/#/channels"
     assert admin_link({}, n("disk_full")) is None
+
+
+async def test_an_unreadable_receipt_is_logged_without_the_token(monkeypatch, caplog):
+    """Pre-open-source audit: receipt_status returned None silently on a revoked
+    token, an HTTP error or a transport error, so an emergency acknowledged in
+    the Pushover app stayed open in Klopot with nothing in the logs. The token
+    travels in the query string, so the log line must not carry it."""
+    import httpx
+
+    http = FakeHTTP.install(monkeypatch, pushover_mod)
+    token = "tok_s3cretvalue"
+    leaky = httpx.ConnectError(f"cannot reach https://api.pushover.net/1/receipts/r.json?token={token}")
+    for answer in (reply(401, {"status": 0}), leaky, reply(200, {"status": 0})):
+        caplog.clear()
+        http.will(answer)
+        with caplog.at_level("WARNING", logger="app.channels.pushover"):
+            assert await pushover_mod.receipt_status({**PUSHOVER, "app_token": token}, "rcpt_abcdefgh") is None
+        assert "acknowledgement unknown" in caplog.text
+        assert token not in caplog.text

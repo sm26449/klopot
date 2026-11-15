@@ -453,11 +453,14 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+      - name: A random admin key, as the README tells users to make
+        run: |
+          key="alertd_$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+          echo "::add-mask::$key"
+          echo "ALERTD_BOOTSTRAP_ADMIN_KEY=$key" >> "$GITHUB_ENV"
       - name: Start the demo stack
         run: docker compose -f compose.demo.yml up -d --build
       - name: Run the demo smoke
-        env:
-          ALERTD_BOOTSTRAP_ADMIN_KEY: alertd_demo_key_please_change
         run: bash demo/smoke.sh
       - name: Logs on failure
         if: failure()

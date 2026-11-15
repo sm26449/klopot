@@ -49,14 +49,15 @@ def init_engine() -> None:
         return
 
     settings = get_settings()
+    database_url = settings.require_database_url()
     _engine = create_async_engine(
-        settings.database_url,
+        database_url,
         echo=settings.database_echo,
         pool_size=settings.database_pool_size,
         max_overflow=settings.database_max_overflow,
         pool_pre_ping=True,  # validate connections from the pool
         pool_recycle=3600,    # recycle hourly to dodge MySQL wait_timeout
-        connect_args=_connect_args(settings.database_url),
+        connect_args=_connect_args(database_url),
     )
     _session_factory = async_sessionmaker(
         bind=_engine,

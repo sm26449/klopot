@@ -20,6 +20,7 @@ idempotency key: a retry after an ambiguous timeout may deliver twice.
 """
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import httpx
@@ -29,6 +30,8 @@ from ..utils.redact import transport_error_text
 from ..utils.safe_http import EgressBlocked, ResponseTooLarge, safe_request
 from ._secrets import resolve_secret, scrub
 from .base import BaseChannel, Notification, SendResult, admin_link
+
+logger = logging.getLogger(__name__)
 
 API = "https://api.pushover.net/1"
 DEFAULT_PRIORITY = {"info": -1, "warning": 0, "critical": 1}
@@ -157,7 +160,18 @@ async def receipt_status(config: dict[str, Any], receipt: str) -> dict[str, Any]
     try:
         r = await safe_request("GET", f"{API}/receipts/{receipt}.json", params={"token": token},
                                timeout=10.0, block_private=get_settings().block_private_egress)
-        data = r.json() if r.status_code // 100 == 2 else None
-    except Exception:
+        if r.status_code // 100 != 2:
+            # A revoked token or a gone receipt: say so, or an emergency
+            # acknowledged in the app stays open here with nothing in the logs.
+            logger.warning("pushover receipt %s: HTTP %s — acknowledgement unknown", receipt[:8], r.status_code)
+            return None
+        data = r.json()
+    except Exception as e:
+        # The token travels in the query string: log only the redacted text.
+        logger.warning("pushover receipt %s: cannot be read (%s) — acknowledgement unknown",
+                       receipt[:8], scrub(transport_error_text(e), token)[:200])
         return None
-    return data if isinstance(data, dict) and data.get("status") == 1 else None
+    if not (isinstance(data, dict) and data.get("status") == 1):
+        logger.warning("pushover receipt %s: unexpected answer — acknowledgement unknown", receipt[:8])
+        return None
+    return data

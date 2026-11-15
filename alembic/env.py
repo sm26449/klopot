@@ -36,7 +36,7 @@ config = context.config
 # Override the URL with our runtime settings (lets MIGRATIONS use the
 # same env vars as the app)
 settings = get_settings()
-config.set_main_option("sqlalchemy.url", settings.database_url)
+config.set_main_option("sqlalchemy.url", settings.require_database_url())
 
 # Logging — fileConfig() globally REPLACES root handlers and sets
 # root level to whatever alembic.ini declares (WARNING). When the

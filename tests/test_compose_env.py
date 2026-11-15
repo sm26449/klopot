@@ -46,3 +46,25 @@ def test_compose_defaults_match_the_code():
         if not ok:
             wrong[key] = (raw, field.default)
     assert not wrong, f"compose default differs from app/config.py: {wrong}"
+
+
+def test_no_known_password_is_a_default():
+    """Pre-open-source audit: a forgotten .env must not leave the stack running
+    with a password everyone knows. The URL has no default (Klopot refuses to
+    start), MYSQL_* passwords have none, and the healthcheck keeps the password
+    off the command line."""
+    text = COMPOSE.read_text()
+    assert Settings.model_fields["database_url"].default == ""
+    assert _compose_env()["ALERTD_DATABASE_URL"] == ""
+    assert re.search(r"MYSQL_(ROOT_)?PASSWORD:\s*\$\{MYSQL_(ROOT_)?PASSWORD:-[^}]", text) is None
+    assert "-p${" not in text and "MYSQL_PWD=" in text
+
+
+def test_a_missing_database_url_is_a_clear_error():
+    import pytest
+
+    with pytest.raises(RuntimeError, match="ALERTD_DATABASE_URL is not set"):
+        Settings(database_url="").require_database_url()
+    with pytest.raises(RuntimeError, match="placeholder"):
+        Settings(database_url="mysql+aiomysql://alertd:<MYSQL_PASSWORD>@mysql:3306/alertd").require_database_url()
+    assert Settings(database_url="sqlite+aiosqlite://").require_database_url() == "sqlite+aiosqlite://"

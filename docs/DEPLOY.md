@@ -126,7 +126,7 @@ See `.env.example`. The main ones:
 | `TRAEFIK_NETWORK` | — | traefik variant: external Docker network traefik runs on |
 | `TRAEFIK_ENTRYPOINT` | `websecure` | traefik variant: entrypoint name |
 | `TRAEFIK_CERTRESOLVER` | `letsencrypt` | traefik variant: certificate resolver name |
-| `ALERTD_DATABASE_URL` | `mysql+aiomysql://alertd:alertd@mysql:3306/alertd` | Async SQLAlchemy URL |
+| `ALERTD_DATABASE_URL` | — (required; Klopot refuses to start without it) | Async SQLAlchemy URL, e.g. `mysql+aiomysql://alertd:<MYSQL_PASSWORD>@mysql:3306/alertd` |
 | `ALERTD_MQTT_HOST` | `host.docker.internal` in compose, `localhost` in code | Broker hostname |
 | `ALERTD_MQTT_PORT` | `1883` | |
 | `ALERTD_MQTT_USERNAME` | (empty) | Optional |
@@ -178,7 +178,7 @@ Other knobs, all documented in `app/config.py`:
   `ALERTD_AUTH_HISTORY_DAYS` (30), `ALERTD_CIRCUIT_BREAKER_THRESHOLD` (3),
   `ALERTD_CIRCUIT_BREAKER_OPEN_SEC` (60), `ALERTD_EVAL_ERROR_DISABLE_THRESHOLD`
   (50), `ALERTD_ESCALATION_AFTER_MIN` (15), `ALERTD_ESCALATION_CHANNEL`
-  (`sms_main`), `ALERTD_DIGEST_HOUR` (21), `ALERTD_CORS_ORIGINS` (empty),
+  (empty = escalation off; name the channel to re-page through), `ALERTD_DIGEST_HOUR` (21), `ALERTD_CORS_ORIGINS` (empty),
   `ALERTD_BLOCK_PRIVATE_EGRESS` (`false`), `ALERTD_ACTIVITY_QUEUE_MAX` (5000).
 
 ### Secrets for channels, inputs and packs (`secrets.env`)

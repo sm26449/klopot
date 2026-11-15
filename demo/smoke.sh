@@ -7,7 +7,7 @@ set -euo pipefail
 
 KLOPOT="http://127.0.0.1:${DEMO_KLOPOT_PORT:-8090}"
 SINK="http://127.0.0.1:${DEMO_SINK_PORT:-8091}"
-KEY="${ALERTD_BOOTSTRAP_ADMIN_KEY:-alertd_demo_key_please_change}"
+KEY="${ALERTD_BOOTSTRAP_ADMIN_KEY:?export the key the demo stack was started with (see compose.demo.yml)}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
 echo "1/3 waiting for Klopot to be healthy…"

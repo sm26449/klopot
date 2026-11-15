@@ -6,6 +6,35 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Upgrade notes
+
+- **No default database password.** `ALERTD_DATABASE_URL`, `MYSQL_PASSWORD`
+  and `MYSQL_ROOT_PASSWORD` have no defaults any more (they were `alertd`):
+  Klopot refuses to start without the URL, and the bundled MySQL without its
+  passwords. An install that relied on the default must set them in `.env`
+  (and, to keep the data, set them to the password the database already has).
+- **Escalation is off unless you name a channel.** `ALERTD_ESCALATION_CHANNEL`
+  defaulted to `sms_main`; it is now empty. If you escalate through
+  `sms_main`, set `ALERTD_ESCALATION_CHANNEL=sms_main` in `.env` **before**
+  upgrading, or unacknowledged criticals stop being re-paged.
+- **Demo:** export a random `ALERTD_BOOTSTRAP_ADMIN_KEY` before
+  `docker compose -f compose.demo.yml up` (the README shows the command);
+  the demo no longer ships a fixed key. The dev overlay takes its passwords
+  from `.env` too.
+
+### Security
+
+- No publicly known credential is a default: the database URL and MySQL
+  passwords (above), the demo admin key and the dev admin password. The MySQL
+  healthcheck passes the password through `MYSQL_PWD`, not as a `-p`
+  argument that `ps` shows.
+- SMS channel healthcheck: a failed check returned the raw error text, in
+  which httpx quotes the URL — a health or router URL with a token reached
+  anyone with a read-scoped key. It now returns the redacted text.
+- Pushover: a receipt that cannot be read (revoked token, HTTP error,
+  network) is logged as a warning without the token, instead of silently
+  leaving an emergency acknowledged in the app open in Klopot.
+
 ### Added
 
 - README screenshots of the admin UI (`docs/screenshots/`), generated from

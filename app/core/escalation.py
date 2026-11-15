@@ -5,7 +5,8 @@ a missed page. This service turns acknowledgement into an operational
 signal: any dispatched (non-suppressed, non-test) critical that is
 still unacknowledged ``ALERTD_ESCALATION_AFTER_MIN`` minutes after
 firing is queued ONCE through the escalation channel
-(``ALERTD_ESCALATION_CHANNEL``, default ``sms_main``), and the row is
+(``ALERTD_ESCALATION_CHANNEL``; empty, the default, turns escalation
+off), and the row is
 stamped ``escalated_at``.
 
 Design notes:
@@ -55,6 +56,9 @@ class EscalationService:
             return
         if get_settings().escalation_after_min <= 0:
             logger.info("escalation disabled (ALERTD_ESCALATION_AFTER_MIN=0)")
+            return
+        if not get_settings().escalation_channel:
+            logger.info("escalation disabled (no ALERTD_ESCALATION_CHANNEL)")
             return
         self._stop_evt.clear()
         self._task = asyncio.create_task(self._run(), name="escalation")

@@ -42,6 +42,27 @@ if [ -n "$TRAEFIK_NETWORK" ] && ! docker network inspect "$TRAEFIK_NETWORK" >/de
   exit 1
 fi
 
+# ── Required values (no default passwords since 1.1.1) ─────────────
+env_value() { sed -n "s/^$1=//p" .env | tail -1; }
+DB_URL="$(env_value ALERTD_DATABASE_URL)"
+case "$DB_URL" in
+  ""|*"<MYSQL_PASSWORD>"*)
+    echo "ERROR: set ALERTD_DATABASE_URL in .env (see .env.example) — there is no default." >&2
+    exit 1 ;;
+esac
+COMPOSE_FILES="$(env_value COMPOSE_FILE)"
+case "$COMPOSE_FILES" in
+  *external-db*) ;;   # your own server: only the URL is needed
+  *)
+    for v in MYSQL_ROOT_PASSWORD MYSQL_PASSWORD; do
+      [ -n "$(env_value "$v")" ] || { echo "ERROR: set $v in .env — there is no default." >&2; exit 1; }
+    done
+    case "$DB_URL" in
+      *":$(env_value MYSQL_PASSWORD)@"*) ;;
+      *) echo "WARNING: ALERTD_DATABASE_URL does not contain MYSQL_PASSWORD — Klopot will not be able to log in to the bundled MySQL." >&2 ;;
+    esac ;;
+esac
+
 # ── 3. Build + start ──────────────────────────────────────────────
 say "docker compose up -d --build (migrations + bootstrap seed run on startup)"
 docker compose up -d --build

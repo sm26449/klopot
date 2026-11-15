@@ -7,8 +7,9 @@
 #   • bundles a Mosquitto broker on 127.0.0.1:1883 (anonymous, dev only);
 #   • plain-HTTP login works (insecure cookies), /docs and /v1/metrics open,
 #     DEBUG logging with human-readable output;
-#   • MySQL published on 127.0.0.1:3306, root password defaults to a dev
-#     value; no backup sidecar (enable it with `--profile backup`).
+#   • MySQL published on 127.0.0.1:3306; no backup sidecar (enable it with
+#     `--profile backup`). Passwords come from .env like production — no
+#     dev defaults (cp .env.example .env and fill in the required values).
 # For running the app straight from source with hot reload, see CONTRIBUTING.md.
 services:
   alertd:
@@ -24,11 +25,12 @@ services:
       ALERTD_COOKIE_SECURE: "false"
       ALERTD_DOCS_ENABLED: "true"
       ALERTD_METRICS_REQUIRE_AUTH: "false"
-      ALERTD_ADMIN_BOOTSTRAP_PASSWORD: ${ALERTD_ADMIN_BOOTSTRAP_PASSWORD:-change-me-dev-only}
+      ALERTD_ADMIN_BOOTSTRAP_PASSWORD: ${ALERTD_ADMIN_BOOTSTRAP_PASSWORD:?set ALERTD_ADMIN_BOOTSTRAP_PASSWORD in .env}
 
   mysql:
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-devroot}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}
     # Published on localhost so alertd can also run from source (see
     # CONTRIBUTING.md) against the containerised database.
     ports:
