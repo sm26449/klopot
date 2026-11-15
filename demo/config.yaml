@@ -1,0 +1,55 @@
+# Demo config pack — imported into the demo Klopot on first run.
+#
+# A publisher emits a sine wave to MQTT; this rule fires when it crosses the
+# threshold and POSTs the alert to the demo webhook sink. Self-contained: all
+# hosts are demo service names on the compose network.
+version: "1.0"
+
+inputs:
+  - name: demo_mqtt
+    kind: mqtt
+    config:
+      host: mosquitto
+      port: 1883
+
+channels:
+  - name: demo_sink
+    kind: webhook
+    config:
+      url: http://sink:8080/
+      method: POST
+      content_type: application/json
+      body_template: '{"title": "{title | jsonstr}", "message": "{message | jsonstr}"}'
+      expected_status: 200
+
+variables:
+  - name: demo_value
+    source: mqtt
+    input: demo_mqtt
+    config:
+      topic: demo/sine
+      type: number
+      stale_after_sec: 60
+    description: Sine wave emitted by the demo publisher.
+
+templates:
+  - type: demo_threshold
+    severity: warning
+    icon: "📈"
+    title_template: "Demo threshold crossed: {demo_value}"
+    message_template: "The demo sine wave read {demo_value}, over the threshold of 5."
+    min_repeat_min: 0
+
+rules:
+  - name: demo_over_threshold
+    template_type: demo_threshold
+    condition_expr: "demo_value > 5"
+    persist_n: 1
+    eval_interval_sec: 2
+    vars_extract: ["demo_value"]
+    trigger_summary: "Demo sine wave above 5"
+
+routes:
+  - template: demo_threshold
+    channel: demo_sink
+    severity_min: info

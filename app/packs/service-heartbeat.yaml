@@ -1,0 +1,66 @@
+pack:
+  id: service-heartbeat
+  name: {en: "Service heartbeat", ro: "Heartbeat serviciu"}
+  description:
+    en: "A service publishes a value to MQTT on a timer; a critical alert fires when it stops (the value goes stale). Works for any process, script or device that can publish to MQTT."
+    ro: "Un serviciu publică periodic o valoare în MQTT; se trimite o alertă critică când se oprește (valoarea devine veche). Merge pentru orice proces, script sau dispozitiv care poate publica în MQTT."
+  version: 1.0.0
+  tags: [uptime, mqtt]
+  parameters:
+    - name: key
+      label: {en: "Short id", ro: "Id scurt"}
+      description:
+        en: "Lowercase letters, digits and _. It goes into the names, so the pack can be installed once per service."
+        ro: "Litere mici, cifre și _. Intră în nume, ca pachetul să poată fi instalat o dată pentru fiecare serviciu."
+      default: api
+    - name: broker_host
+      label: {en: "MQTT broker host", ro: "Host broker MQTT"}
+      default: mqtt.example.com
+    - name: broker_port
+      label: {en: "MQTT broker port", ro: "Port broker MQTT"}
+      type: integer
+      default: 1883
+    - name: service_name
+      label: {en: "Service name (shown in the alert)", ro: "Numele serviciului (apare în alertă)"}
+      default: API
+    - name: topic
+      label: {en: "Heartbeat topic", ro: "Topic heartbeat"}
+      default: services/api/heartbeat
+    - name: timeout_sec
+      label: {en: "Silent for (seconds) = down", ro: "Tăcut (secunde) = căzut"}
+      type: integer
+      default: 90
+    - name: alert_channel
+      label: {en: "Send to channel", ro: "Trimite pe canalul"}
+      type: channel
+      default: ui_default
+
+version: "1.0"
+inputs:
+  - name: heartbeat_mqtt
+    kind: mqtt
+    config: {host: "${broker_host}", port: "${broker_port}"}
+variables:
+  - name: ${key}_heartbeat
+    source: mqtt
+    input: heartbeat_mqtt
+    config: {topic: "${topic}", type: number, stale_after_sec: "${timeout_sec}"}
+    description: "Heartbeat of ${service_name}."
+templates:
+  - type: ${key}_down
+    severity: critical
+    icon: "🔴"
+    category: Uptime
+    title_template: "${service_name} is down — no heartbeat"
+    message_template: "No heartbeat from ${service_name} for over ${timeout_sec} seconds. Check the process and its MQTT connection."
+    min_repeat_min: 15
+rules:
+  - name: ${key}_no_heartbeat
+    template_type: ${key}_down
+    condition_expr: "var_age('${key}_heartbeat') > ${timeout_sec}"
+    persist_n: 2
+    eval_interval_sec: 30
+    vars_extract: ["${key}_heartbeat"]
+    trigger_summary: "No heartbeat for more than ${timeout_sec}s on two consecutive checks"
+routes:
+  - {template: "${key}_down", channel: "${alert_channel}", severity_min: info}

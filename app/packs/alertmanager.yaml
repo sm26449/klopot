@@ -1,0 +1,66 @@
+pack:
+  id: alertmanager
+  name: {en: "Prometheus Alertmanager / Grafana", ro: "Prometheus Alertmanager / Grafana"}
+  description:
+    en: "Receive Alertmanager or Grafana alerts: one template per severity, a resolution message, and an episode per alert so repeats notify once. Point the receiver's webhook at the input URL shown after install."
+    ro: "Primește alerte din Alertmanager sau Grafana: un șablon per severitate, un mesaj de rezolvare și un episod per alertă, ca repetările să notifice o singură dată. Îndreaptă webhook-ul receiver-ului spre URL-ul intrării afișat după instalare."
+  version: 1.0.0
+  tags: [prometheus, grafana, webhook]
+  parameters:
+    - name: token_env
+      label: {en: "Env variable holding the receiver token", ro: "Variabila de mediu cu token-ul receiver-ului"}
+      description:
+        en: "Put KLOPOT_SECRET_ALERTMANAGER_TOKEN=<a long random value> in secrets.env and restart Klopot; Alertmanager / Grafana sends the same value as a Bearer token."
+        ro: "Pune KLOPOT_SECRET_ALERTMANAGER_TOKEN=<o valoare lungă, aleatoare> în secrets.env și repornește Klopot; Alertmanager / Grafana trimite aceeași valoare ca token Bearer."
+      type: env
+      default: KLOPOT_SECRET_ALERTMANAGER_TOKEN
+    - name: alert_channel
+      label: {en: "Send to channel", ro: "Trimite pe canalul"}
+      type: channel
+      default: ui_default
+
+version: "1.0"
+inputs:
+  - name: alertmanager
+    kind: alertmanager
+    config:
+      default_type: am_warning
+      type_label: alertname
+      type_by_severity: {critical: am_critical, warning: am_warning, default: am_info}
+      resolved_type: am_resolved
+      auth_required: true
+      auth_token_ref: "${token_env}"
+templates:
+  - type: am_critical
+    severity: critical
+    icon: "🚨"
+    category: Prometheus
+    title_template: "{labels.alertname} on {labels.instance}"
+    message_template: "{annotations.summary}"
+    min_repeat_min: 0
+  - type: am_warning
+    severity: warning
+    icon: "⚠️"
+    category: Prometheus
+    title_template: "{labels.alertname} on {labels.instance}"
+    message_template: "{annotations.summary}"
+    min_repeat_min: 0
+  - type: am_info
+    severity: info
+    icon: "🔵"
+    category: Prometheus
+    title_template: "{labels.alertname} on {labels.instance}"
+    message_template: "{annotations.summary}"
+    min_repeat_min: 0
+  - type: am_resolved
+    severity: info
+    icon: "✅"
+    category: Prometheus
+    title_template: "Resolved: {labels.alertname} on {labels.instance}"
+    message_template: "{annotations.summary}"
+    min_repeat_min: 0
+routes:
+  - {template: am_critical, channel: "${alert_channel}", severity_min: info}
+  - {template: am_warning, channel: "${alert_channel}", severity_min: info}
+  - {template: am_info, channel: "${alert_channel}", severity_min: info}
+  - {template: am_resolved, channel: "${alert_channel}", severity_min: info}

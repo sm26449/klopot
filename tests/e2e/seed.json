@@ -1,0 +1,28 @@
+{
+  "version": "1.0",
+  "templates": [
+    {
+      "type": "e2e_disk_full", "severity": "critical", "icon": "💾", "category": "E2E",
+      "title_template": "Disk almost full on {host} — {pct}% used, clean up before the volume stops accepting writes",
+      "message_template": "{host} is at {pct}%.", "min_repeat_min": 0
+    },
+    {
+      "type": "e2e_info", "severity": "info", "icon": "🧪", "category": "E2E",
+      "title_template": "E2E info: {what}", "min_repeat_min": 0
+    }
+  ],
+  "routes": [
+    { "template": "e2e_disk_full", "channel": "ui_default", "severity_min": "info" },
+    { "template": "e2e_info", "channel": "ui_default", "severity_min": "info" }
+  ],
+  "variables": [
+    { "name": "e2e.temperature", "source": "constant", "config": { "value": 21.5 }, "description": "E2E constant" }
+  ],
+  "rules": [
+    {
+      "name": "e2e_temperature_high", "template_type": "e2e_info",
+      "condition_expr": "e2e.temperature > 90", "persist_n": 2, "eval_interval_sec": 30,
+      "trigger_summary": "E2E: temperature above 90"
+    }
+  ]
+}

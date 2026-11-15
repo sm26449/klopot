@@ -1,0 +1,167 @@
+[project]
+name = "alertd"
+version = "1.1.0"
+description = "Notification microservice — declarative inputs, rules, templates, channels"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [
+    { name = "Stefan Maldaianu", email = "stefan@klopot.dev" },
+]
+
+dependencies = [
+    # Web framework
+    "fastapi>=0.140.0,<0.163",
+    # Explicit security floor: starlette <1.3.1 carries PYSEC-2026-161/-248/
+    # -249/-2280/-2281 (and the 0.49.1 StaticFiles range DoS, A-03). FastAPI
+    # >=0.140 no longer caps starlette, so pin the floor here directly.
+    "starlette>=1.3.1,<2",
+    "uvicorn[standard]>=0.32.0,<0.33",
+    "gunicorn>=23.0.0,<24",
+    # Validation / config
+    "pydantic>=2.9.0,<3",
+    "pydantic-settings>=2.6.0,<3",
+    # Database (async)
+    "sqlalchemy>=2.0.36,<2.1",
+    "aiomysql>=0.3.0,<0.4",
+    "alembic>=1.14.0,<2",
+    "cryptography>=43.0.0",  # required by aiomysql for caching_sha2_password
+    # MQTT (async)
+    "aiomqtt>=2.3.0,<3",
+    # HTTP client (async, for channel adapters in S5)
+    "httpx>=0.28.0,<0.29",
+    # Expression eval (rule conditions in S4)
+    "simpleeval>=1.0.0,<2",
+    # Linear-time regex for user-supplied patterns — no catastrophic
+    # backtracking, so a rule regex can't freeze the event loop (audit V10)
+    "google-re2>=1.1,<2",
+    # Crypto for API keys
+    "bcrypt>=4.2.0,<5",
+    # Password hashing for admin_users (argon2id — memory-hard; bcrypt
+    # stays for high-entropy API keys)
+    "argon2-cffi>=23.1.0,<24",
+    # Cron parsing (schedules in S7)
+    "croniter>=3.0.0,<4",
+    # Logging
+    "structlog>=24.4.0,<25",
+    # Email channel (S6)
+    "aiosmtplib>=5.1.2,<6",
+    # Web Push channel (S6)
+    "pywebpush>=2.0.0,<3",
+    # Config import/export (S8)
+    "pyyaml>=6.0,<7",
+    # Metrics (S12)
+    "prometheus-client>=0.21.0,<0.22",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0,<9",
+    "pytest-asyncio>=0.24.0,<0.25",
+    "pytest-cov>=6.0.0,<7",
+    "httpx>=0.28.0,<0.29",  # also test client
+    "aiosqlite>=0.20.0,<0.22",  # in-memory test DB (S12c)
+    "ruff>=0.7.0,<0.8",
+    "black>=24.10.0,<25",
+    "mypy>=1.13.0,<2",
+    "mypy-baseline>=0.7,<1",
+    "types-croniter",
+    "types-PyYAML",
+    "pre-commit>=4.0.0,<5",
+    # SDK generation (scripts/generate_sdks.sh). 0.30 targets the "httpx2"
+    # fork; 0.29.1 is the last release generating for httpx.
+    "openapi-python-client==0.29.1",
+]
+
+[project.urls]
+Repository = "https://github.com/sm26449/klopot"
+
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+exclude = ["tests*", "docs*"]
+
+# Admin UI static assets (HTML/JS/CSS/SVG) must ship with the package for
+# non-editable installs; the Docker image copies app/ directly anyway.
+[tool.setuptools.package-data]
+app = ["admin_ui/static/**/*"]
+
+# ── Tooling ──────────────────────────────────────────────────────────
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+# E/W: pycodestyle  F: pyflakes  I: isort  B: flake8-bugbear
+# UP: pyupgrade  ASYNC: flake8-async  PT: pytest-style  RUF: ruff-specific
+select = ["E", "W", "F", "I", "B", "UP", "ASYNC", "PT", "RUF"]
+ignore = [
+    "E501",    # line length handled by black
+    "B008",    # function call in default arg — FastAPI Depends()/Query()/Body() idiom
+    "RUF001",  # ambiguous unicode in strings — ×, –, ∪ used deliberately
+    "RUF002",  # ambiguous unicode in docstrings
+    "RUF003",  # ambiguous unicode in comments
+]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/shadow_diff.py" = ["E741"]  # historical S11 script; `l` for log-line
+
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+extend-exclude = "alembic/versions"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+warn_unused_ignores = true
+exclude = ["alembic/versions/", "tests/"]
+
+[[tool.mypy.overrides]]
+module = ["simpleeval", "aiomqtt.*", "aiomysql.*", "croniter", "re2", "pywebpush", "py_vapid", "http_ece"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = ["-ra", "--strict-markers", "--strict-config"]
+markers = [
+    "sqlite: test relies on the in-memory SQLite test harness (isolation or event-loop model) and is NOT run on the MySQL gate. The behaviour it asserts is real; only the harness differs. Run the MySQL gate with `-m 'not sqlite'`.",
+    "mysql: concurrency/locking test that needs real MySQL (two independent sessions racing). Skipped on the SQLite run via `-m 'not mysql'`; run on the MySQL gate.",
+]
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning:passlib.*",
+    # datetime.utcnow() — used through alertd's codebase; tracked
+    # under the S12+ TZ-normalization ticket. Promoting it to an
+    # error blocks the whole test suite without surfacing real bugs.
+    "ignore::DeprecationWarning:.*utcnow.*",
+    "ignore:datetime\\.datetime\\.utcnow.*:DeprecationWarning",
+    # Async generator cleanup leaks during teardown (StaticPool +
+    # aiosqlite + asyncio task lifecycle) — not real bugs.
+    "ignore::pytest.PytestUnraisableExceptionWarning",
+    # Same StaticPool + aiosqlite teardown race, surfaced from the
+    # connection's worker THREAD instead of the loop: as a test's
+    # function-scoped event loop closes, aiosqlite's background thread
+    # can raise "Event loop is closed" / "Cannot operate on a closed
+    # database". It is a pure in-memory-SQLite test artifact (prod uses
+    # aiomysql on a long-lived loop) and lands on whichever test happens
+    # to be running, so left as an error it flakes CI at random.
+    "ignore::pytest.PytestUnhandledThreadExceptionWarning",
+    # starlette.testclient (used for WebSocket tests) imports a
+    # deprecated anyio alias — upstream issue, not ours.
+    "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
+    # starlette 1.x TestClient prefers the httpx2 package and warns when the
+    # plain httpx we ship for the real async client is used instead. This is a
+    # test-harness-only preference (production uses httpx directly, never the
+    # TestClient), so silence it rather than add a second HTTP client.
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated:starlette.exceptions.StarletteDeprecationWarning",
+]

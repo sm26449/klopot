@@ -1,0 +1,153 @@
+"""/v1/packs: catalog, preview, install; pack export and the plain import path."""
+from __future__ import annotations
+
+import pytest
+import yaml
+from sqlalchemy import select
+
+from app.db.models import AuditLog, Channel, ChannelKind, Input, Rule, Template, Variable
+from app.services import packs
+
+
+@pytest.fixture
+async def ui_channel(db_session):
+    db_session.add(Channel(name="ui_default", kind=ChannelKind.ui, config={}, enabled=True))
+    await db_session.commit()
+
+
+def _h(key):
+    return {"X-API-Key": key}
+
+
+async def test_catalog_lists_and_serves_packs(db_client, admin_key):
+    r = await db_client.get("/v1/packs", headers=_h(admin_key))
+    assert r.status_code == 200
+    ids = {p["id"] for p in r.json()["items"]}
+    assert {"self-monitoring", "service-heartbeat", "sensor-threshold", "alertmanager"} <= ids
+    one = (await db_client.get("/v1/packs/sensor-threshold", headers=_h(admin_key))).json()
+    assert one["counts"]["rules"] == 2 and "pack:" in one["yaml"]
+    assert {p["name"] for p in one["parameters"]} >= {"key", "topic", "threshold", "alert_channel"}
+    assert (await db_client.get("/v1/packs/nope", headers=_h(admin_key))).status_code == 404
+
+
+@pytest.mark.parametrize("pack_id", sorted(packs.catalog()))
+async def test_every_catalog_pack_installs_on_an_empty_instance(db_client, admin_key, ui_channel, pack_id):
+    """A broken catalog pack must fail the build, not a user's first install."""
+    r = await db_client.post("/v1/packs/apply", json={"pack_id": pack_id}, headers=_h(admin_key))
+    body = r.json()
+    assert body["applied"] is True, body
+    again = (await db_client.post("/v1/packs/preview", json={"pack_id": pack_id}, headers=_h(admin_key))).json()
+    assert again["counts"]["new"] == 0 and again["counts"]["differs"] == 0, again  # reinstall = no-op
+
+
+async def test_install_with_parameters_and_a_second_instance(db_client, admin_key, db_session, ui_channel):
+    params = {"key": "fridge", "topic": "home/fridge/t", "threshold": 6, "broker_host": "broker.lan"}
+    preview = (await db_client.post("/v1/packs/preview", json={"pack_id": "sensor-threshold", "params": params},
+                                    headers=_h(admin_key))).json()
+    assert preview["ok"] and preview["params"]["threshold"] == 6
+    assert {(i["section"], i["key"]) for i in preview["items"]} >= {("rules", "fridge_above_threshold"), ("variables", "fridge_value")}
+    assert (await db_client.post("/v1/packs/apply", json={"pack_id": "sensor-threshold", "params": params},
+                                 headers=_h(admin_key))).json()["applied"]
+    second = {**params, "key": "freezer", "topic": "home/freezer/t", "threshold": -10}
+    assert (await db_client.post("/v1/packs/apply", json={"pack_id": "sensor-threshold", "params": second},
+                                 headers=_h(admin_key))).json()["applied"]
+    rules = {r.name: r.condition_expr for r in (await db_session.execute(select(Rule))).scalars()}
+    assert rules["fridge_above_threshold"].endswith("fridge_value > 6")
+    assert rules["freezer_above_threshold"].endswith("freezer_value > -10")
+    inp = (await db_session.execute(select(Input).where(Input.name == "sensors_mqtt"))).scalar_one()
+    assert inp.config == {"host": "broker.lan", "port": 1883}  # typed: port stays an int
+    audit = (await db_session.execute(select(AuditLog).where(AuditLog.action == "pack.install"))).scalars().all()
+    assert len(audit) == 2
+
+
+async def test_bad_parameters_are_reported_not_applied(db_client, admin_key, ui_channel):
+    r = (await db_client.post("/v1/packs/apply", json={"pack_id": "sensor-threshold", "params": {"threshold": "warm"}},
+                              headers=_h(admin_key))).json()
+    assert r["applied"] is False and any("threshold" in e for e in r["errors"])
+    r = await db_client.post("/v1/packs/preview", json={"pack_id": "x", "yaml": "a: 1"}, headers=_h(admin_key))
+    assert r.status_code == 422  # exactly one source
+
+
+async def test_route_to_a_missing_channel_is_a_validation_error(db_client, admin_key, ui_channel):
+    r = (await db_client.post("/v1/packs/preview", json={"pack_id": "service-heartbeat", "params": {"alert_channel": "nowhere"}},
+                              headers=_h(admin_key))).json()
+    assert r["ok"] is False and any("nowhere" in e for e in r["errors"])
+
+
+async def test_user_yaml_pack_inspect_and_install(db_client, admin_key, db_session, ui_channel):
+    text = yaml.safe_dump({
+        "pack": {"id": "mine", "name": "Mine", "parameters": [{"name": "level", "type": "number", "default": 3}]},
+        "templates": [{"type": "mine_low", "severity": "warning", "title_template": "Low below ${level}"}],
+        "routes": [{"template": "mine_low", "channel": "ui_default"}],
+    })
+    info = (await db_client.post("/v1/packs/inspect", json={"yaml": text}, headers=_h(admin_key))).json()
+    assert info["ok"] and info["parameters"][0]["name"] == "level" and info["counts"] == {"templates": 1, "routes": 1}
+    r = (await db_client.post("/v1/packs/apply", json={"yaml": text, "params": {"level": 5}}, headers=_h(admin_key))).json()
+    assert r["applied"]
+    t = (await db_session.execute(select(Template).where(Template.type == "mine_low"))).scalar_one()
+    assert t.title_template == "Low below 5"
+
+
+async def test_plain_import_accepts_a_header_but_refuses_parameters(db_client, admin_key, ui_channel):
+    plain = yaml.safe_dump({"pack": {"id": "plain", "name": "P"}, "templates": [
+        {"type": "p_t", "severity": "info", "title_template": "x"}]})
+    r = (await db_client.post("/v1/config/import/preview", content=plain, headers={**_h(admin_key), "Content-Type": "application/yaml"})).json()
+    assert r["ok"] and r["counts"]["new"] == 1
+    with_params = packs.catalog_text("sensor-threshold")
+    r = (await db_client.post("/v1/config/import/preview", content=with_params,
+                              headers={**_h(admin_key), "Content-Type": "application/yaml"})).json()
+    assert r["ok"] is False and "/v1/packs/apply" in r["errors"][0]
+
+
+async def test_export_as_pack_closes_over_dependencies_and_reinstalls(db_client, admin_key, db_session, ui_channel):
+    # Build a small world through a pack, then export one rule as a new pack.
+    await db_client.post("/v1/packs/apply", json={"pack_id": "sensor-threshold", "params": {"key": "tank"}}, headers=_h(admin_key))
+    r = await db_client.get("/v1/config/export", headers=_h(admin_key), params={
+        "sections": "rules", "names": "tank_above_threshold", "with_dependencies": "true",
+        "pack_id": "tank-alerts", "pack_name": "Tank alerts"})
+    assert r.status_code == 200 and "tank-alerts.yaml" in r.headers["content-disposition"]
+    doc = yaml.safe_load(r.text)
+    assert doc["pack"] == {"id": "tank-alerts", "name": "Tank alerts", "version": "1.0.0"}
+    assert list(doc)[:2] == ["pack", "version"]
+    assert [x["name"] for x in doc["inputs"]] == ["sensors_mqtt"]           # variable → input
+    assert [x["name"] for x in doc["variables"]] == ["tank_value"]           # rule → variable
+    assert [x["type"] for x in doc["templates"]] == ["tank_too_high"]        # rule → template
+    assert [x["name"] for x in doc["channels"]] == ["ui_default"]           # route → channel
+    # The exported pack installs through /v1/packs (here: onto the same instance → all identical).
+    again = (await db_client.post("/v1/packs/preview", json={"yaml": r.text}, headers=_h(admin_key))).json()
+    assert again["ok"] and again["counts"]["new"] == 0 and again["counts"]["differs"] == 0, again
+
+
+async def test_closure_follows_computed_formulas_inhibitors_and_gate_variables(db_client, admin_key, db_session, ui_channel):
+    text = yaml.safe_dump({"pack": {"id": "deps", "name": "Deps"}, "variables": [
+        {"name": "a", "source": "constant", "config": {"value": 1}},
+        {"name": "b", "source": "computed", "config": {"formula": "a * 2"}},
+        {"name": "g", "source": "constant", "config": {"value": 5}},
+    ], "templates": [
+        {"type": "t_main", "severity": "warning", "title_template": "x", "gate_variable": "g", "gate_min": 1},
+        {"type": "t_inh", "severity": "info", "title_template": "y"},
+    ], "rules": [
+        {"name": "inhibitor", "template_type": "t_inh", "condition_expr": "a > 0"},
+        {"name": "main", "template_type": "t_main", "condition_expr": "b > 1", "inhibited_by": ["inhibitor"]},
+    ]})
+    assert (await db_client.post("/v1/packs/apply", json={"yaml": text}, headers=_h(admin_key))).json()["applied"]
+    doc = yaml.safe_load((await db_client.get("/v1/config/export", headers=_h(admin_key), params={
+        "sections": "rules", "names": "main", "with_dependencies": "true"})).text)
+    assert sorted(r["name"] for r in doc["rules"]) == ["inhibitor", "main"]
+    assert sorted(v["name"] for v in doc["variables"]) == ["a", "b", "g"]
+    assert sorted(t["type"] for t in doc["templates"]) == ["t_inh", "t_main"]
+    assert (await db_session.execute(select(Variable).where(Variable.name == "b"))).scalar_one()
+
+
+async def test_preview_reports_whether_each_secret_is_ready(db_client, admin_key, ui_channel, monkeypatch):
+    """An `env` setting names a secret; the preview says whether Klopot may read
+    it and whether it is set — never its value."""
+    h = _h(admin_key)
+    monkeypatch.delenv("KLOPOT_SECRET_ALERTMANAGER_TOKEN", raising=False)
+    r = (await db_client.post("/v1/packs/preview", headers=h, json={"pack_id": "alertmanager"})).json()
+    assert r["env"] == [{"param": "token_env", "name": "KLOPOT_SECRET_ALERTMANAGER_TOKEN", "allowed": True, "set": False}]
+    monkeypatch.setenv("KLOPOT_SECRET_ALERTMANAGER_TOKEN", "s3cret-value")
+    r = (await db_client.post("/v1/packs/preview", headers=h, json={"pack_id": "alertmanager"})).json()
+    assert r["env"][0]["set"] is True and "s3cret-value" not in str(r)
+    r = (await db_client.post("/v1/packs/preview", headers=h, json={"pack_id": "alertmanager", "params": {"token_env": "MY_TOKEN"}})).json()
+    assert r["env"][0]["allowed"] is False  # not KLOPOT_SECRET_* and not allowlisted

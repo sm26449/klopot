@@ -1,0 +1,203 @@
+# Klopot — production stack (no reverse proxy).
+#
+#   cp .env.example .env            # then edit: passwords, MQTT broker, secrets
+#   docker compose up -d
+#
+# Variants (overlays on top of this file):
+#   docker compose -f docker-compose.yml -f compose.traefik.yml up -d   # behind traefik (TLS)
+#   docker compose -f docker-compose.yml -f compose.dev.yml up --build  # local development
+#   … -f compose.external-db.yml                                        # use an existing MySQL
+#   docker compose -f compose.demo.yml up -d --build                    # self-contained demo
+# Tip: put the -f list in .env as COMPOSE_FILE=docker-compose.yml:compose.traefik.yml
+# so a plain `docker compose up -d` picks the right variant.
+#
+# The HTTP port binds 127.0.0.1 only. Expose Klopot beyond the host through a
+# TLS reverse proxy (see compose.traefik.yml and docs/DEPLOY.md).
+name: ${KLOPOT_PROJECT_NAME:-klopot}
+
+services:
+  alertd:
+    # CI publishes this image on every green main build. With both image: and
+    # build: present, `docker compose pull` fetches the prebuilt image and
+    # `docker compose build` still works as the local fallback.
+    image: ${KLOPOT_IMAGE:-ghcr.io/sm26449/klopot:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${KLOPOT_HTTP_PORT:-5090}:5090"
+    # Lets ALERTD_MQTT_HOST=host.docker.internal reach a broker on the host.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # Secrets for channels / inputs / packs, one line each:
+    #   KLOPOT_SECRET_<NAME>=value   → reference it as KLOPOT_SECRET_<NAME>
+    # Optional file next to .env (see secrets.env.example); restart to apply.
+    env_file:
+      - path: secrets.env
+        required: false
+    environment:
+      # ── Database ────────────────────────────────────────────
+      ALERTD_DATABASE_URL: ${ALERTD_DATABASE_URL:-mysql+aiomysql://alertd:alertd@mysql:3306/alertd}
+      # ── MQTT ────────────────────────────────────────────────
+      ALERTD_MQTT_HOST: ${ALERTD_MQTT_HOST:-host.docker.internal}
+      ALERTD_MQTT_PORT: ${ALERTD_MQTT_PORT:-1883}
+      ALERTD_MQTT_USERNAME: ${ALERTD_MQTT_USERNAME:-}
+      ALERTD_MQTT_PASSWORD: ${ALERTD_MQTT_PASSWORD:-}
+      ALERTD_MQTT_CLIENT_ID: ${ALERTD_MQTT_CLIENT_ID:-alertd}
+      # ── Service ─────────────────────────────────────────────
+      ALERTD_LOG_LEVEL: ${ALERTD_LOG_LEVEL:-INFO}
+      ALERTD_BIND_HOST: 0.0.0.0
+      ALERTD_BIND_PORT: 5090
+      ALERTD_TZ: ${ALERTD_TZ:-UTC}
+      # OS-level TZ — naive datetime.now() in quiet-hours evaluation must
+      # return local time, not UTC.
+      TZ: ${TZ:-${ALERTD_TZ:-UTC}}
+      # ── Bootstrap admin API key (optional, written to DB on first run) ─
+      ALERTD_BOOTSTRAP_ADMIN_KEY: ${ALERTD_BOOTSTRAP_ADMIN_KEY:-}
+      # ── Admin UI (static SPA at /admin) ─────────────────────
+      ALERTD_ADMIN_UI_ENABLED: ${ALERTD_ADMIN_UI_ENABLED:-true}
+      # ── Admin UI login (first-boot password + session/lockout knobs) ─
+      ALERTD_ADMIN_BOOTSTRAP_PASSWORD: ${ALERTD_ADMIN_BOOTSTRAP_PASSWORD:-}
+      # false only for plain-HTTP localhost; compose.traefik.yml forces true.
+      ALERTD_COOKIE_SECURE: ${ALERTD_COOKIE_SECURE:-false}
+      ALERTD_SESSION_IDLE_HOURS: ${ALERTD_SESSION_IDLE_HOURS:-12}
+      ALERTD_SESSION_MAX_DAYS: ${ALERTD_SESSION_MAX_DAYS:-7}
+      ALERTD_LOGIN_MAX_FAILURES: ${ALERTD_LOGIN_MAX_FAILURES:-5}
+      ALERTD_LOGIN_MAX_FAILURES_PER_IP: ${ALERTD_LOGIN_MAX_FAILURES_PER_IP:-20}
+      ALERTD_LOGIN_LOCKOUT_MIN: ${ALERTD_LOGIN_LOCKOUT_MIN:-15}
+      # ── Reverse proxy, API surface & secret-ref policy ──────
+      ALERTD_TRUSTED_PROXY_CIDRS: ${ALERTD_TRUSTED_PROXY_CIDRS:-}
+      ALERTD_SECRET_REF_ALLOW: ${ALERTD_SECRET_REF_ALLOW:-}
+      # Activity log: false keeps the rows but no request/response bodies.
+      ALERTD_ACTIVITY_LOG_BODIES: ${ALERTD_ACTIVITY_LOG_BODIES:-true}
+      # Web Push: extra push-service hosts besides Apple / Google / Mozilla / Microsoft.
+      ALERTD_PUSH_ALLOWED_HOSTS: ${ALERTD_PUSH_ALLOWED_HOSTS:-}
+      # docs/metrics: blank = auto (off / read-key-required under cookie_secure).
+      ALERTD_DOCS_ENABLED: ${ALERTD_DOCS_ENABLED:-}
+      ALERTD_METRICS_REQUIRE_AUTH: ${ALERTD_METRICS_REQUIRE_AUTH:-}
+      ALERTD_ADAPTER_SEND_TIMEOUT_SEC: ${ALERTD_ADAPTER_SEND_TIMEOUT_SEC:-30}
+      # ── Entity admission caps (raise via .env if you outgrow them) ─
+      ALERTD_MAX_RULES: ${ALERTD_MAX_RULES:-100}
+      ALERTD_MAX_INPUTS: ${ALERTD_MAX_INPUTS:-50}
+      ALERTD_MAX_CHANNELS: ${ALERTD_MAX_CHANNELS:-20}
+      # ── Tuning (defaults = app/config.py; tests/test_compose_env.py keeps them in step) ─
+      ALERTD_LOG_FORMAT: ${ALERTD_LOG_FORMAT:-console}
+      ALERTD_DATABASE_POOL_SIZE: ${ALERTD_DATABASE_POOL_SIZE:-10}
+      ALERTD_DATABASE_MAX_OVERFLOW: ${ALERTD_DATABASE_MAX_OVERFLOW:-5}
+      ALERTD_HASH_MAX_CONCURRENCY: ${ALERTD_HASH_MAX_CONCURRENCY:-4}
+      ALERTD_MQTT_KEEPALIVE_SEC: ${ALERTD_MQTT_KEEPALIVE_SEC:-60}
+      ALERTD_DEFAULT_EVAL_INTERVAL_SEC: ${ALERTD_DEFAULT_EVAL_INTERVAL_SEC:-10}
+      ALERTD_IDEMPOTENCY_WINDOW_SEC: ${ALERTD_IDEMPOTENCY_WINDOW_SEC:-300}
+      ALERTD_EVAL_ERROR_DISABLE_THRESHOLD: ${ALERTD_EVAL_ERROR_DISABLE_THRESHOLD:-50}
+      ALERTD_CIRCUIT_BREAKER_THRESHOLD: ${ALERTD_CIRCUIT_BREAKER_THRESHOLD:-3}
+      ALERTD_CIRCUIT_BREAKER_OPEN_SEC: ${ALERTD_CIRCUIT_BREAKER_OPEN_SEC:-60}
+      ALERTD_ESCALATION_AFTER_MIN: ${ALERTD_ESCALATION_AFTER_MIN:-15}
+      ALERTD_ESCALATION_CHANNEL: ${ALERTD_ESCALATION_CHANNEL:-sms_main}
+      ALERTD_DIGEST_HOUR: ${ALERTD_DIGEST_HOUR:-21}
+      # ── Retention (days) ────────────────────────────────────
+      ALERTD_LOG_RETENTION_DAYS: ${ALERTD_LOG_RETENTION_DAYS:-90}
+      ALERTD_AUDIT_RETENTION_DAYS: ${ALERTD_AUDIT_RETENTION_DAYS:-365}
+      ALERTD_AUTH_HISTORY_DAYS: ${ALERTD_AUTH_HISTORY_DAYS:-30}
+      ALERTD_ACTIVITY_QUEUE_MAX: ${ALERTD_ACTIVITY_QUEUE_MAX:-5000}
+      # ── Size budgets & egress (docs/DEPLOY.md) ─────────────
+      ALERTD_MAX_REQUEST_BYTES: ${ALERTD_MAX_REQUEST_BYTES:-1048576}
+      ALERTD_MAX_WEBHOOK_BYTES: ${ALERTD_MAX_WEBHOOK_BYTES:-65536}
+      ALERTD_MAX_ALERTMANAGER_BYTES: ${ALERTD_MAX_ALERTMANAGER_BYTES:-1048576}
+      ALERTD_MAX_RESPONSE_BYTES: ${ALERTD_MAX_RESPONSE_BYTES:-4194304}
+      ALERTD_MAX_CONFIG_DEPTH: ${ALERTD_MAX_CONFIG_DEPTH:-50}
+      ALERTD_MAX_AGGREGATE_MEMBERS: ${ALERTD_MAX_AGGREGATE_MEMBERS:-1000}
+      ALERTD_MQTT_QUEUE_MAX: ${ALERTD_MQTT_QUEUE_MAX:-10000}
+      ALERTD_MQTT_MAX_PAYLOAD_BYTES: ${ALERTD_MQTT_MAX_PAYLOAD_BYTES:-262144}
+      ALERTD_BLOCK_PRIVATE_EGRESS: ${ALERTD_BLOCK_PRIVATE_EGRESS:-false}
+      ALERTD_CORS_ORIGINS: ${ALERTD_CORS_ORIGINS:-}
+      # Deprecated: read only by migration 0030 and old clients sending require_pv_kw.
+      ALERTD_PV_POWER_VAR: ${ALERTD_PV_POWER_VAR:-}
+      # ── Channel secrets (referenced via *_ref in channels.config) ─
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMS_GATEWAY_API_KEY: ${SMS_GATEWAY_API_KEY:-}
+      # ── Input secrets (referenced via *_ref in inputs.config) ──
+      # The MQTT input reuses ALERTD_MQTT_USERNAME / ALERTD_MQTT_PASSWORD
+      # above through username_ref / password_ref.
+      ALERTD_EXTERNAL_ALARM_TOKEN: ${ALERTD_EXTERNAL_ALARM_TOKEN:-}
+    networks:
+      - internal
+    volumes:
+      - alertd-data:/app/data
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # ── Backup sidecar — scheduled mysqldump with rotation ────────
+  # Runs scripts/backup.sh per BACKUP_CRON (default daily 02:00) via a small
+  # in-image scheduler (Dockerfile.backup, base mysql:8.0 so
+  # caching_sha2_password works natively). Dumps land in ./backups (host
+  # mount), kept for BACKUP_KEEP_DAYS. Restore steps: docs/DEPLOY.md.
+  backup:
+    build:
+      context: .
+      dockerfile: Dockerfile.backup
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_USER: ${MYSQL_USER:-alertd}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-alertd}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-alertd}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-30}
+      BACKUP_DIR: /backups
+      BACKUP_CRON: ${BACKUP_CRON:-0 2 * * *}
+      TZ: ${ALERTD_TZ:-UTC}
+    volumes:
+      - ./backups:/backups
+    networks:
+      - internal
+    logging: *logging
+
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    command:
+      - "--character-set-server=utf8mb4"
+      - "--collation-server=utf8mb4_unicode_ci"
+      - "--default-authentication-plugin=caching_sha2_password"
+      - "--innodb-buffer-pool-size=${MYSQL_INNODB_BUFFER_POOL_SIZE:-256M}"
+    environment:
+      # Required (set in .env); MySQL refuses to initialise without it.
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-alertd}
+      MYSQL_USER: ${MYSQL_USER:-alertd}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-alertd}
+      TZ: ${ALERTD_TZ:-UTC}
+    networks:
+      - internal
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test:
+        ["CMD", "mysqladmin", "ping", "-h", "localhost",
+         "-u", "${MYSQL_USER:-alertd}",
+         "-p${MYSQL_PASSWORD:-alertd}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    # MySQL is never published on the host — reachable only on `internal`.
+    logging: *logging
+
+volumes:
+  alertd-data:
+  mysql-data:
+
+networks:
+  # alertd ↔ mysql ↔ backup only.
+  internal:
+    driver: bridge

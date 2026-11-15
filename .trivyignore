@@ -1,0 +1,11 @@
+# Trivy ignore list for the publish-gate image scan.
+#
+# The scan fails on fixable HIGH/CRITICAL vulnerabilities. If a finding has no
+# fix yet, or is not reachable in our usage, add its CVE id here WITH an expiry
+# date and a one-line reason, and re-evaluate at that date — never a silent,
+# permanent exclusion.
+#
+# Format:
+#   CVE-YYYY-NNNNN  # expires 2026-12-31 — <reason>
+#
+# (No entries yet.)

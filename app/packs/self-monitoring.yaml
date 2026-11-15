@@ -1,0 +1,63 @@
+# Klopot's own alerts. Installed automatically on first start (scripts/seed.py);
+# reinstalling it later restores a deleted or edited built-in template.
+pack:
+  id: self-monitoring
+  name: {en: "Klopot self-monitoring", ro: "Auto-monitorizare Klopot"}
+  description:
+    en: "Alerts Klopot raises about itself: a rule switched off after repeated evaluation errors, the daily digest of suppressed alerts, and the backup restore drill."
+    ro: "Alertele pe care Klopot le trimite despre el însuși: o regulă oprită după erori repetate de evaluare, rezumatul zilnic al alertelor suprimate și testul de restaurare a backup-ului."
+  version: 1.0.0
+  tags: [klopot, built-in]
+  parameters:
+    - name: alert_channel
+      label: {en: "Send to channel", ro: "Trimite pe canalul"}
+      type: channel
+      default: ui_default
+
+version: "1.0"
+templates:
+  - type: rule_auto_disabled
+    severity: warning
+    icon: "🛠️"
+    category: Self-monitoring
+    title_template: "Rule auto-disabled: {rule_name}"
+    message_template: >-
+      Rule '{rule_name}' (template {template_type}) was auto-disabled after
+      {threshold} consecutive eval errors. Last error: {error}. Fix the
+      variable binding, then re-enable via PATCH /v1/rules/{rule_id}.
+    description: "Built-in silent-decay guard: the engine fires this about itself when a rule can no longer evaluate."
+    min_repeat_min: 10
+  - type: restore_drill_ok
+    severity: info
+    icon: "🧯"
+    category: Self-monitoring
+    title_template: "Backup restore drill PASSED"
+    message_template: "Restore drill OK: {detail}"
+    description: "Monthly proof that backups actually restore (scripts/restore_drill.sh)."
+    min_repeat_min: 0
+  - type: daily_suppressed_digest
+    severity: info
+    icon: "📊"
+    category: Self-monitoring
+    title_template: "Alert digest: {dispatched} sent, {total_suppressed} suppressed (24h)"
+    message_template: >-
+      Last 24h: {dispatched} dispatched, {total_suppressed} suppressed
+      ({by_reason}). Top suppressed: {top_types}. A persistently high count
+      for one type usually means a mis-tuned cooldown or a flapping condition.
+    description: "Daily visibility into what Klopot silenced (throttle, quiet hours, inhibition, snooze)."
+    min_repeat_min: 0
+  - type: restore_drill_failed
+    severity: critical
+    icon: "🧯"
+    category: Self-monitoring
+    title_template: "Backup restore drill FAILED"
+    message_template: >-
+      Restore drill FAILED ({backup}): {detail}. Backups may be unusable —
+      investigate before you need them.
+    description: "The restore drill could not restore or verify the latest backup (scripts/restore_drill.sh)."
+    min_repeat_min: 0
+routes:
+  - {template: rule_auto_disabled, channel: "${alert_channel}", severity_min: info}
+  - {template: restore_drill_ok, channel: "${alert_channel}", severity_min: info}
+  - {template: daily_suppressed_digest, channel: "${alert_channel}", severity_min: info}
+  - {template: restore_drill_failed, channel: "${alert_channel}", severity_min: info}

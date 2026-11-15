@@ -1,0 +1,85 @@
+pack:
+  id: sensor-threshold
+  name: {en: "Sensor above a threshold", ro: "Senzor peste un prag"}
+  description:
+    en: "A numeric MQTT sensor (temperature, humidity, level…) alerts when it stays above a threshold for several checks, and warns when the sensor itself goes silent."
+    ro: "Un senzor numeric MQTT (temperatură, umiditate, nivel…) trimite alertă când rămâne peste un prag mai multe verificări și avertizează când senzorul tace."
+  version: 1.0.0
+  tags: [iot, mqtt, sensor]
+  parameters:
+    - name: key
+      label: {en: "Short id", ro: "Id scurt"}
+      description:
+        en: "Lowercase letters, digits and _. It goes into the names, so the pack can be installed once per sensor."
+        ro: "Litere mici, cifre și _. Intră în nume, ca pachetul să poată fi instalat o dată pentru fiecare senzor."
+      default: freezer
+    - name: broker_host
+      label: {en: "MQTT broker host", ro: "Host broker MQTT"}
+      default: mqtt.example.com
+    - name: broker_port
+      label: {en: "MQTT broker port", ro: "Port broker MQTT"}
+      type: integer
+      default: 1883
+    - name: sensor_name
+      label: {en: "Sensor name (shown in the alert)", ro: "Numele senzorului (apare în alertă)"}
+      default: Freezer
+    - name: topic
+      label: {en: "Sensor topic", ro: "Topic senzor"}
+      default: home/freezer/temperature
+    - name: threshold
+      label: {en: "Alert above", ro: "Alertă peste"}
+      type: number
+      default: -10
+    - name: unit
+      label: {en: "Unit", ro: "Unitate"}
+      default: "°C"
+      required: false
+    - name: alert_channel
+      label: {en: "Send to channel", ro: "Trimite pe canalul"}
+      type: channel
+      default: ui_default
+
+version: "1.0"
+inputs:
+  - name: sensors_mqtt
+    kind: mqtt
+    config: {host: "${broker_host}", port: "${broker_port}"}
+variables:
+  - name: ${key}_value
+    source: mqtt
+    input: sensors_mqtt
+    config: {topic: "${topic}", type: number, stale_after_sec: 600}
+    description: "${sensor_name} reading in ${unit}."
+templates:
+  - type: ${key}_too_high
+    severity: critical
+    icon: "🌡️"
+    category: Sensors
+    title_template: "${sensor_name} too high: {${key}_value}${unit}"
+    message_template: "${sensor_name} reads {${key}_value}${unit}, above the ${threshold}${unit} threshold."
+    min_repeat_min: 30
+  - type: ${key}_silent
+    severity: warning
+    icon: "📡"
+    category: Sensors
+    title_template: "${sensor_name} sensor is silent"
+    message_template: "No reading from ${sensor_name} for over 10 minutes — check the sensor and its MQTT connection."
+    min_repeat_min: 60
+rules:
+  - name: ${key}_above_threshold
+    template_type: ${key}_too_high
+    condition_expr: "var_age('${key}_value') < 600 and ${key}_value > ${threshold}"
+    persist_n: 3
+    eval_interval_sec: 30
+    vars_extract: ["${key}_value"]
+    trigger_summary: "${sensor_name} above ${threshold}${unit} for three consecutive checks"
+  - name: ${key}_no_data
+    template_type: ${key}_silent
+    condition_expr: "var_age('${key}_value') > 600"
+    persist_n: 2
+    eval_interval_sec: 60
+    vars_extract: ["${key}_value"]
+    trigger_summary: "No ${sensor_name} reading for more than 10 minutes"
+routes:
+  - {template: "${key}_too_high", channel: "${alert_channel}", severity_min: info}
+  - {template: "${key}_silent", channel: "${alert_channel}", severity_min: info}

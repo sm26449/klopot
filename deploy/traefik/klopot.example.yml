@@ -1,0 +1,28 @@
+# traefik dynamic configuration (file provider) for Klopot.
+#
+# Use this when your traefik discovers routes from files instead of Docker
+# labels. Copy it into traefik's dynamic-config directory (watched by
+# `providers.file.directory`), then edit the hostname and certResolver.
+# Start Klopot with compose.traefik.yml so the container joins traefik's
+# network under the alias `klopot`, which is what the service URL targets.
+http:
+  routers:
+    klopot:
+      rule: "Host(`alerts.example.com`)"
+      entryPoints: [websecure]
+      middlewares: [klopot-hsts]
+      service: klopot
+      tls:
+        certResolver: letsencrypt
+  middlewares:
+    klopot-hsts:
+      headers:
+        forceSTSHeader: true
+        stsSeconds: 31536000
+        stsIncludeSubdomains: false
+        stsPreload: false
+  services:
+    klopot:
+      loadBalancer:
+        servers:
+          - url: "http://klopot:5090"

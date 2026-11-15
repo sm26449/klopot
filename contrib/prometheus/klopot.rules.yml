@@ -1,0 +1,58 @@
+groups:
+  - name: klopot
+    rules:
+      - alert: KlopotUnavailable
+        expr: up{job="klopot"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Klopot cannot be scraped on {{ $labels.instance }}"
+      - alert: KlopotOperationsCollectionFailed
+        expr: alertd_operations_collection_success == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Klopot operational DB snapshot is unavailable"
+      - alert: KlopotWorkerStopped
+        expr: alertd_worker_up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Klopot worker {{ $labels.worker }} has stopped"
+      - alert: KlopotQueueStalled
+        expr: alertd_queue_oldest_overdue_seconds > 300
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Klopot queue {{ $labels.queue }} is overdue"
+      - alert: KlopotEngineStalled
+        expr: time() - alertd_engine_last_tick_timestamp > 120
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Klopot rule engine has no recent successful tick"
+      - alert: KlopotTelegramDisconnected
+        expr: alertd_telegram_receiver_connected == 0
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Klopot Telegram receiver {{ $labels.channel }} is disconnected"
+      - alert: KlopotMQTTOutputDisconnected
+        expr: (alertd_mqtt_output_connected == 0) and on(job, instance, channel) (alertd_mqtt_output_active == 1)
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Klopot MQTT output {{ $labels.channel }} is disconnected"
+      - alert: KlopotChannelCommandFailed
+        expr: increase(alertd_channel_commands_total{state="failed"}[10m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "Klopot {{ $labels.queue }} command exhausted its retries"

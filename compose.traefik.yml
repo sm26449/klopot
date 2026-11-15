@@ -1,0 +1,48 @@
+# Klopot behind an existing traefik (TLS termination) — overlay.
+#
+#   docker compose -f docker-compose.yml -f compose.traefik.yml up -d
+#
+# Required in .env:
+#   KLOPOT_HOSTNAME=alerts.example.com   public hostname routed to Klopot
+#   TRAEFIK_NETWORK=traefik               the Docker network traefik runs on
+#                                         (external; created by your traefik stack)
+#   ALERTD_TRUSTED_PROXY_CIDRS=…          that network's subnet, so per-IP login
+#                                         lockout keys on the real client
+#                                         (`docker network inspect $TRAEFIK_NETWORK`)
+# Optional:
+#   TRAEFIK_ENTRYPOINT (default websecure), TRAEFIK_CERTRESOLVER (default letsencrypt)
+#
+# Two ways traefik can discover the route — both work with this overlay:
+#   • docker provider: the labels below are picked up automatically.
+#   • file provider:   copy deploy/traefik/klopot.example.yml into traefik's
+#                      dynamic-config directory and set the hostname there.
+#                      It targets http://klopot:5090 — the alias set below.
+#
+# If your MQTT broker runs on the same Docker network as traefik, point
+# ALERTD_MQTT_HOST at its container name; no extra wiring is needed.
+services:
+  alertd:
+    environment:
+      # Secure cookies + auto-hardened /docs and /v1/metrics behind TLS.
+      ALERTD_COOKIE_SECURE: "true"
+    networks:
+      internal: {}
+      traefik:
+        aliases:
+          - klopot
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: ${TRAEFIK_NETWORK:?set TRAEFIK_NETWORK in .env}
+      traefik.http.routers.klopot.rule: Host(`${KLOPOT_HOSTNAME:?set KLOPOT_HOSTNAME in .env}`)
+      traefik.http.routers.klopot.entrypoints: ${TRAEFIK_ENTRYPOINT:-websecure}
+      traefik.http.routers.klopot.tls: "true"
+      traefik.http.routers.klopot.tls.certresolver: ${TRAEFIK_CERTRESOLVER:-letsencrypt}
+      traefik.http.routers.klopot.middlewares: klopot-hsts
+      traefik.http.middlewares.klopot-hsts.headers.forceSTSHeader: "true"
+      traefik.http.middlewares.klopot-hsts.headers.stsSeconds: "31536000"
+      traefik.http.services.klopot.loadbalancer.server.port: "5090"
+
+networks:
+  traefik:
+    name: ${TRAEFIK_NETWORK:?set TRAEFIK_NETWORK in .env}
+    external: true

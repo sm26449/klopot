@@ -1,0 +1,22 @@
+# Klopot with an existing MySQL server — overlay.
+#
+#   docker compose -f docker-compose.yml -f compose.external-db.yml up -d
+#   (usually combined with compose.traefik.yml, whose network then also
+#    carries the database traffic)
+#
+# The bundled `mysql` and `backup` services are not started; back the
+# database up where it lives. Point ALERTD_DATABASE_URL in .env at your
+# server, e.g. mysql+aiomysql://alertd:<password>@db-host:3306/alertd —
+# the host must be reachable from the alertd container (a container on a
+# shared Docker network, or host.docker.internal for the Docker host).
+# The database user needs full rights on its schema: migrations run on
+# startup.
+services:
+  alertd:
+    depends_on: !reset {}
+
+  mysql:
+    profiles: ["bundled-db"]
+
+  backup:
+    profiles: ["bundled-db"]

@@ -1,0 +1,13 @@
+scrape_configs:
+  - job_name: klopot
+    scrape_interval: 30s
+    metrics_path: /v1/metrics
+    static_configs:
+      - targets: [klopot:5090]
+    # Create a read-scoped API key and mount its raw value at this path.
+    http_headers:
+      X-API-Key:
+        files: [/run/secrets/klopot_metrics_key]
+
+rule_files:
+  - /etc/prometheus/rules/klopot.rules.yml

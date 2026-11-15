@@ -1,0 +1,1404 @@
+{
+  "channels": {
+    "mqtt": {
+      "fields": [
+        {
+          "name": "topic_template",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": "klopot/notifications/{type}",
+          "help": "Publish topic; placeholders: type, severity, id, instance, channel. No + or #."
+        },
+        {
+          "name": "qos",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 1,
+          "help": "Delivery QoS: 0, 1 or 2. Consumers deduplicate outbox retries using delivery_id."
+        },
+        {
+          "name": "retain",
+          "type": "bool",
+          "required": false,
+          "secret": false,
+          "default": false,
+          "help": "Retain notification messages. Off by default to avoid replaying old alerts on subscribe."
+        },
+        {
+          "name": "host",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Broker host; omit to use ALERTD_MQTT_HOST."
+        },
+        {
+          "name": "port",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 1883,
+          "help": "Broker TCP port."
+        },
+        {
+          "name": "username",
+          "type": "string",
+          "required": false,
+          "secret": true,
+          "default": null,
+          "help": "Broker username (write-only); defaults to ALERTD_MQTT_USERNAME.",
+          "ref_field": "username_ref"
+        },
+        {
+          "name": "password",
+          "type": "string",
+          "required": false,
+          "secret": true,
+          "default": null,
+          "help": "Broker password (write-only); defaults to ALERTD_MQTT_PASSWORD.",
+          "ref_field": "password_ref"
+        },
+        {
+          "name": "tls",
+          "type": "bool",
+          "required": false,
+          "secret": false,
+          "default": false,
+          "help": "TLS with certificate and hostname verification using system CAs."
+        },
+        {
+          "name": "instance_id",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Availability/heartbeat instance name; defaults to ALERTD_MQTT_CLIENT_ID."
+        },
+        {
+          "name": "availability_topic",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": "klopot/{instance}/outputs/{channel}/status",
+          "help": "Retained online/offline + LWT. Empty disables."
+        },
+        {
+          "name": "heartbeat_topic",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": "klopot/{instance}/outputs/{channel}/heartbeat",
+          "help": "30-second process heartbeat with last successful engine tick. Empty disables."
+        },
+        {
+          "name": "payload_template",
+          "type": "text",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Optional JSON-object template. delivery_id is always supplied. Use | jsonstr for embedded text."
+        },
+        {
+          "name": "timeout_sec",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 10,
+          "help": "Connect/publish wait, 1–20 seconds; outbox handles retries."
+        }
+      ],
+      "intrusive": false
+    },
+    "ui": {
+      "fields": [],
+      "intrusive": false
+    },
+    "banner": {
+      "fields": [],
+      "intrusive": false
+    },
+    "telegram": {
+      "fields": [
+        {
+          "name": "chat_id",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "default": null,
+          "help": "Target chat / channel id."
+        },
+        {
+          "name": "bot_token",
+          "type": "string",
+          "required": false,
+          "secret": true,
+          "default": null,
+          "help": "Bot API token (write-only).",
+          "ref_field": "bot_token_ref"
+        },
+        {
+          "name": "parse_mode",
+          "type": "select",
+          "required": false,
+          "secret": false,
+          "default": "HTML",
+          "help": "Telegram message formatting.",
+          "options": [
+            "HTML",
+            "MarkdownV2",
+            ""
+          ]
+        },
+        {
+          "name": "inline_actions",
+          "type": "bool",
+          "required": false,
+          "secret": false,
+          "default": false,
+          "help": "Enable acknowledge/snooze buttons and a dedicated bot's long-poll receiver."
+        },
+        {
+          "name": "allowed_user_ids",
+          "type": "json",
+          "required": false,
+          "secret": false,
+          "default": [],
+          "help": "JSON array of Telegram user IDs allowed to act. An allowlist takes precedence over any_chat_member."
+        },
+        {
+          "name": "any_chat_member",
+          "type": "bool",
+          "required": false,
+          "secret": false,
+          "default": false,
+          "help": "Explicitly allow anyone using buttons in this chat when no user allowlist is set."
+        },
+        {
+          "name": "actions_locale",
+          "type": "select",
+          "required": false,
+          "secret": false,
+          "default": "en",
+          "help": "Language of message action buttons.",
+          "options": [
+            "en",
+            "ro"
+          ]
+        },
+        {
+          "name": "admin_url",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": "",
+          "help": "Optional full admin URL for the read-only Open in Klopot link; no credentials, query or fragment."
+        }
+      ],
+      "intrusive": false
+    },
+    "sms": {
+      "fields": [
+        {
+          "name": "provider",
+          "type": "select",
+          "required": false,
+          "secret": false,
+          "default": "http",
+          "help": "http = any gateway with an HTTP API; twilio = Twilio; teltonika = a Teltonika RUT router (RutOS).",
+          "options": [
+            "http",
+            "twilio",
+            "teltonika"
+          ]
+        },
+        {
+          "name": "phone",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "default": null,
+          "help": "Destination E.164 number; several separated by commas."
+        },
+        {
+          "name": "max_chars",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 320,
+          "help": "Longer text is cut (160 = one SMS segment)."
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Gateway send URL. Shown redacted as scheme://host/… on read; leave unchanged to keep it.",
+          "show_if": {
+            "provider": [
+              "http"
+            ]
+          }
+        },
+        {
+          "name": "method",
+          "type": "select",
+          "required": false,
+          "secret": false,
+          "default": "POST",
+          "help": "",
+          "options": [
+            "POST",
+            "PUT",
+            "GET"
+          ],
+          "show_if": {
+            "provider": [
+              "http"
+            ]
+          }
+        },
+        {
+          "name": "content_type",
+          "type": "select",
+          "required": false,
+          "secret": false,
+          "default": "application/json",
+          "help": "",
+          "options": [
+            "application/json",
+            "application/x-www-form-urlencoded",
+            "text/plain"
+          ],
+          "show_if": {
+            "provider": [
+              "http"
+            ]
+          }
+        },
+        {
+          "name": "body_template",
+          "type": "text",
+          "required": false,
+          "secret": false,
+          "default": "{\"phone\": \"{phone | jsonstr}\", \"message\": \"{text | jsonstr}\"}",
+          "help": "Request body; {phone} and {text} plus {title} {message} {severity} {type}. Use | jsonstr inside JSON strings.",
+          "show_if": {
+            "provider": [
+              "http"
+            ]
+          }
+        },
+        {
+          "name": "auth_kind",
+          "type": "select",
+          "required": false,
+          "secret": false,
+          "default": "",
+          "help": "How auth_value is sent.",
+          "options": [
+            "",
+            "bearer",
+            "basic",
+            "header"
+          ],
+          "show_if": {
+            "provider": [
+              "http"
+            ]
+          }
+        },
+        {
+          "name": "auth_header",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": "Authorization",
+          "help": "Header name when auth_kind=header (e.g. X-API-Key).",
+          "show_if": {
+            "provider": [
+              "http"
+            ]
+          }
+        },
+        {
+          "name": "auth_value",
+          "type": "string",
+          "required": false,
+          "secret": true,
+          "default": null,
+          "help": "Token / key (write-only).",
+          "show_if": {
+            "provider": [
+              "http"
+            ]
+          },
+          "ref_field": "auth_value_ref"
+        },
+        {
+          "name": "health_url",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Optional URL the channel test probes with GET.",
+          "show_if": {
+            "provider": [
+              "http"
+            ]
+          }
+        },
+        {
+          "name": "success_statuses",
+          "type": "json",
+          "required": false,
+          "secret": false,
+          "default": [],
+          "help": "Extra HTTP statuses that count as delivered, e.g. [409] when the gateway answers 409 for a duplicate it already sent. 2xx always count; 429/503 wait for Retry-After; other 4xx fail without retries.",
+          "show_if": {
+            "provider": [
+              "http"
+            ]
+          }
+        },
+        {
+          "name": "account_sid",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "",
+          "show_if": {
+            "provider": [
+              "twilio"
+            ]
+          }
+        },
+        {
+          "name": "auth_token",
+          "type": "string",
+          "required": false,
+          "secret": true,
+          "default": null,
+          "help": "Twilio auth token (write-only).",
+          "show_if": {
+            "provider": [
+              "twilio"
+            ]
+          },
+          "ref_field": "auth_token_ref"
+        },
+        {
+          "name": "from_number",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Your Twilio number, E.164.",
+          "show_if": {
+            "provider": [
+              "twilio"
+            ]
+          }
+        },
+        {
+          "name": "router_url",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Router address, e.g. https://192.0.2.1 (RutOS REST API).",
+          "show_if": {
+            "provider": [
+              "teltonika"
+            ]
+          }
+        },
+        {
+          "name": "username",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "",
+          "show_if": {
+            "provider": [
+              "teltonika"
+            ]
+          }
+        },
+        {
+          "name": "password",
+          "type": "string",
+          "required": false,
+          "secret": true,
+          "default": null,
+          "help": "Router password (write-only).",
+          "show_if": {
+            "provider": [
+              "teltonika"
+            ]
+          },
+          "ref_field": "password_ref"
+        },
+        {
+          "name": "modem",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": "1-1",
+          "help": "Modem id on the router.",
+          "show_if": {
+            "provider": [
+              "teltonika"
+            ]
+          }
+        }
+      ],
+      "intrusive": true
+    },
+    "email": {
+      "fields": [
+        {
+          "name": "to",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "default": null,
+          "help": "Recipient address(es), comma-separated."
+        },
+        {
+          "name": "smtp_host",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "default": null,
+          "help": ""
+        },
+        {
+          "name": "smtp_port",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 587,
+          "help": ""
+        },
+        {
+          "name": "username",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": ""
+        },
+        {
+          "name": "password",
+          "type": "string",
+          "required": false,
+          "secret": true,
+          "default": null,
+          "help": "SMTP password (write-only).",
+          "ref_field": "password_ref"
+        },
+        {
+          "name": "from_addr",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Envelope sender (canonical). Defaults to username if blank."
+        },
+        {
+          "name": "use_tls",
+          "type": "bool",
+          "required": false,
+          "secret": false,
+          "default": true,
+          "help": ""
+        }
+      ],
+      "intrusive": false
+    },
+    "push": {
+      "fields": [
+        {
+          "name": "vapid_private",
+          "type": "string",
+          "required": false,
+          "secret": true,
+          "default": null,
+          "help": "VAPID private key (write-only) — best as a reference to KLOPOT_SECRET_VAPID_PRIVATE (scripts/vapid_keys.py prints one).",
+          "ref_field": "vapid_private_ref"
+        },
+        {
+          "name": "vapid_subject",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "default": null,
+          "help": "mailto: or https: contact the push services can reach, e.g. mailto:ops@example.com."
+        },
+        {
+          "name": "ttl_sec",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 86400,
+          "help": "How long a push service keeps an alert for a phone that is off (seconds)."
+        }
+      ],
+      "intrusive": false
+    },
+    "ntfy": {
+      "fields": [
+        {
+          "name": "server_url",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": "https://ntfy.sh",
+          "help": "ntfy server (self-hosted or https://ntfy.sh)."
+        },
+        {
+          "name": "topic",
+          "type": "string",
+          "required": true,
+          "secret": true,
+          "default": null,
+          "help": "Topic to publish to (write-only: on ntfy, whoever knows the topic can read and post to it).",
+          "ref_field": "topic_ref"
+        },
+        {
+          "name": "token",
+          "type": "string",
+          "required": false,
+          "secret": true,
+          "default": null,
+          "help": "Access token (write-only), sent as Bearer.",
+          "ref_field": "token_ref"
+        },
+        {
+          "name": "priority_map",
+          "type": "json",
+          "required": false,
+          "secret": false,
+          "default": {
+            "info": 2,
+            "warning": 3,
+            "critical": 5
+          },
+          "help": "ntfy priority (1–5) per severity."
+        },
+        {
+          "name": "tags",
+          "type": "json",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Extra tags, e.g. [\"home\", \"ops\"]. The severity is always added."
+        },
+        {
+          "name": "admin_url",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Public Klopot URL, e.g. https://alerts.example.com — adds a click link and a View button."
+        },
+        {
+          "name": "timeout_sec",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 10,
+          "help": ""
+        }
+      ],
+      "intrusive": false
+    },
+    "gotify": {
+      "fields": [
+        {
+          "name": "server_url",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "default": null,
+          "help": "Your Gotify server, e.g. https://gotify.example.com."
+        },
+        {
+          "name": "app_token",
+          "type": "string",
+          "required": false,
+          "secret": true,
+          "default": null,
+          "help": "Application token (write-only), sent as X-Gotify-Key.",
+          "ref_field": "app_token_ref"
+        },
+        {
+          "name": "priority_map",
+          "type": "json",
+          "required": false,
+          "secret": false,
+          "default": {
+            "info": 2,
+            "warning": 5,
+            "critical": 8
+          },
+          "help": "Gotify priority (0–10) per severity."
+        },
+        {
+          "name": "admin_url",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Public Klopot URL — the notification opens the alert in Klopot."
+        },
+        {
+          "name": "timeout_sec",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 10,
+          "help": ""
+        }
+      ],
+      "intrusive": false
+    },
+    "pushover": {
+      "fields": [
+        {
+          "name": "user_key",
+          "type": "string",
+          "required": true,
+          "secret": true,
+          "default": null,
+          "help": "Your Pushover user (or group) key.",
+          "ref_field": "user_key_ref"
+        },
+        {
+          "name": "app_token",
+          "type": "string",
+          "required": false,
+          "secret": true,
+          "default": null,
+          "help": "Pushover application API token (write-only).",
+          "ref_field": "app_token_ref"
+        },
+        {
+          "name": "device",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Only this device (optional)."
+        },
+        {
+          "name": "priority_map",
+          "type": "json",
+          "required": false,
+          "secret": false,
+          "default": {
+            "info": -1,
+            "warning": 0,
+            "critical": 1
+          },
+          "help": "Pushover priority (-2…1) per severity. 2 (emergency) is only used via emergency_for."
+        },
+        {
+          "name": "emergency_for",
+          "type": "json",
+          "required": false,
+          "secret": false,
+          "default": [],
+          "help": "Severities sent as EMERGENCY (repeat until acknowledged), e.g. [\"critical\"]. Off by default."
+        },
+        {
+          "name": "retry_sec",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 60,
+          "help": "Emergency: seconds between repeats (≥ 30)."
+        },
+        {
+          "name": "expire_sec",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 3600,
+          "help": "Emergency: stop repeating after (≤ 10800)."
+        },
+        {
+          "name": "admin_url",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Public Klopot URL — adds a link to the alert."
+        },
+        {
+          "name": "timeout_sec",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 10,
+          "help": ""
+        }
+      ],
+      "intrusive": true
+    },
+    "webhook": {
+      "fields": [
+        {
+          "name": "url",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "default": null,
+          "help": "Target URL. Shown redacted as scheme://host/… on read since the path/query can carry a secret; leave it unchanged to keep the stored value, or type a new URL to replace it."
+        },
+        {
+          "name": "method",
+          "type": "select",
+          "required": false,
+          "secret": false,
+          "default": "POST",
+          "help": "",
+          "options": [
+            "POST",
+            "PUT",
+            "GET"
+          ]
+        },
+        {
+          "name": "content_type",
+          "type": "select",
+          "required": false,
+          "secret": false,
+          "default": "application/json",
+          "help": "",
+          "options": [
+            "application/json",
+            "application/x-www-form-urlencoded",
+            "text/plain"
+          ]
+        },
+        {
+          "name": "body_template",
+          "type": "text",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Payload template; {title} {message} {severity} {type} placeholders. For JSON, wrap embedded text with the | jsonstr filter (e.g. {\"text\": \"{title | jsonstr}\"}). Leave blank for a default JSON body."
+        },
+        {
+          "name": "auth_kind",
+          "type": "select",
+          "required": false,
+          "secret": false,
+          "default": "",
+          "help": "How auth_value is applied.",
+          "options": [
+            "",
+            "bearer",
+            "basic",
+            "header"
+          ]
+        },
+        {
+          "name": "auth_header",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": "Authorization",
+          "help": "Header name when auth_kind=header."
+        },
+        {
+          "name": "auth_value",
+          "type": "string",
+          "required": false,
+          "secret": true,
+          "default": null,
+          "help": "Token / credential (write-only).",
+          "ref_field": "auth_value_ref"
+        },
+        {
+          "name": "expected_status",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 200,
+          "help": "HTTP status treated as success."
+        },
+        {
+          "name": "timeout_sec",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 10,
+          "help": ""
+        }
+      ],
+      "intrusive": false
+    }
+  },
+  "inputs": {
+    "mqtt": {
+      "fields": [
+        {
+          "name": "host",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "default": null,
+          "help": "Broker host."
+        },
+        {
+          "name": "port",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 1883,
+          "help": ""
+        },
+        {
+          "name": "username",
+          "type": "string",
+          "required": false,
+          "secret": true,
+          "default": null,
+          "help": "Broker username (write-only).",
+          "ref_field": "username_ref"
+        },
+        {
+          "name": "password",
+          "type": "string",
+          "required": false,
+          "secret": true,
+          "default": null,
+          "help": "Broker password (write-only).",
+          "ref_field": "password_ref"
+        },
+        {
+          "name": "client_id",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "MQTT client id; defaults to alertd-<input>."
+        },
+        {
+          "name": "keepalive",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 60,
+          "help": ""
+        }
+      ]
+    },
+    "http_poll": {
+      "fields": [
+        {
+          "name": "url",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "default": null,
+          "help": "Poll URL. Shown redacted as scheme://host/… on read; leave unchanged to keep the stored value."
+        },
+        {
+          "name": "method",
+          "type": "select",
+          "required": false,
+          "secret": false,
+          "default": "GET",
+          "help": "",
+          "options": [
+            "GET",
+            "POST"
+          ]
+        },
+        {
+          "name": "params",
+          "type": "json",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Query params as a JSON object."
+        },
+        {
+          "name": "headers",
+          "type": "json",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Extra request headers as a JSON object."
+        },
+        {
+          "name": "interval_sec",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 60,
+          "help": ""
+        },
+        {
+          "name": "timeout_sec",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 10,
+          "help": ""
+        },
+        {
+          "name": "auth_kind",
+          "type": "select",
+          "required": false,
+          "secret": false,
+          "default": "",
+          "help": "",
+          "options": [
+            "",
+            "bearer",
+            "basic",
+            "header"
+          ]
+        },
+        {
+          "name": "auth_value",
+          "type": "string",
+          "required": false,
+          "secret": true,
+          "default": null,
+          "help": "Token / credential (write-only).",
+          "ref_field": "auth_value_ref"
+        }
+      ]
+    },
+    "webhook": {
+      "fields": [
+        {
+          "name": "auth_required",
+          "type": "bool",
+          "required": false,
+          "secret": false,
+          "default": true,
+          "help": "Require X-Input-Token on POST /v1/inputs/{id}/webhook."
+        },
+        {
+          "name": "auth_token",
+          "type": "string",
+          "required": false,
+          "secret": true,
+          "default": null,
+          "help": "Expected inbound token (write-only).",
+          "ref_field": "auth_token_ref"
+        }
+      ]
+    },
+    "sms_inbox": {
+      "fields": [
+        {
+          "name": "auth_required",
+          "type": "bool",
+          "required": false,
+          "secret": false,
+          "default": true,
+          "help": "Require X-Input-Token on the inbound POST /v1/inputs/{id}/webhook. Set False to opt out explicitly."
+        },
+        {
+          "name": "auth_token",
+          "type": "string",
+          "required": false,
+          "secret": true,
+          "default": null,
+          "help": "Expected inbound token (write-only), checked when auth_required is true.",
+          "ref_field": "auth_token_ref"
+        }
+      ]
+    },
+    "alertmanager": {
+      "fields": [
+        {
+          "name": "default_type",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "default": "alertmanager_alert",
+          "help": "Template for an alert no other choice matches (unknown alert names are never dropped). It can use {labels.alertname}, {labels.instance}, {annotations.summary}…"
+        },
+        {
+          "name": "type_label",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": "alertname",
+          "help": "If a template is named like this label's value, that template is used."
+        },
+        {
+          "name": "type_by_severity",
+          "type": "json",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Template by labels.severity when type_label gave none, e.g. {\"critical\": \"am_critical\", \"warning\": \"am_warning\", \"default\": \"am_info\"}."
+        },
+        {
+          "name": "resolved_type",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Template sent when an alert resolves (optional)."
+        },
+        {
+          "name": "max_alerts",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 200,
+          "help": "Alerts processed per request; the rest count as truncated."
+        },
+        {
+          "name": "auth_required",
+          "type": "bool",
+          "required": false,
+          "secret": false,
+          "default": true,
+          "help": "Require the token as X-Input-Token or Authorization: Bearer."
+        },
+        {
+          "name": "auth_token",
+          "type": "string",
+          "required": false,
+          "secret": true,
+          "default": null,
+          "help": "Expected token (write-only). In Alertmanager: http_config.authorization.credentials.",
+          "ref_field": "auth_token_ref"
+        }
+      ]
+    },
+    "schedule": {
+      "fields": []
+    },
+    "email_imap": {
+      "fields": [
+        {
+          "name": "host",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "default": null,
+          "help": ""
+        },
+        {
+          "name": "port",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 993,
+          "help": ""
+        },
+        {
+          "name": "username",
+          "type": "string",
+          "required": true,
+          "secret": false,
+          "default": null,
+          "help": ""
+        },
+        {
+          "name": "password",
+          "type": "string",
+          "required": false,
+          "secret": true,
+          "default": null,
+          "help": "IMAP password (write-only).",
+          "ref_field": "password_ref"
+        },
+        {
+          "name": "mailbox",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": "INBOX",
+          "help": ""
+        },
+        {
+          "name": "poll_interval_sec",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 60,
+          "help": ""
+        }
+      ]
+    }
+  },
+  "variables": {
+    "mqtt": {
+      "fields": [
+        {
+          "name": "input_id",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Owning MQTT input id."
+        },
+        {
+          "name": "topic",
+          "type": "topic",
+          "required": true,
+          "secret": false,
+          "default": null,
+          "help": "MQTT topic (supports + / # wildcards)."
+        },
+        {
+          "name": "json_path",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Dot-path within a JSON payload (e.g. sensor.temperature)."
+        },
+        {
+          "name": "type",
+          "type": "select",
+          "required": false,
+          "secret": false,
+          "default": "number",
+          "help": "Coercion applied to the extracted value.",
+          "options": [
+            "number",
+            "bool",
+            "string",
+            "json"
+          ]
+        },
+        {
+          "name": "stale_after_sec",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 300,
+          "help": "Value is considered stale past this age; rules gate on it."
+        }
+      ]
+    },
+    "aggregate": {
+      "fields": [
+        {
+          "name": "topics",
+          "type": "json",
+          "required": true,
+          "secret": false,
+          "default": null,
+          "help": "Member topics as a JSON array."
+        },
+        {
+          "name": "aggregate",
+          "type": "select",
+          "required": false,
+          "secret": false,
+          "default": "sum",
+          "help": "",
+          "options": [
+            "sum",
+            "avg",
+            "max",
+            "min"
+          ]
+        },
+        {
+          "name": "json_path",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Dot-path within each member payload."
+        },
+        {
+          "name": "type",
+          "type": "select",
+          "required": false,
+          "secret": false,
+          "default": "number",
+          "help": "",
+          "options": [
+            "number",
+            "bool",
+            "string",
+            "json"
+          ]
+        },
+        {
+          "name": "stale_after_sec",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 300,
+          "help": ""
+        }
+      ]
+    },
+    "constant": {
+      "fields": [
+        {
+          "name": "value",
+          "type": "json",
+          "required": true,
+          "secret": false,
+          "default": null,
+          "help": "Static value (never goes stale)."
+        },
+        {
+          "name": "type",
+          "type": "select",
+          "required": false,
+          "secret": false,
+          "default": "number",
+          "help": "",
+          "options": [
+            "number",
+            "bool",
+            "string",
+            "json"
+          ]
+        }
+      ]
+    },
+    "computed": {
+      "fields": [
+        {
+          "name": "formula",
+          "type": "text",
+          "required": true,
+          "secret": false,
+          "default": null,
+          "help": "Expression over other variables (expression language)."
+        },
+        {
+          "name": "type",
+          "type": "select",
+          "required": false,
+          "secret": false,
+          "default": "number",
+          "help": "",
+          "options": [
+            "number",
+            "bool",
+            "string",
+            "json"
+          ]
+        },
+        {
+          "name": "stale_after_sec",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 300,
+          "help": ""
+        }
+      ]
+    },
+    "schedule": {
+      "fields": [
+        {
+          "name": "cron",
+          "type": "cron",
+          "required": true,
+          "secret": false,
+          "default": null,
+          "help": "Cron expression for the slot value."
+        },
+        {
+          "name": "value",
+          "type": "json",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Value to set while the slot is active."
+        }
+      ]
+    }
+  },
+  "webhook_presets": [
+    {
+      "id": "discord",
+      "label": "Discord",
+      "config": {
+        "content_type": "application/json",
+        "expected_status": 204,
+        "body_template": "{\"content\": \"**{title | jsonstr}**\\n{message | jsonstr}\"}"
+      },
+      "help": "Channel webhook URL (…/api/webhooks/<id>/<token>)."
+    },
+    {
+      "id": "slack",
+      "label": "Slack",
+      "config": {
+        "content_type": "application/json",
+        "expected_status": 200,
+        "body_template": "{\"text\": \"*{title | jsonstr}*\\n{message | jsonstr}\"}"
+      },
+      "help": "Incoming webhook URL (hooks.slack.com/services/…)."
+    },
+    {
+      "id": "teams",
+      "label": "Microsoft Teams",
+      "config": {
+        "content_type": "application/json",
+        "expected_status": 200,
+        "body_template": "{\"title\": \"{title | jsonstr}\", \"text\": \"{message | jsonstr}\"}"
+      },
+      "help": "Teams incoming webhook / workflow URL."
+    },
+    {
+      "id": "mattermost",
+      "label": "Mattermost",
+      "config": {
+        "content_type": "application/json",
+        "expected_status": 200,
+        "body_template": "{\"text\": \"**{title | jsonstr}**\\n{message | jsonstr}\"}"
+      },
+      "help": "Incoming webhook URL (…/hooks/<token>)."
+    },
+    {
+      "id": "home_assistant",
+      "label": "Home Assistant",
+      "config": {
+        "content_type": "application/json",
+        "expected_status": 200,
+        "body_template": "{\"title\": \"{title | jsonstr}\", \"message\": \"{message | jsonstr}\"}",
+        "auth_kind": "bearer"
+      },
+      "help": "Webhook (/api/webhook/<id>) or REST (/api/services/notify/*) with a long-lived token in auth_value."
+    },
+    {
+      "id": "ntfy",
+      "label": "ntfy",
+      "config": {
+        "content_type": "text/plain",
+        "expected_status": 200,
+        "body_template": "{message}"
+      },
+      "help": "Topic URL (https://ntfy.sh/<topic>). Title goes in the body."
+    },
+    {
+      "id": "generic",
+      "label": "Generic JSON",
+      "config": {
+        "content_type": "application/json",
+        "expected_status": 200,
+        "body_template": "{\"title\": \"{title | jsonstr}\", \"message\": \"{message | jsonstr}\", \"severity\": \"{severity}\", \"type\": \"{type}\"}"
+      },
+      "help": "Plain JSON POST with the standard fields."
+    }
+  ]
+}

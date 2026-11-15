@@ -1,0 +1,48 @@
+# Alerts sent by your own scripts, cron jobs or apps through POST /v1/fire.
+# The request names the severity by type and brings its own text:
+#   curl -X POST https://host/v1/fire -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
+#        -d '{"type": "script_warning", "context": {"title": "Backup is late", "message": "Last run 26h ago"}}'
+pack:
+  id: script-alerts
+  name: {en: "Alerts from your scripts", ro: "Alerte din scripturile tale"}
+  description:
+    en: "Three ready templates — script_info, script_warning, script_critical — that show the title and message your script sends to POST /v1/fire. The quickest way to get alerts from cron jobs, backups and apps."
+    ro: "Trei șabloane gata făcute — script_info, script_warning, script_critical — care afișează titlul și mesajul trimise de scriptul tău la POST /v1/fire. Cel mai rapid mod de a primi alerte din cron, backup-uri și aplicații."
+  version: 1.0.0
+  tags: [api, scripts]
+  parameters:
+    - name: alert_channel
+      label: {en: "Send to channel", ro: "Trimite pe canalul"}
+      type: channel
+      default: ui_default
+
+version: "1.0"
+templates:
+  - type: script_info
+    severity: info
+    icon: "🔵"
+    category: Scripts
+    title_template: "{title}"
+    message_template: "{message}"
+    description: "Informational alert from a script: context {title, message}."
+    min_repeat_min: 0
+  - type: script_warning
+    severity: warning
+    icon: "⚠️"
+    category: Scripts
+    title_template: "{title}"
+    message_template: "{message}"
+    description: "Warning from a script: context {title, message}."
+    min_repeat_min: 0
+  - type: script_critical
+    severity: critical
+    icon: "🚨"
+    category: Scripts
+    title_template: "{title}"
+    message_template: "{message}"
+    description: "Critical alert from a script: context {title, message}."
+    min_repeat_min: 0
+routes:
+  - {template: script_info, channel: "${alert_channel}", severity_min: info}
+  - {template: script_warning, channel: "${alert_channel}", severity_min: info}
+  - {template: script_critical, channel: "${alert_channel}", severity_min: info}

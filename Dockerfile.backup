@@ -1,0 +1,23 @@
+# Backup sidecar — uses the same mysql:8.0 base as the DB so the
+# dump tool natively supports caching_sha2_password (alpine's
+# mariadb-client doesn't ship the auth plugin shared lib and fails
+# against MySQL 8 with default auth). We don't install cron — too
+# fragile inside containers (setpgid issues on dcron, full apt-get
+# at every restart on debian cron). A tiny shell loop that wakes
+# every minute, checks the schedule, fires the dump, sleeps, is
+# trivial and reliable.
+FROM mysql:8.0
+
+# scripts/backup.sh is the actual dump+rotate routine; the
+# entrypoint loop matches the cron expression and invokes it.
+COPY scripts/backup.sh /usr/local/bin/backup.sh
+RUN chmod +x /usr/local/bin/backup.sh
+
+# The scheduler loop (POSIX sh, tested in tests/test_backup_script.py):
+# BACKUP_CRON "minute hour" fields of *, N or */N.
+COPY scripts/backup_scheduler.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+VOLUME /backups
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

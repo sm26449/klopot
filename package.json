@@ -1,0 +1,16 @@
+{
+  "name": "klopot-adminui-tests",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Dev-only test tooling for the alertd admin UI. The shipped UI is the vendored static ESM under app/admin_ui/static; these devDependencies back the node --test accessibility harness only.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/js/*.mjs"
+  },
+  "devDependencies": {
+    "axe-core": "4.14.0",
+    "jsdom": "26.1.0",
+    "openapi-typescript": "7.4.4",
+    "playwright": "1.48.2"
+  }
+}
