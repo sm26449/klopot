@@ -17,6 +17,13 @@
   <a href="README.ro.md">Română</a>
 </p>
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dashboard-dark.png">
+    <img src="docs/screenshots/dashboard-light.png" alt="Klopot admin UI — dashboard" width="880">
+  </picture>
+</p>
+
 > **Naming.** The product is **Klopot**; the daemon, its image entry point and
 > its `ALERTD_*` settings are still called `alertd` through 1.x. Klopot was
 > born as the alerting service of a home-energy monitoring stack, but nothing
@@ -113,6 +120,25 @@ Migrations run on startup. [Deploy](docs/DEPLOY.md) covers the traefik setup
 [Getting Started](docs/GETTING_STARTED.md), or install a ready-made pack from
 **Admin UI → Packs** (service heartbeat, sensor threshold, Alertmanager —
 see [Packs](docs/PACKS.md)).
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%"><a href="docs/screenshots/log-delivery.png"><img src="docs/screenshots/log-delivery.png" alt="Every alert with its delivery per channel — sent, deferred by the provider, retried"></a><br><sub>Every alert with its delivery per channel — sent, deferred by the provider, retried</sub></td>
+    <td width="50%"><a href="docs/screenshots/incidents.png"><img src="docs/screenshots/incidents.png" alt="Incidents: detection to recovery, acknowledgement separate from resolution"></a><br><sub>Incidents: detection to recovery, acknowledgement separate from resolution</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="docs/screenshots/rules.png"><img src="docs/screenshots/rules.png" alt="Rules grouped by category, with their last firing"></a><br><sub>Rules grouped by category, with their last firing</sub></td>
+    <td width="50%"><a href="docs/screenshots/template-editor.png"><img src="docs/screenshots/template-editor.png" alt="Template editor with a live preview from current values"></a><br><sub>Template editor with a live preview from current values</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="docs/screenshots/activity.png"><img src="docs/screenshots/activity.png" alt="Activity: every attempt to a provider, with its HTTP answer"></a><br><sub>Activity: every attempt to a provider, with its HTTP answer</sub></td>
+    <td width="50%"><a href="docs/screenshots/push-devices.png"><img src="docs/screenshots/push-devices.png" alt="Web Push to the installed app — per device, per severity"></a><br><sub>Web Push to the installed app — per device, per severity</sub></td>
+  </tr>
+</table>
+
+<sub>Synthetic demo data; regenerate with <code>scripts/screenshots.sh</code>. The admin UI also works on a phone and installs as an app.</sub>
 
 ## Features
 

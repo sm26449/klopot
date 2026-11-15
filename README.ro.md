@@ -17,6 +17,13 @@
   <a href="README.md">English</a>
 </p>
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dashboard-dark.png">
+    <img src="docs/screenshots/dashboard-light.png" alt="Interfața de administrare Klopot — dashboard" width="880">
+  </picture>
+</p>
+
 > **Denumire.** Produsul este **Klopot**; daemonul, punctul de intrare din
 > imagine și setările `ALERTD_*` se numesc încă `alertd` pe toată linia 1.x.
 > Klopot s-a născut ca serviciul de alertare al unui sistem de monitorizare a
@@ -117,6 +124,25 @@ traefik (provider docker sau file), backup-urile și upgrade-urile. Apoi urmeaz�
 [Getting Started](docs/GETTING_STARTED.ro.md), sau instalează un pachet gata
 făcut din **Admin UI → Pachete** (heartbeat serviciu, prag senzor, Alertmanager
 — vezi [Pachete](docs/PACKS.md)).
+
+## Capturi de ecran
+
+<table>
+  <tr>
+    <td width="50%"><a href="docs/screenshots/log-delivery.png"><img src="docs/screenshots/log-delivery.png" alt="Fiecare alertă cu livrarea pe fiecare canal — trimisă, amânată de furnizor, reîncercată"></a><br><sub>Fiecare alertă cu livrarea pe fiecare canal — trimisă, amânată de furnizor, reîncercată</sub></td>
+    <td width="50%"><a href="docs/screenshots/incidents.png"><img src="docs/screenshots/incidents.png" alt="Incidente: de la detectare la revenire, confirmarea separată de rezolvare"></a><br><sub>Incidente: de la detectare la revenire, confirmarea separată de rezolvare</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="docs/screenshots/rules.png"><img src="docs/screenshots/rules.png" alt="Reguli grupate pe categorii, cu ultima declanșare"></a><br><sub>Reguli grupate pe categorii, cu ultima declanșare</sub></td>
+    <td width="50%"><a href="docs/screenshots/template-editor.png"><img src="docs/screenshots/template-editor.png" alt="Editorul de șabloane, cu previzualizare din valorile curente"></a><br><sub>Editorul de șabloane, cu previzualizare din valorile curente</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="docs/screenshots/activity.png"><img src="docs/screenshots/activity.png" alt="Activitate: fiecare încercare către un furnizor, cu răspunsul HTTP"></a><br><sub>Activitate: fiecare încercare către un furnizor, cu răspunsul HTTP</sub></td>
+    <td width="50%"><a href="docs/screenshots/push-devices.png"><img src="docs/screenshots/push-devices.png" alt="Web Push în aplicația instalată — pe dispozitiv, pe severitate"></a><br><sub>Web Push în aplicația instalată — pe dispozitiv, pe severitate</sub></td>
+  </tr>
+</table>
+
+<sub>Date demo sintetice; se regenerează cu <code>scripts/screenshots.sh</code>. Interfața funcționează și pe telefon și se instalează ca aplicație.</sub>
 
 ## Funcționalități
 

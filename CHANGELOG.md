@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- README screenshots of the admin UI (`docs/screenshots/`), generated from
+  synthetic data by `scripts/screenshots.sh`; `scripts/e2e.sh` takes
+  `E2E_AFTER` (a command run on the throwaway stack) and `E2E_ONLY=none`.
+
 ## [1.1.0] — 2026-11-15
 
 Schema `0028`–`0039`, applied on startup, forward-only: take a backup first

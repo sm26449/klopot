@@ -21,6 +21,7 @@
 |--------|---------|
 | `check.sh` | **Everything CI runs, locally**: ruff, mypy baseline, pytest (SQLite), node tests, OpenAPI + SDK drift, gitleaks; `--mysql` adds the MySQL gate on a throwaway container, `--e2e` the browser tests. |
 | `e2e.sh` | **Browser end-to-end tests** (`tests/e2e/*.e2e.mjs`, Playwright): builds the image, starts a throwaway fresh install (MySQL 8 + app on a free port), runs first login, every page in EN + RO, a phone viewport and the editors. `--no-build`, `--keep`, `E2E_ONLY=<substring>`. |
+| `screenshots.sh` | README screenshots (`docs/screenshots/`) from synthetic data: a throwaway install through `e2e.sh` (`E2E_ONLY=none`, `E2E_AFTER`), a local HTTP sink, `screenshots.mjs` seeds a demo site and shoots the admin UI. |
 | `vapid_keys.py` | Print a VAPID key pair for the Web Push channel; the private key goes into `secrets.env` as `KLOPOT_SECRET_VAPID_PRIVATE` (docs/WEB_PUSH.md). |
 | `render_icons.mjs` | Re-render the installable-app icons (`app/admin_ui/static/icons/*.png`) from the brand mark; `node scripts/render_icons.mjs` after `npm ci`. |
 | `dump_openapi.py` | Regenerate `openapi/v1.json` after a route or schema change (CI fails on drift). |
