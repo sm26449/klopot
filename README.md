@@ -210,6 +210,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup and conventions,
 [SECURITY.md](SECURITY.md) for reporting vulnerabilities, and
 [CHANGELOG.md](CHANGELOG.md) for history.
 
+Website: **[klopot.dev](https://klopot.dev)**. Bugs and ideas go to
+[Issues](https://github.com/sm26449/klopot/issues); anything else —
+questions, help with an installation, an integration — to
+**contact@klopot.dev** or the form on the site.
+
 ---
 
 ## The team

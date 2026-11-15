@@ -18,6 +18,8 @@ minor to stay supported.
 Report privately through GitHub's **[private vulnerability reporting][gh]**
 (the *Report a vulnerability* button under the repository's **Security**
 tab). That channel is confidential and reaches the maintainer directly.
+If you cannot use it, e-mail **contact@klopot.dev** with "Security" in the
+subject.
 
 Please include:
 

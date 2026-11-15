@@ -228,4 +228,5 @@ Licensed under the **Apache License 2.0** — see [`LICENSE`](LICENSE) and
 [`NOTICE`](NOTICE). By contributing you agree that your contributions are
 licensed under the same terms. Contributions are welcome; please read the
 [Code of Conduct](CODE_OF_CONDUCT.md) first, and report security issues
-privately per [`SECURITY.md`](SECURITY.md).
+privately per [`SECURITY.md`](SECURITY.md). Questions that do not fit an
+issue: **contact@klopot.dev**.

@@ -215,6 +215,11 @@ Vezi [CONTRIBUTING.md](CONTRIBUTING.md) pentru setup și convenții,
 [SECURITY.md](SECURITY.md) pentru raportarea vulnerabilităților, și
 [CHANGELOG.md](CHANGELOG.md) pentru istoric.
 
+Site: **[klopot.dev](https://klopot.dev/ro/)**. Erorile și ideile merg în
+[Issues](https://github.com/sm26449/klopot/issues); orice altceva —
+întrebări, ajutor la o instalare, o integrare — la **contact@klopot.dev**
+sau prin formularul de pe site.
+
 ---
 
 ## Echipa
