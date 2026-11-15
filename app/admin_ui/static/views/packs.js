@@ -5,7 +5,8 @@
 // Install = parameters → POST /v1/packs/preview → the same per-item review as
 // config import (lib/transfer.js ImportReview) → POST /v1/packs/apply.
 import { html, useEffect, useState } from "../lib/h.js";
-import { api } from "../lib/api.js";
+import { api, getAll } from "../lib/api.js";
+import { lookupFailed } from "../lib/lookup.js";
 import { toast } from "../lib/toast.js";
 import { Drawer, ErrorState, Spinner } from "../lib/ui.js";
 import { t, lt } from "../lib/i18n.js";
@@ -31,7 +32,8 @@ export function PacksView() {
     try { setCatalog((await api.get("/v1/packs")).items); } catch (e) { setError(e); }
   }
   async function loadChannels() {
-    try { setChannels((await api.get("/v1/channels", { limit: 500 })).items.map((c) => c.name).sort()); } catch { /* the field falls back to text */ }
+    // On failure the field falls back to free text — and the operator is told.
+    try { setChannels((await getAll("/v1/channels")).items.map((c) => c.name).sort()); } catch (e) { lookupFailed(e); }
   }
   useEffect(() => { load(); loadChannels(); }, []);
 

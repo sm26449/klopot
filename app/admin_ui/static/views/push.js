@@ -3,6 +3,7 @@
 import { html, useEffect, useState } from "../lib/h.js";
 import { api } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
+import { lookup } from "../lib/lookup.js";
 import { ErrorState, Spinner } from "../lib/ui.js";
 import { fmtDateTime, fmtRelative } from "../lib/format.js";
 import { sevLabel } from "../lib/labels.js";
@@ -24,7 +25,8 @@ export function PushCard({ admin }) {
     try {
       const [c, d] = await Promise.all([api.get("/v1/push/config"), api.get("/v1/push/subscriptions")]);
       setConfig(c); setDevices(d);
-      const sub = state === "ready" ? await currentSubscription().catch(() => null) : null;
+      // A browser that cannot answer looks unsubscribed — but says why.
+      const sub = state === "ready" ? await lookup(currentSubscription(), null) : null;
       setHere(sub ? await endpointHash(sub.endpoint) : null);
     } catch (e) { setError(e); }
   }

@@ -57,6 +57,7 @@ class HTTPPollInput(BaseInput):
         self._last_msg_ts: float | None = None
         self._msg_count: int = 0
         self._last_error: str | None = None
+        self._bad_json = False  # warned about an unparsable JSON answer (once per run)
 
     @property
     def topic(self) -> str:
@@ -201,8 +202,14 @@ class HTTPPollInput(BaseInput):
         if "application/json" in ct or r.text.lstrip().startswith(("{", "[")):
             try:
                 payload = r.json()
-            except Exception:
-                pass
+                self._bad_json = False
+            except ValueError as e:
+                # Used as text, as before — but say so, once per run of bad
+                # answers: a rule reading a JSON field just sees no value.
+                if not self._bad_json:
+                    logger.warning("HTTPPoll %s: the answer looks like JSON but does not parse (%s); "
+                                   "using it as text", self.name, type(e).__name__)
+                self._bad_json = True
 
         try:
             await self.on_value(self.topic, payload, "http_poll")

@@ -5,7 +5,8 @@
 // GET /v1/setup/status, which derives every step from the live configuration,
 // so the guide is right however things were set up (UI, API, a pack).
 import { html, useEffect, useState, useCallback } from "../lib/h.js";
-import { api } from "../lib/api.js";
+import { api, getAll } from "../lib/api.js";
+import { lookup } from "../lib/lookup.js";
 import { toast } from "../lib/toast.js";
 import { ErrorState, Spinner } from "../lib/ui.js";
 import { t, lt } from "../lib/i18n.js";
@@ -70,12 +71,12 @@ export function SetupView({ query }) {
   const [catalog, setCatalog] = useState([]);
 
   const loadChannels = useCallback(async () => {
-    try { setChannels((await api.get("/v1/channels", { limit: 500 })).items); } catch (e) { toast.error(e); }
+    try { setChannels((await getAll("/v1/channels")).items); } catch (e) { toast.error(e); }
   }, []);
   useEffect(() => {
     loadChannels();
     api.get("/v1/meta/kinds").then(setMeta).catch((e) => toast.error(e));
-    api.get("/v1/packs").then((r) => setCatalog(r.items)).catch(() => {});
+    lookup(api.get("/v1/packs").then((r) => setCatalog(r.items)));
   }, [loadChannels]);
   useEffect(() => { if (query?.step !== undefined) setStep(Math.min(3, Math.max(0, Number(query.step) || 0))); }, [query?.step]);
 

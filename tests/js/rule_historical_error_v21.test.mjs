@@ -17,7 +17,8 @@ const en = read("i18n/en.js"); // UI strings moved to the i18n catalog
 test("the attention banners count only ENABLED rules, across all pages", () => {
   // Both banners (failing expression / waiting for data) query enabled rules
   // by eval_status, so a disabled rule's history isn't a current incident.
-  assert.match(rules, /api\.get\("\/v1\/rules", \{ enabled: "true", eval_status: status, limit: 100 \}\)/);
+  // Every page of them (getAll), not the first 100 (Copilot hygiene #7).
+  assert.match(rules, /getAll\("\/v1\/rules", \{ enabled: "true", eval_status: status \}\)/);
   assert.match(rules, /load\("error"\), load\("no_data"\)/);
 });
 

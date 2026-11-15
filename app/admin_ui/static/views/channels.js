@@ -52,7 +52,8 @@ export function ChannelsView() {
       // routes count per channel (few channels — parallel is fine)
       const counts = {};
       await Promise.all(p.items.map(async (c) => {
-        try { counts[c.id] = (await api.get(`/v1/channels/${c.id}/usage`)).templates.length; } catch { counts[c.id] = 0; }
+        // A failed lookup shows "?" — never "0 routes" for a channel in use.
+        try { counts[c.id] = (await api.get(`/v1/channels/${c.id}/usage`)).templates.length; } catch { counts[c.id] = "?"; }
       }));
       setUsage(counts);
     } catch (e) { setErr(e); }

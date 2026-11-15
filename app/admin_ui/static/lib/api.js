@@ -138,3 +138,20 @@ export const api = {
   health: () => request("GET", "/v1/health"),
   version: () => request("GET", "/v1/version"),
 };
+
+const PAGE = 500;            // the API's largest page (limit ≤ 500)
+const ALL_MAX = 10000;       // a picker or search never loads more than this
+
+/** Every row of a paged list (?skip&limit), for pickers, autocomplete and
+ *  search: one page silently stopped at 500 (Copilot hygiene #7). Resolves
+ *  { items, total }; items.length < total only past ALL_MAX. */
+export async function getAll(path, query = {}) {
+  const items = [];
+  for (let skip = 0; ; skip += PAGE) {
+    const p = await api.get(path, { ...query, skip, limit: PAGE });
+    items.push(...(p.items || []));
+    if (!p.items?.length || items.length >= (p.total ?? 0) || items.length >= ALL_MAX) {
+      return { items, total: p.total ?? items.length };
+    }
+  }
+}

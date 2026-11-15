@@ -36,6 +36,7 @@ export default {
     loadError: "Couldn't load this.",
     refreshFailed: "Couldn't refresh — showing the data from the last successful load.",
     detailError: "Couldn't load the full details.",
+    lookupFailed: "Some lists couldn't be loaded — choices and suggestions may be incomplete.",
     retry: "Retry",
     close: "Close",
     prev: "‹ Prev",
@@ -761,6 +762,7 @@ export default {
     subtitle: "Conditions evaluated against live variables.",
     newRule: "New rule",
     evalErrorsBanner: "{count} enabled rule(s) have a failing expression:",
+    attentionFailed: "Couldn't check which rules are failing — reload the page to try again.",
     noDataBanner: "{count} enabled rule(s) are waiting for data (an input variable has no value):",
     searchAria: "Search rules",
     searchPlaceholder: "Search name / condition / summary…",
@@ -1056,6 +1058,7 @@ export default {
     none: "Nothing found.",
     button: "Search",
     keys: "↑ ↓ to move · Enter to open · Esc to close",
+    partial: "Some results couldn't be loaded — this list may be incomplete.",
     kind: { page: "Page", template: "Template", rule: "Rule", variable: "Variable", channel: "Channel", input: "Input", pack: "Pack" },
   },
   setup: {

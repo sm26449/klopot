@@ -61,3 +61,25 @@ async def test_create_input_supported_kind_ok(db_client, admin_key):
         headers={"X-API-Key": admin_key},
     )
     assert r.status_code == 201, r.text
+
+
+async def test_import_refuses_an_input_kind_without_an_adapter(db_client, admin_key):
+    """Copilot hygiene #5: the REST API refused these kinds, an import stored
+    them as enabled inputs that never ran."""
+    pack = "inputs:\n  - name: mailbox\n    kind: email_imap\n    config: {host: imap.example.com}\n"
+    r = await db_client.post("/v1/config/import", params={"apply": "true"}, content=pack,
+                             headers={"X-API-Key": admin_key, "Content-Type": "application/yaml"})
+    body = r.json()
+    assert body.get("ok") is False or r.status_code >= 400, body
+    assert "not supported" in r.text
+    names = [i["name"] for i in (await db_client.get("/v1/inputs", headers={"X-API-Key": admin_key})).json()["items"]]
+    assert "mailbox" not in names
+
+
+def test_the_form_offers_only_input_kinds_that_run():
+    from app.inputs import REGISTRY
+    from app.meta_kinds import describe_kinds
+
+    offered = set(describe_kinds()["inputs"])
+    assert offered == set(REGISTRY)
+    assert "email_imap" not in offered and "schedule" not in offered

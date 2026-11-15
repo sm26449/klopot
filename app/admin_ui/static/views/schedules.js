@@ -4,7 +4,7 @@ import { html, useState, useEffect, useCallback } from "../lib/h.js";
 import { useGuard } from "../lib/action.js";
 import { useLoader } from "../lib/loader.js";
 import { clickable } from "../lib/a11y.js";
-import { api } from "../lib/api.js";
+import { api, getAll } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { Drawer, useDirty, Spinner, Empty, ErrorState, StaleBanner, Json, DangerConfirm, ListMeta, DraftBanner } from "../lib/ui.js";
 import { useDraft } from "../lib/draft.js";
@@ -29,7 +29,7 @@ export function SchedulesView() {
   // wondering where the suggestions went. Flag it so the editor can say so and
   // offer a retry instead of pretending there are no templates (UX-006).
   const loadTemplates = useCallback(() => {
-    api.get("/v1/templates", { limit: 500 })
+    getAll("/v1/templates")
       .then((p) => { setTemplates(p.items.map((x) => x.type).sort()); setTemplatesErr(false); })
       .catch(() => setTemplatesErr(true));
   }, []);

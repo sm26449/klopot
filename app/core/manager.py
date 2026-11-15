@@ -234,6 +234,11 @@ class InputManager:
         wanted: dict[str, Input] = {
             i.name: i for i in inputs if i.kind.value in REGISTRY
         }
+        for i in inputs:
+            if i.enabled and i.kind.value not in REGISTRY:
+                # Never runs (no adapter): say so instead of an input whose
+                # health just stays empty (Copilot hygiene #5).
+                logger.warning("input %r: kind %r has no adapter and is not started", i.name, i.kind.value)
         # Stop removed
         for name in list(self._adapters.keys()):
             if name not in wanted:

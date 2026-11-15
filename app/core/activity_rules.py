@@ -21,6 +21,8 @@ from ..utils.time import utc_now
 logger = logging.getLogger(__name__)
 
 _TTL_SEC = 60.0
+# After a failed load: try again this soon, not a whole TTL later.
+_RETRY_SEC = 5.0
 BODY_MODES = ("auto", "never", "errors", "always")
 ACTIONS = ("keep", "ignore")
 STATUS_CLASSES = ("1xx", "2xx", "3xx", "4xx", "5xx")
@@ -67,6 +69,9 @@ class RuleCache:
         # Bumped by invalidate(); a load that started before it must not
         # stamp the set it read as fresh.
         self._generation = 0
+        # A failed load is retried after _RETRY_SEC and logged once per streak.
+        self._retry_at: float | None = None
+        self._failing = False
         self._lock = asyncio.Lock()
         # rule id → [count, last_at, last_ip] not yet written to the table.
         self._hits: dict[int, list[Any]] = {}
@@ -74,9 +79,13 @@ class RuleCache:
     def invalidate(self) -> None:
         self._generation += 1
         self._loaded_at = None
+        self._retry_at = None
 
     def _fresh(self) -> bool:
-        return self._loaded_at is not None and time.monotonic() - self._loaded_at < _TTL_SEC
+        now = time.monotonic()
+        if self._retry_at is not None:
+            return now < self._retry_at
+        return self._loaded_at is not None and now - self._loaded_at < _TTL_SEC
 
     async def rules(self) -> list[Rule]:
         if self._fresh():
@@ -94,10 +103,22 @@ class RuleCache:
                 async with get_session_factory()() as s:
                     rows = (await s.execute(select(ActivityRule).where(ActivityRule.enabled.is_(True))
                                             .order_by(ActivityRule.position, ActivityRule.id))).scalars().all()
-                self._rules = [Rule(r.id, r.name, r.match_method, r.match_path, r.match_status, r.match_actor,
-                                    r.match_ip, r.action, r.keep_days, r.request_body, r.response_body) for r in rows]
+                rules = [Rule(r.id, r.name, r.match_method, r.match_path, r.match_status, r.match_actor,
+                              r.match_ip, r.action, r.keep_days, r.request_body, r.response_body) for r in rows]
             except Exception:
-                logger.debug("activity rules: load failed; keeping the previous set", exc_info=True)
+                # Not marked fresh: ignore / keep rules may be missing until the
+                # next load, so say so and retry soon (Copilot hygiene #1).
+                if not self._failing:
+                    logger.warning("activity rules: load failed; using %d rule(s) from the last good load, "
+                                   "retrying in %.0f s", len(self._rules), _RETRY_SEC, exc_info=True)
+                self._failing = True
+                self._retry_at = time.monotonic() + _RETRY_SEC
+                return self._rules
+            if self._failing:
+                logger.info("activity rules: loaded again (%d rule(s))", len(rules))
+            self._failing = False
+            self._retry_at = None
+            self._rules = rules
             if generation == self._generation:
                 self._loaded_at = time.monotonic()
         return self._rules

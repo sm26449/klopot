@@ -2,7 +2,8 @@
 // cheat-sheet, eval-now, test fire, duplicate and typed-confirm delete.
 import { html, useState, useEffect, useMemo } from "../lib/h.js";
 import { useLoader } from "../lib/loader.js";
-import { api } from "../lib/api.js";
+import { api, getAll } from "../lib/api.js";
+import { lookup } from "../lib/lookup.js";
 import { navigate, useUrlFilters } from "../lib/router.js";
 import { toast } from "../lib/toast.js";
 import { Drawer, useDirty, Spinner, Empty, ErrorState, StaleBanner, ListMeta, DangerConfirm, Json, KindHelp, DraftBanner, starterActions } from "../lib/ui.js";
@@ -85,9 +86,9 @@ export function RulesView({ query, params }) {
   }, [filters]);
 
   useEffect(() => {
-    api.get("/v1/templates", { limit: 500 }).then((p) => setTemplateRows(p.items)).catch(() => {});
-    api.get("/v1/variables", { limit: 500 }).then((p) => setVariables(p.items.map((v) => v.name).sort())).catch(() => {});
-    api.get("/v1/rules", { limit: 500 }).then((p) => setAllRules(p.items.map((r) => r.name).sort())).catch(() => {});
+    lookup(getAll("/v1/templates").then((p) => setTemplateRows(p.items)));
+    lookup(getAll("/v1/variables").then((p) => setVariables(p.items.map((v) => v.name).sort())));
+    lookup(getAll("/v1/rules").then((p) => setAllRules(p.items.map((r) => r.name).sort())));
   }, []);
 
   const templates = useMemo(() => templateRows.map((tt) => tt.type).sort(), [templateRows]);
@@ -99,14 +100,15 @@ export function RulesView({ query, params }) {
   // show): only ENABLED rules count — a disabled rule keeps its last error as
   // history and must not be surfaced as failing now (audit V21). Expression
   // errors and rules waiting for an input are reported separately.
-  const [attention, setAttention] = useState({ error: [], no_data: [] });
+  // Every such rule (not the first 100), and a failed lookup is said, not
+  // shown as "nothing failing" (Copilot hygiene #7).
+  const [attention, setAttention] = useState({ error: [], no_data: [], failed: false });
   useEffect(() => {
     let active = true;
-    const load = (status) => api.get("/v1/rules", { enabled: "true", eval_status: status, limit: 100 })
-      .then((p) => p.items).catch(() => []);
+    const load = (status) => getAll("/v1/rules", { enabled: "true", eval_status: status }).then((p) => p.items);
     Promise.all([load("error"), load("no_data")]).then(([error, noData]) => {
-      if (active) setAttention({ error, no_data: noData });
-    });
+      if (active) setAttention({ error, no_data: noData, failed: false });
+    }).catch(() => { if (active) setAttention({ error: [], no_data: [], failed: true }); });
     return () => { active = false; };
   }, [data]);
 
@@ -150,6 +152,7 @@ export function RulesView({ query, params }) {
         <button class="btn primary" onClick=${() => setEditing({ __new: true })}>${t("rules.newRule")}</button></div>
     </div>
 
+    ${attention.failed ? html`<div class="alert warn" role="status">${t("rules.attentionFailed")}</div>` : null}
     ${["error", "no_data"].map((kind) => attention[kind].length ? html`<div key=${kind} class=${"alert " + (kind === "error" ? "warn" : "info")}>
       <b>${t(kind === "error" ? "rules.evalErrorsBanner" : "rules.noDataBanner", { count: attention[kind].length })}</b>
       ${attention[kind].map((r) => html` <a key=${r.id} class="mono small" href=${"#/rules/" + r.id} title=${r.last_eval_error || ""}>${r.name}</a>`)}

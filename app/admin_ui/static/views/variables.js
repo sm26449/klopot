@@ -5,7 +5,8 @@ import { useUrlFilters } from "../lib/router.js";
 import { TransferMenu } from "../lib/transfer.js";
 import { clickable } from "../lib/a11y.js";
 import { useLoader } from "../lib/loader.js";
-import { api } from "../lib/api.js";
+import { api, getAll } from "../lib/api.js";
+import { lookup } from "../lib/lookup.js";
 import { toast } from "../lib/toast.js";
 import { Drawer, useDirty, Spinner, Empty, ErrorState, StaleBanner, DangerConfirm, ListMeta, KindHelp, DraftBanner, starterActions } from "../lib/ui.js";
 import { useDraft } from "../lib/draft.js";
@@ -42,8 +43,8 @@ export function VariablesView({ query }) {
   const items = page?.items ?? null;
   const total = page?.total ?? null;
   useEffect(() => {
-    api.get("/v1/meta/kinds").then(setMeta).catch(() => {});
-    api.get("/v1/inputs", { limit: 500 }).then((p) => setInputs(p.items)).catch(() => {});
+    lookup(api.get("/v1/meta/kinds").then(setMeta));
+    lookup(getAll("/v1/inputs").then((p) => setInputs(p.items)));
   }, []);
 
   const inputName = useMemo(() => new Map(inputs.map((i) => [i.id, i.name])), [inputs]);

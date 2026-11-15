@@ -3,7 +3,8 @@
 import { html, useState, useMemo, useEffect } from "../lib/h.js";
 import { clickable } from "../lib/a11y.js";
 import { useLoader } from "../lib/loader.js";
-import { api } from "../lib/api.js";
+import { api, getAll } from "../lib/api.js";
+import { lookup } from "../lib/lookup.js";
 import { toast } from "../lib/toast.js";
 import { Drawer, useDirty, Spinner, Empty, ErrorState, StaleBanner, DangerConfirm, Json, ListMeta, KindHelp, DraftBanner, starterActions } from "../lib/ui.js";
 import { useDraft } from "../lib/draft.js";
@@ -128,10 +129,10 @@ function TemplateEditor({ template, categories, onClose, onSaved }) {
 
   // Load channels + existing routes (edit only) + rule reference count.
   useEffect(() => {
-    api.get("/v1/channels", { limit: 500 }).then((p) => setChannels(p.items)).catch(() => {});
-    api.get("/v1/variables", { limit: 500 }).then((p) => setVariableNames(p.items.map((v) => v.name).sort())).catch(() => {});
-    api.get("/v1/meta/kinds").then((m) => setIntrusiveKinds(new Set(
-      Object.entries(m.channels || {}).filter(([, d]) => d.intrusive).map(([k]) => k)))).catch(() => {});
+    lookup(getAll("/v1/channels").then((p) => setChannels(p.items)));
+    lookup(getAll("/v1/variables").then((p) => setVariableNames(p.items.map((v) => v.name).sort())));
+    lookup(api.get("/v1/meta/kinds").then((m) => setIntrusiveKinds(new Set(
+      Object.entries(m.channels || {}).filter(([, d]) => d.intrusive).map(([k]) => k)))));
     if (!isNew) {
       api.get(`/v1/templates/${encodeURIComponent(template.type)}/channels`).then((rs) => {
         const m = {};
@@ -145,7 +146,7 @@ function TemplateEditor({ template, categories, onClose, onSaved }) {
         };
         setRoutes(m);
       }).catch(() => { setRoutes(null); setRoutesError(true); });
-      api.get("/v1/rules", { template_type: template.type, limit: 1 }).then((p) => setRuleRefs(p.total)).catch(() => {});
+      lookup(api.get("/v1/rules", { template_type: template.type, limit: 1 }).then((p) => setRuleRefs(p.total)));
     } else { setRoutes({}); }
   }, []);
 
@@ -154,8 +155,9 @@ function TemplateEditor({ template, categories, onClose, onSaved }) {
   const suggested = useMemo(() => JSON.stringify(sampleContext(usedNames ? usedNames.split("\n") : [], liveValues), null, 2), [usedNames, liveValues]);
   useEffect(() => { if (!ctxTouched) setCtxText(suggested); }, [suggested, ctxTouched]);
   useEffect(() => {
-    api.get("/v1/state").then((st) => setLiveValues(Object.fromEntries((st.variables || [])
-      .filter((v) => v.value !== null && v.value !== undefined).map((v) => [v.name, v.value])))).catch(() => {});
+    // Live values only seed the preview; without them it uses sample values.
+    lookup(api.get("/v1/state").then((st) => setLiveValues(Object.fromEntries((st.variables || [])
+      .filter((v) => v.value !== null && v.value !== undefined).map((v) => [v.name, v.value])))));
   }, []);
   const ctx = useMemo(() => { try { return JSON.parse(ctxText || "{}"); } catch { return null; } }, [ctxText]);
   const titlePrev = ctx ? renderTemplate(tpl.title_template, ctx) : null;

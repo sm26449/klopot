@@ -3,7 +3,8 @@
 import { html, useState, useEffect, useCallback, useRef } from "../lib/h.js";
 import { useLoader } from "../lib/loader.js";
 import { useUrlFilters } from "../lib/router.js";
-import { api } from "../lib/api.js";
+import { api, getAll } from "../lib/api.js";
+import { lookup } from "../lib/lookup.js";
 import { toast } from "../lib/toast.js";
 import { openStream } from "../lib/ws.js";
 import { makeCoalescer, makeSingleFlight } from "../lib/coalesce.js";
@@ -75,9 +76,7 @@ export function LogView({ query }) {
 
   // Template types for the "type" filter datalist (load once).
   useEffect(() => {
-    api.get("/v1/templates", { limit: 500 })
-      .then((p) => setTypes(p.items.map((t) => t.type).sort()))
-      .catch(() => {});
+    lookup(getAll("/v1/templates").then((p) => setTypes(p.items.map((t) => t.type).sort())));
   }, []);
 
   const buildQuery = useCallback(() => {
@@ -330,10 +329,11 @@ function AttemptTimeline({ notificationId, refresh }) {
   const [items, setItems] = useState(null);
   useEffect(() => {
     api.get("/v1/activity/attempts", { notification_id: notificationId, limit: 100 })
-      .then((p) => setItems(Array.isArray(p?.items) ? p.items : [])).catch(() => setItems([]));
+      .then((p) => setItems(Array.isArray(p?.items) ? p.items : [])).catch(() => setItems(false));
   }, [notificationId, refresh]);
   return html`<h3 class="why-h">${t("log.attempts")}</h3>
-    ${items === null ? html`<${Spinner} />` : html`<${AttemptList} items=${items} />`}`;
+    ${items === null ? html`<${Spinner} />` : items === false ? html`<p class="muted small" role="status">${t("common.loadError")}</p>`
+      : html`<${AttemptList} items=${items} />`}`;
 }
 
 function DeliveryDetails({ deliveries }) {

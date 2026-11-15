@@ -1127,62 +1127,6 @@
           "ref_field": "auth_token_ref"
         }
       ]
-    },
-    "schedule": {
-      "fields": []
-    },
-    "email_imap": {
-      "fields": [
-        {
-          "name": "host",
-          "type": "string",
-          "required": true,
-          "secret": false,
-          "default": null,
-          "help": ""
-        },
-        {
-          "name": "port",
-          "type": "int",
-          "required": false,
-          "secret": false,
-          "default": 993,
-          "help": ""
-        },
-        {
-          "name": "username",
-          "type": "string",
-          "required": true,
-          "secret": false,
-          "default": null,
-          "help": ""
-        },
-        {
-          "name": "password",
-          "type": "string",
-          "required": false,
-          "secret": true,
-          "default": null,
-          "help": "IMAP password (write-only).",
-          "ref_field": "password_ref"
-        },
-        {
-          "name": "mailbox",
-          "type": "string",
-          "required": false,
-          "secret": false,
-          "default": "INBOX",
-          "help": ""
-        },
-        {
-          "name": "poll_interval_sec",
-          "type": "int",
-          "required": false,
-          "secret": false,
-          "default": 60,
-          "help": ""
-        }
-      ]
     }
   },
   "variables": {

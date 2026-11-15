@@ -62,6 +62,23 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Admin UI: a list that fails to load is said, not shown as empty. Picker
+  options, autocomplete and live values give one "some lists couldn't be
+  loaded" notice; Ctrl+K says when a section is missing; the rules page says
+  when it could not check which rules are failing (it showed none); delivery
+  attempts and recent payloads show an error instead of "no rows"; a channel
+  whose usage could not be read shows `?` routes, not `0`.
+- Admin UI: pickers, autocomplete, Ctrl+K, the "rules needing attention"
+  banners and the API keys list load every page instead of stopping silently
+  at the first 500 (100 for the banners).
+- Config import refuses input kinds that have no adapter (`schedule`,
+  `email_imap`), as the API already did; the input form no longer offers
+  them, and an existing one is logged as not started.
+- Activity log: a failed load of the rules was logged at debug and the empty
+  set kept for 60 s, so ignore / keep rules silently did not apply; it is now
+  a warning (once per outage) and retried after 5 s.
+- HTTP poll: an answer that looks like JSON but does not parse is logged
+  (once per run of bad answers) instead of silently used as text.
 - Template editor preview: numbers now look exactly as sent. The preview
   rounded half up (`2.5` → `3`, the server sends `2`), did not clamp digit
   counts (`fixed(101)` showed an error), printed full floats where the server

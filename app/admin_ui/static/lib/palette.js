@@ -5,7 +5,7 @@
 // the shell's NAV; items (templates, rules, variables, channels, inputs,
 // packs) are loaded when the palette opens, so it is always current.
 import { html, useEffect, useRef, useState, useMemo } from "./h.js";
-import { api } from "./api.js";
+import { api, getAll } from "./api.js";
 import { useDialog } from "./dialog.js";
 import { navigate } from "./router.js";
 import { t, lt } from "./i18n.js";
@@ -23,14 +23,17 @@ export function matchScore(text, query) {
   return i === q.length ? 100 - (s.length - q.length) * 0.1 : 0;
 }
 
-async function loadItems() {
-  const safe = (p) => p.catch(() => ({ items: [] }));
+// Every item (not the first 500), and a section that failed is counted so
+// the palette can say its results are incomplete (Copilot hygiene #7, #8).
+export async function loadItems() {
+  let failed = 0;
+  const safe = (p) => p.catch((err) => { failed += 1; console.error("search: a section failed to load", err); return { items: [] }; });
   const [tpl, rules, vars, chans, inputs, packs] = await Promise.all([
-    safe(api.get("/v1/templates", { limit: 500 })), safe(api.get("/v1/rules", { limit: 500 })),
-    safe(api.get("/v1/variables", { limit: 500 })), safe(api.get("/v1/channels", { limit: 500 })),
-    safe(api.get("/v1/inputs", { limit: 500 })), safe(api.get("/v1/packs")),
+    safe(getAll("/v1/templates")), safe(getAll("/v1/rules")),
+    safe(getAll("/v1/variables")), safe(getAll("/v1/channels")),
+    safe(getAll("/v1/inputs")), safe(api.get("/v1/packs")),
   ]);
-  return [
+  const items = [
     ...tpl.items.map((x) => ({ kind: "template", label: x.type, hint: x.title_template, go: () => navigate("/templates", { search: x.type }) })),
     ...rules.items.map((x) => ({ kind: "rule", label: x.name, hint: x.condition_expr, go: () => navigate(`/rules/${x.id}`) })),
     ...vars.items.map((x) => ({ kind: "variable", label: x.name, hint: x.source, go: () => navigate("/variables", { search: x.name }) })),
@@ -38,6 +41,7 @@ async function loadItems() {
     ...inputs.items.map((x) => ({ kind: "input", label: x.name, hint: x.kind, go: () => navigate("/inputs") })),
     ...packs.items.map((x) => ({ kind: "pack", label: lt(x.name), hint: lt(x.description), go: () => navigate("/packs") })),
   ];
+  return { items, failed };
 }
 
 export function CommandPalette({ open, onClose, pages }) {
@@ -45,13 +49,14 @@ export function CommandPalette({ open, onClose, pages }) {
   const [query, setQuery] = useState("");
   const [items, setItems] = useState(null);
   const [active, setActive] = useState(0);
+  const [partial, setPartial] = useState(false);
   useDialog(open, onClose, ref);
 
   // Reset on close, not on open: an effect runs a frame after the palette
   // appears, so a reset there wiped what a fast typist had already typed.
   useEffect(() => {
-    if (!open) { setQuery(""); setActive(0); setItems(null); return; }
-    loadItems().then(setItems);
+    if (!open) { setQuery(""); setActive(0); setItems(null); setPartial(false); return; }
+    loadItems().then((r) => { setItems(r.items); setPartial(r.failed > 0); });
   }, [open]);
 
   const results = useMemo(() => {
@@ -85,6 +90,7 @@ export function CommandPalette({ open, onClose, pages }) {
         </li>`)}
       </ul>
       ${!results.length ? html`<p class="muted small palette-empty" role="status">${items === null ? t("common.loading") : t("palette.none")}</p>` : null}
+      ${partial ? html`<p class="muted small" role="status">${t("palette.partial")}</p>` : null}
       <p class="palette-keys muted small" aria-hidden="true">${t("palette.keys")}</p>
     </div>
   </div>`;

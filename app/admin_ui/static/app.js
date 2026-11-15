@@ -303,7 +303,9 @@ function App() {
     if (seen) return;
     const path = (location.hash || "#/").slice(1).split("?")[0];
     if (path !== "/" && path !== "/dashboard" && path !== "") return;
-    api.get("/v1/setup/status").then((s) => { if (!s.complete && !s.dismissed) navigate("/setup", undefined, { replace: true }); }).catch(() => {});
+    api.get("/v1/setup/status").then((s) => { if (!s.complete && !s.dismissed) navigate("/setup", undefined, { replace: true }); })
+      // Only decides whether to open the setup guide; the dashboard works without it.
+      .catch((e) => console.error("could not check the setup status", e));
   }, [state, user]);
 
   useEffect(() => {

@@ -1,7 +1,8 @@
 // Snooze & maintenance (phase F4): active mutes + history, create by
 // scope/target/until, and a one-click maintenance mode (snooze type:*).
 import { html, useState, useEffect, useCallback } from "../lib/h.js";
-import { api } from "../lib/api.js";
+import { api, getAll } from "../lib/api.js";
+import { lookup } from "../lib/lookup.js";
 import { toast } from "../lib/toast.js";
 import { Spinner, Empty, ErrorState } from "../lib/ui.js";
 import { fmtDateTime, fmtRelative } from "../lib/format.js";
@@ -43,9 +44,9 @@ export function SnoozeView() {
   // Target autocomplete options per scope.
   useEffect(() => {
     Promise.all([
-      api.get("/v1/templates", { limit: 500 }).then((p) => p.items.map((t) => t.type)).catch(() => []),
-      api.get("/v1/rules", { limit: 500 }).then((p) => p.items.map((r) => ({ id: r.id, name: r.name }))).catch(() => []),
-      api.get("/v1/channels", { limit: 500 }).then((p) => p.items.map((c) => c.name)).catch(() => []),
+      lookup(getAll("/v1/templates").then((p) => p.items.map((t) => t.type)), []),
+      lookup(getAll("/v1/rules").then((p) => p.items.map((r) => ({ id: r.id, name: r.name }))), []),
+      lookup(getAll("/v1/channels").then((p) => p.items.map((c) => c.name)), []),
     ]).then(([type, rule, channel]) => setOpts({ type, rule, channel }));
   }, []);
 

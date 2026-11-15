@@ -318,3 +318,30 @@ async def test_a_load_racing_an_invalidate_is_not_kept_as_fresh():
     cache.invalidate()                     # a rule changed while a load was running
     assert cache._generation == gen + 1
     assert cache._fresh() is False
+
+
+async def test_a_failed_rule_load_is_logged_retried_soon_and_not_kept_as_fresh(db_client, monkeypatch, caplog):
+    """Copilot hygiene #1: a failed load was logged at debug and the (empty)
+    set stamped fresh for 60 s, so ignore rules silently did not run."""
+    from app.core import activity_rules
+    from app.db import session as db_session_mod
+
+    now = [1000.0]
+    monkeypatch.setattr(activity_rules.time, "monotonic", lambda: now[0])
+    cache = activity_rules.RuleCache()
+    real = db_session_mod.get_session_factory
+
+    def broken():
+        raise RuntimeError("database down")
+
+    monkeypatch.setattr(db_session_mod, "get_session_factory", broken)
+    with caplog.at_level("WARNING", logger="app.core.activity_rules"):
+        assert await cache.rules() == []
+        await cache.rules()                                  # within the retry window: no new attempt, no new line
+    assert caplog.text.count("load failed") == 1
+    assert cache._fresh() is True
+    now[0] += activity_rules._RETRY_SEC + 0.1
+    assert cache._fresh() is False, "retried after a few seconds, not a whole TTL"
+    monkeypatch.setattr(db_session_mod, "get_session_factory", real)
+    assert await cache.rules() == []                         # loads (no rules in this database)
+    assert cache._failing is False and cache._retry_at is None

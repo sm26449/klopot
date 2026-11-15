@@ -1,7 +1,7 @@
 // API keys (phase F7): table + create / edit / rotate(grace) / revoke /
 // delete, with the plaintext shown exactly once in a copy modal.
 import { html, useState, useEffect, useCallback } from "../lib/h.js";
-import { api } from "../lib/api.js";
+import { api, getAll } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { Drawer, useDirty, Modal, Spinner, Empty, ErrorState, StaleBanner, DangerConfirm, DraftBanner } from "../lib/ui.js";
 import { useDraft } from "../lib/draft.js";
@@ -25,7 +25,7 @@ export function ApiKeysView() {
 
   const load = useCallback(async () => {
     setErr(null);
-    try { setItems((await api.get("/v1/api_keys", { limit: 500 })).items); } catch (e) { setErr(e); }
+    try { setItems((await getAll("/v1/api_keys")).items); } catch (e) { setErr(e); }
   }, []);
   useEffect(() => { load(); }, [load]);
 

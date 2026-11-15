@@ -193,9 +193,10 @@ async def test_load_skips_disabled_inputs(
 
 
 async def test_load_skips_unknown_kind(
-    db_engine, db_session,
+    db_engine, db_session, caplog,
 ):
-    """An input.kind not in REGISTRY → log warning, no adapter."""
+    """An input.kind not in REGISTRY → log warning, no adapter (the warning
+    was missing until the Copilot hygiene pass, #5)."""
     db_session.add(Input(
         id=102, name="weird",
         kind=InputKind.mqtt,  # valid enum
@@ -204,13 +205,14 @@ async def test_load_skips_unknown_kind(
     await db_session.commit()
 
     # Patch registry to be empty so the kind lookup fails
-    with patch("app.core.manager.REGISTRY", {}):
+    with patch("app.core.manager.REGISTRY", {}), caplog.at_level("WARNING", logger="app.core.manager"):
         mgr = InputManager()
         await mgr.start()
         try:
             assert "weird" not in mgr._adapters
         finally:
             await mgr.stop()
+    assert "'weird'" in caplog.text and "no adapter" in caplog.text
 
 
 async def test_seeds_constant_variables(

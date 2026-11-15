@@ -4,6 +4,7 @@ import { html, useState, useEffect, useCallback } from "../lib/h.js";
 import { useGuard } from "../lib/action.js";
 import { clickable } from "../lib/a11y.js";
 import { api } from "../lib/api.js";
+import { lookup } from "../lib/lookup.js";
 import { toast } from "../lib/toast.js";
 import { Drawer, useDirty, Spinner, Empty, ErrorState, StaleBanner, Json, DangerConfirm, ConfirmModal, ListMeta, KindHelp, DraftBanner, starterActions } from "../lib/ui.js";
 import { useDraft } from "../lib/draft.js";
@@ -24,7 +25,7 @@ export function InputsView() {
     catch (e) { setErr(e); }
   }, []);
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { api.get("/v1/meta/kinds").then(setMeta).catch(() => {}); }, []);
+  useEffect(() => { lookup(api.get("/v1/meta/kinds").then(setMeta)); }, []);
 
   return html`<div>
     <div class="page-head">

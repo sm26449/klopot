@@ -33,6 +33,7 @@ export default {
     loadError: "Nu s-a putut încărca.",
     refreshFailed: "Reîmprospătarea a eșuat — se afișează datele de la ultima încărcare reușită.",
     detailError: "Nu s-au putut încărca detaliile complete.",
+    lookupFailed: "Unele liste nu s-au putut încărca — opțiunile și sugestiile pot fi incomplete.",
     retry: "Reîncearcă",
     close: "Închide",
     prev: "‹ Înapoi",
@@ -758,6 +759,7 @@ export default {
     subtitle: "Condiții evaluate pe baza variabilelor live.",
     newRule: "Regulă nouă",
     evalErrorsBanner: "{count} regulă(i) active au o expresie care eșuează:",
+    attentionFailed: "Nu s-a putut verifica ce reguli eșuează — reîncarcă pagina pentru a reîncerca.",
     noDataBanner: "{count} regulă(i) active așteaptă date (o variabilă de intrare nu are valoare):",
     searchAria: "Caută reguli",
     searchPlaceholder: "Caută nume / condiție / rezumat…",
@@ -1053,6 +1055,7 @@ export default {
     none: "Nimic găsit.",
     button: "Caută",
     keys: "↑ ↓ pentru mutare · Enter pentru deschidere · Esc pentru închidere",
+    partial: "Unele rezultate nu s-au putut încărca — lista poate fi incompletă.",
     kind: { page: "Pagină", template: "Șablon", rule: "Regulă", variable: "Variabilă", channel: "Canal", input: "Intrare", pack: "Pachet" },
   },
   setup: {

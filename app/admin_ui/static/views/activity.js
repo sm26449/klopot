@@ -378,11 +378,12 @@ function RuleEditor({ rule, onClose, onSaved }) {
 export function ChannelActivity({ name, refresh }) {
   const [items, setItems] = useState(null);
   useEffect(() => {
-    api.get("/v1/activity/attempts", { channel: name, limit: 5 }).then((p) => setItems(Array.isArray(p?.items) ? p.items : [])).catch(() => setItems([]));
+    api.get("/v1/activity/attempts", { channel: name, limit: 5 }).then((p) => setItems(Array.isArray(p?.items) ? p.items : [])).catch(() => setItems(false));
   }, [name, refresh]);
   return html`<div class="field">
     <div class="mini-h">${t("activity.recentAttempts")} · <a href=${`#/activity?tab=attempts&channel=${encodeURIComponent(name)}`}>${t("activity.seeAll")}</a></div>
-    ${items === null ? html`<${Spinner} />` : html`<${AttemptList} items=${items} compact=${true} />`}
+    ${items === null ? html`<${Spinner} />` : items === false ? html`<p class="muted small" role="status">${t("common.loadError")}</p>`
+      : html`<${AttemptList} items=${items} compact=${true} />`}
   </div>`;
 }
 
@@ -391,11 +392,11 @@ export function InputPayloads({ inputId }) {
   const path = `/v1/inputs/${inputId}/webhook`;
   const [items, setItems] = useState(null);
   useEffect(() => {
-    api.get("/v1/activity/requests", { search: path, limit: 5 }).then((p) => setItems(Array.isArray(p?.items) ? p.items : [])).catch(() => setItems([]));
+    api.get("/v1/activity/requests", { search: path, limit: 5 }).then((p) => setItems(Array.isArray(p?.items) ? p.items : [])).catch(() => setItems(false));
   }, [inputId]);
   return html`<div class="field">
     <div class="mini-h">${t("activity.recentPayloads")} · <a href=${`#/activity?tab=requests&search=${encodeURIComponent(path)}`}>${t("activity.seeAll")}</a></div>
-    ${items === null ? html`<${Spinner} />` : !items.length ? html`<p class="muted small">${t("activity.noPayloads")}</p>`
+    ${items === null ? html`<${Spinner} />` : items === false ? html`<p class="muted small" role="status">${t("common.loadError")}</p>` : !items.length ? html`<p class="muted small">${t("activity.noPayloads")}</p>`
       : html`<ul class="setup-channels">${items.map((r) => html`<li key=${r.id}>
           <${StatusBadge} status=${r.status} /> <span class="small" title=${fmtDateTime(r.ts)}>${fmtRelative(r.ts)}</span>
           <span class="muted mono small">${r.client_ip || ""}</span>${r.has_request_body ? html` <span class="chip tag">{ }</span>` : null}</li>`)}</ul>`}

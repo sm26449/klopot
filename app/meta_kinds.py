@@ -440,7 +440,11 @@ INTRUSIVE_CHANNEL_KINDS = frozenset({"sms", "pushover"})
 
 
 def describe_kinds() -> dict[str, Any]:
-    """Full form-schema document served by ``GET /v1/meta/kinds``."""
+    """Full form-schema document served by ``GET /v1/meta/kinds``. Input kinds
+    without an adapter (schedule, email_imap) are left out: the API refuses
+    to create them, so the form must not offer them."""
+    from .inputs import REGISTRY as INPUT_ADAPTERS
+
     return {
         "channels": {
             kind: {
@@ -451,7 +455,7 @@ def describe_kinds() -> dict[str, Any]:
         },
         "inputs": {
             kind: {"fields": _apply_secret_flags("input", kind, fields)}
-            for kind, fields in _INPUTS.items()
+            for kind, fields in _INPUTS.items() if kind in INPUT_ADAPTERS
         },
         "variables": {
             source: {"fields": list(fields)}

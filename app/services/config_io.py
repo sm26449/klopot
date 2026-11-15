@@ -624,6 +624,14 @@ async def _import_inputs(session: AsyncSession, items: list[dict[str, Any]], pla
         if not isinstance(item, dict) or "name" not in item:
             plan.errors.append(f"invalid input row: {item}")
             continue
+        from ..inputs import REGISTRY
+
+        if item.get("kind") not in REGISTRY:
+            # The REST API refuses these (audit F29); an import must too, or it
+            # stores an input that never runs (Copilot hygiene #5).
+            plan.errors.append(f"input {item['name']!r}: kind {item.get('kind')!r} is not supported "
+                               f"(no adapter); supported: {sorted(REGISTRY)}")
+            continue
         existing = (
             await session.execute(select(Input).where(Input.name == item["name"]))
         ).scalar_one_or_none()
