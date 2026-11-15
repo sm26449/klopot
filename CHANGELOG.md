@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Search (Ctrl+K): when the results arrived after you started typing, the
+  list re-sorted and Enter opened whatever had moved under the highlight;
+  the highlight now stays on the item you saw.
+- Tests: the concurrent-login pool check (K07) on MySQL is deterministic.
+
 ### Security
 
 - Dev tooling: Playwright 1.48.2 → 1.61.1 (GHSA for < 1.55.1: browsers were

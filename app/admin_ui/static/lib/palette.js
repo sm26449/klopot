@@ -44,18 +44,24 @@ export async function loadItems() {
   return { items, failed };
 }
 
+const resultKey = (r) => `${r.kind}:${r.label}`;
+
 export function CommandPalette({ open, onClose, pages }) {
   const ref = useRef(null);
   const [query, setQuery] = useState("");
   const [items, setItems] = useState(null);
-  const [active, setActive] = useState(0);
+  // The highlighted result, by identity: when the items arrive and the list
+  // re-sorts, the highlight stays on what the operator saw (Enter used to
+  // open whatever had moved to the highlighted position).
+  const [activeKey, setActiveKey] = useState(null);
+  const lastQuery = useRef(query);
   const [partial, setPartial] = useState(false);
   useDialog(open, onClose, ref);
 
   // Reset on close, not on open: an effect runs a frame after the palette
   // appears, so a reset there wiped what a fast typist had already typed.
   useEffect(() => {
-    if (!open) { setQuery(""); setActive(0); setItems(null); setPartial(false); return; }
+    if (!open) { setQuery(""); setActiveKey(null); setItems(null); setPartial(false); return; }
     loadItems().then((r) => { setItems(r.items); setPartial(r.failed > 0); });
   }, [open]);
 
@@ -64,13 +70,23 @@ export function CommandPalette({ open, onClose, pages }) {
     return all.map((r) => ({ ...r, score: Math.max(matchScore(r.label, query), matchScore(r.hint || "", query) * 0.5) }))
       .filter((r) => r.score > 0).sort((a, b) => b.score - a.score).slice(0, MAX_RESULTS);
   }, [pages, items, query]);
-  useEffect(() => { setActive(0); }, [query]);
+  useEffect(() => {
+    const queryChanged = lastQuery.current !== query;
+    lastQuery.current = query;
+    const kept = activeKey !== null && results.some((r) => resultKey(r) === activeKey);
+    if (queryChanged || !kept) setActiveKey(results.length ? resultKey(results[0]) : null);
+  }, [results]);
+  const active = Math.max(0, results.findIndex((r) => resultKey(r) === activeKey));
+  const move = (delta) => {
+    const next = results[Math.min(results.length - 1, Math.max(0, active + delta))];
+    if (next) setActiveKey(resultKey(next));
+  };
 
   if (!open) return null;
   const choose = (r) => { onClose(); r.go(); };
   function onKey(e) {
-    if (e.key === "ArrowDown") { e.preventDefault(); setActive((a) => Math.min(results.length - 1, a + 1)); }
-    else if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => Math.max(0, a - 1)); }
+    if (e.key === "ArrowDown") { e.preventDefault(); move(1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); move(-1); }
     else if (e.key === "Enter" && results[active]) { e.preventDefault(); choose(results[active]); }
   }
   const optId = (i) => `cmdk-opt-${i}`;
@@ -83,7 +99,7 @@ export function CommandPalette({ open, onClose, pages }) {
         value=${query} onInput=${(e) => setQuery(e.target.value)} onKeyDown=${onKey} />
       <ul id="cmdk-list" role="listbox" class="palette-list" aria-label=${t("palette.results")}>
         ${results.map((r, i) => html`<li key=${r.kind + ":" + r.label} id=${optId(i)} role="option" aria-selected=${i === active ? "true" : "false"}
-            class=${i === active ? "active" : ""} onMouseMove=${() => setActive(i)} onClick=${() => choose(r)}>
+            class=${i === active ? "active" : ""} onMouseMove=${() => setActiveKey(resultKey(r))} onClick=${() => choose(r)}>
           <span class="palette-kind">${t(`palette.kind.${r.kind}`)}</span>
           <span class="palette-label">${r.label}</span>
           ${r.hint ? html`<span class="palette-hint muted small">${r.hint}</span>` : null}
