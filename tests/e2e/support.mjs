@@ -20,7 +20,12 @@ export async function launch() {
 
 /** A logged-in page. `phone: true` emulates a Pixel 7 (touch, coarse pointer). */
 export async function session(browser, { lang = "en", phone = false, theme = "light" } = {}) {
-  const ctx = await browser.newContext(phone ? { ...devices["Pixel 7"] } : { viewport: { width: 1440, height: 900 } });
+  // Reduced motion: a slow runner (CI) would otherwise run axe while a drawer
+  // still slides in at 60 % opacity and report its text as low contrast.
+  const ctx = await browser.newContext({
+    ...(phone ? devices["Pixel 7"] : { viewport: { width: 1440, height: 900 } }),
+    reducedMotion: "reduce",
+  });
   await ctx.addInitScript(([l, th]) => {
     try { localStorage.setItem("alertd.lang", l); localStorage.setItem("alertd.theme", th); localStorage.setItem("alertd.family", "klopot"); } catch { /* */ }
     // The first-login redirect to the setup guide is covered by 00_first_run;

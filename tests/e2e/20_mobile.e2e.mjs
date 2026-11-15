@@ -3,7 +3,7 @@
 // sideways and interactive targets are at least 44 px (WCAG 2.5.5 / platform HIG).
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { launch, session, go, ROUTES } from "./support.mjs";
+import { launch, session, go, ROUTES, until } from "./support.mjs";
 
 const MIN_TARGET = 44;
 let browser, page;
@@ -59,7 +59,8 @@ test("phone · the menu opens and navigates", async () => {
   await link.waitFor({ state: "visible" });
   await link.click();
   await page.waitForFunction(() => location.hash === "#/rules");
-  assert.equal(await page.locator("nav.nav a[href='#/rules']").isVisible(), false, "menu closes after navigating");
+  const closed = await until(async () => !(await page.locator("nav.nav a[href='#/rules']").isVisible()));
+  assert.equal(closed, true, "menu closes after navigating");
 });
 
 test("phone · language, theme and sign-out are in the menu", async () => {

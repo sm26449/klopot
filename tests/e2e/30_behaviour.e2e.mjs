@@ -129,10 +129,12 @@ test("search: Ctrl+K finds a page and an item, Enter opens it", async () => {
   await page.waitForURL(/#\/rules\/\d+/);
   await page.locator(".drawer").waitFor();          // the rule's editor opened
   await page.keyboard.press("Escape");
+  await page.locator(".drawer").waitFor({ state: "detached" });
   await page.keyboard.press("Control+k");
   await input.fill("chanels");                     // a typo still finds the page
   // Wait for the new results: Enter on the previous list would open the old item.
-  await until(async () => /channel/i.test(await page.locator(".palette [role=option][aria-selected=true]").innerText().catch(() => "")));
+  const fresh = await until(async () => /channel/i.test(await page.locator(".palette [role=option][aria-selected=true]").innerText().catch(() => "")));
+  assert.ok(fresh, "the typo search selects the channels entry");
   await page.keyboard.press("Enter");
   await page.waitForURL(/#\/channels/);
 });

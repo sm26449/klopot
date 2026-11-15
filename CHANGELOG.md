@@ -20,6 +20,15 @@ adheres to [Semantic Versioning](https://semver.org/).
   clipped titles and squeezed selects. Matrix and compact tables still scroll
   inside their box; screen readers keep the table semantics.
 
+### Fixed
+
+- Search (Ctrl+K): text typed right after the palette opened could be wiped
+  by its reset; the reset now runs when the palette closes.
+- CI: `scripts/generate_sdks.sh` finds `openapi-python-client` on `PATH` when
+  there is no `.venv` (the GitHub runner), and the browser e2e runs with
+  reduced motion and waits for state instead of checking it once, so a slow
+  runner no longer fails axe on a drawer still sliding in.
+
 ## [1.1.0] — 2026-11-15
 
 Schema `0028`–`0039`, applied on startup, forward-only: take a backup first

@@ -47,9 +47,10 @@ export function CommandPalette({ open, onClose, pages }) {
   const [active, setActive] = useState(0);
   useDialog(open, onClose, ref);
 
+  // Reset on close, not on open: an effect runs a frame after the palette
+  // appears, so a reset there wiped what a fast typist had already typed.
   useEffect(() => {
-    if (!open) return;
-    setQuery(""); setActive(0); setItems(null);
+    if (!open) { setQuery(""); setActive(0); setItems(null); return; }
     loadItems().then(setItems);
   }, [open]);
 

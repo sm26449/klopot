@@ -12,12 +12,18 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-PY=.venv/bin; [ -x "$PY/openapi-python-client" ] || PY=venv/bin
+# The project virtualenv locally; CI installs into the runner's Python (on PATH).
+OPC=""
+for c in .venv/bin/openapi-python-client venv/bin/openapi-python-client; do
+  [ -x "$c" ] && { OPC="$PWD/$c"; break; }
+done
+[ -n "$OPC" ] || OPC="$(command -v openapi-python-client)" \
+  || { echo "openapi-python-client not found (pip install -e '.[dev]')" >&2; exit 1; }
 SPEC=openapi/v1.json
 CHECK=0; [ "${1:-}" = "--check" ] && CHECK=1
 
 out="$(mktemp -d)"; trap 'rm -rf "$out"' EXIT
-( cd "$out" && "$OLDPWD/$PY/openapi-python-client" generate --path "$OLDPWD/$SPEC" \
+( cd "$out" && "$OPC" generate --path "$OLDPWD/$SPEC" \
     --config "$OLDPWD/sdk/python-client.yaml" --meta pdm --output-path python >/dev/null 2>&1 ) \
   || { echo "openapi-python-client failed" >&2; exit 1; }
 npx --no-install openapi-typescript "$SPEC" --output "$out/schema.d.ts" >/dev/null 2>&1 \
