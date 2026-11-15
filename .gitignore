@@ -55,6 +55,8 @@ alembic/versions/*.pyc
 backups/
 shadow-reports/
 
+# review prompts and reports (local; they quote weaknesses before they are fixed)
+.audit/
 # audit evidence/scripts — repro-only, not idempotent, local resources
 docs/audit-artifacts/
 
