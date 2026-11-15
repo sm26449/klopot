@@ -252,10 +252,25 @@ async def test_poll_cursor_is_durable_before_next_request(telegram_delivery):
 async def test_snooze_until_morning_uses_local_calendar_across_dst(monkeypatch):
     from types import SimpleNamespace
 
-    monkeypatch.setattr(channel_actions, "get_settings", lambda: SimpleNamespace(tz="Europe/Bucharest"))
+    monkeypatch.setattr(channel_actions, "get_settings", lambda: SimpleNamespace(tz="Europe/Bucharest", snooze_morning_hour=8))
     # Spring transition happens before 08:00; the target uses the new UTC offset.
     assert channel_actions.snooze_deadline("snooze_morning", datetime(2026, 3, 28, 23, 30)) == datetime(2026, 3, 29, 5)
     assert channel_actions.snooze_deadline("snooze_morning", datetime(2026, 3, 29, 6)) == datetime(2026, 3, 30, 5)
+
+
+async def test_the_morning_hour_is_a_setting_and_the_button_says_it(monkeypatch):
+    """Pre-open-source audit: 08:00 was written in the deadline and again in the
+    button labels; one setting now drives both."""
+    from app.channels.telegram_config import action_labels
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "tz", "UTC")
+    monkeypatch.setattr(get_settings(), "snooze_morning_hour", 6)
+    assert channel_actions.snooze_deadline("snooze_morning", datetime(2026, 7, 1, 5, 59)) == datetime(2026, 7, 1, 6)
+    assert channel_actions.snooze_deadline("snooze_morning", datetime(2026, 7, 1, 6, 0)) == datetime(2026, 7, 2, 6)
+    assert action_labels("en")["snooze_morning"] == "Snooze until 06:00"
+    assert action_labels("ro")["snooze_morning"] == "Amână până la 06:00"
+    assert action_labels("xx")["ack"] == "Acknowledge"
 
 
 async def test_idle_bot_does_not_filter_randomized_update_ids(telegram_delivery):

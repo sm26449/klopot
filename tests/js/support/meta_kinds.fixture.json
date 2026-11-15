@@ -194,6 +194,22 @@
           "secret": false,
           "default": "",
           "help": "Optional full admin URL for the read-only Open in Klopot link; no credentials, query or fragment."
+        },
+        {
+          "name": "api_url",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": "https://api.telegram.org",
+          "help": "Bot API server. Change it only for a self-hosted Telegram Bot API server or a proxy."
+        },
+        {
+          "name": "timeout_sec",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 10,
+          "help": ""
         }
       ],
       "intrusive": false
@@ -404,6 +420,19 @@
           }
         },
         {
+          "name": "api_url",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": "https://api.twilio.com",
+          "help": "Twilio API origin. Change it only for a proxy or a test double.",
+          "show_if": {
+            "provider": [
+              "twilio"
+            ]
+          }
+        },
+        {
           "name": "router_url",
           "type": "string",
           "required": false,
@@ -455,6 +484,14 @@
               "teltonika"
             ]
           }
+        },
+        {
+          "name": "timeout_sec",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 15,
+          "help": "Seconds to wait for the gateway, Twilio or the router."
         }
       ],
       "intrusive": true
@@ -739,6 +776,14 @@
           "secret": false,
           "default": null,
           "help": "Public Klopot URL — adds a link to the alert."
+        },
+        {
+          "name": "api_url",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": "https://api.pushover.net/1",
+          "help": "Pushover API base. Change it only for a proxy or a test double."
         },
         {
           "name": "timeout_sec",

@@ -41,11 +41,11 @@ import httpx
 
 from ..config import get_settings
 from ..core import rendering
-from ..utils.http_retry import BACKPRESSURE_STATUSES, parse_retry_after
+from ..utils.http_retry import BACKPRESSURE_STATUSES, retry_after_or_default
 from ..utils.redact import redact_url, safe_url_display, transport_error_text
 from ..utils.safe_http import EgressBlocked, ResponseTooLarge, safe_request
 from ._secrets import resolve_secret
-from .base import BaseChannel, Notification, SendResult
+from .base import HEALTHCHECK_TIMEOUT_SEC, BaseChannel, Notification, SendResult
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +142,7 @@ class WebhookChannel(BaseChannel):
         try:
             r = await safe_request(
                 method, url, content=body_str, headers=headers,
-                timeout=10.0, block_private=get_settings().block_private_egress,
+                timeout=float(config.get("timeout_sec") or 10), block_private=get_settings().block_private_egress,
             )
             if r.status_code in ok_statuses:
                 return SendResult(ok=True, response={"status": r.status_code})
@@ -154,7 +154,7 @@ class WebhookChannel(BaseChannel):
                 response={"status": r.status_code},
                 # 429 / 503: the receiver asked us to wait — defer, don't count
                 # it against the channel (Retry-After, default 60 s).
-                retry_after=(parse_retry_after(r.headers.get("Retry-After")) or 60.0)
+                retry_after=retry_after_or_default(r.headers.get("Retry-After"))
                 if r.status_code in BACKPRESSURE_STATUSES else None,
             )
         except EgressBlocked as e:
@@ -177,7 +177,7 @@ class WebhookChannel(BaseChannel):
         # a screened IP. Many webhook URLs reject HEAD, so 405 is still "up".
         try:
             r = await safe_request(
-                "HEAD", url, timeout=3.0,
+                "HEAD", url, timeout=HEALTHCHECK_TIMEOUT_SEC,
                 block_private=get_settings().block_private_egress,
             )
             return {"reachable": r.status_code < 500, "status": r.status_code}

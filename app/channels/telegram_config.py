@@ -80,7 +80,16 @@ def public_view_url(config: dict[str, Any], notification_id: str, incident_id: s
     return f"{base.rstrip('/')}/#/{target}"
 
 
-LABELS = {
-    "en": {"ack": "Acknowledge", "snooze_1h": "Snooze 1h", "snooze_morning": "Snooze until 08:00", "view": "Open in Klopot"},
-    "ro": {"ack": "Confirmă", "snooze_1h": "Amână 1h", "snooze_morning": "Amână până la 08:00", "view": "Deschide în Klopot"},
+_LABELS = {
+    "en": {"ack": "Acknowledge", "snooze_1h": "Snooze 1h", "snooze_morning": "Snooze until {hour:02d}:00", "view": "Open in Klopot"},
+    "ro": {"ack": "Confirmă", "snooze_1h": "Amână 1h", "snooze_morning": "Amână până la {hour:02d}:00", "view": "Deschide în Klopot"},
 }
+
+
+def action_labels(locale: str | None) -> dict[str, str]:
+    """Button labels in ``locale`` (English when unknown); the morning hour
+    comes from ALERTD_SNOOZE_MORNING_HOUR, the same one snooze_deadline uses."""
+    from ..config import get_settings
+
+    hour = get_settings().snooze_morning_hour
+    return {k: v.format(hour=hour) for k, v in _LABELS.get(locale or "en", _LABELS["en"]).items()}

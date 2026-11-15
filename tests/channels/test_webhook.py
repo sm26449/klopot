@@ -343,3 +343,11 @@ async def test_default_body_contains_notification_id():
     body = _json.loads(client.request.call_args.kwargs["content"])
     assert body["id"] == "ntf_bodyid"
     assert body["type"] == "t"
+
+
+async def test_timeout_sec_from_the_form_is_used():
+    """Pre-open-source audit: the form offered timeout_sec but the send used 10 s."""
+    patcher, holder = _patch_request()
+    with patcher:
+        await WebhookChannel().send(_notif(), {"url": "https://hooks.example/x", "timeout_sec": 3})
+    assert holder.request.call_args.kwargs["timeout"] == 3.0

@@ -21,11 +21,14 @@ from typing import Any
 
 import httpx
 
+from ..config import get_settings
 from ..core.activity import note_exchange
 from ..utils.redact import redact_url, transport_error_text
+from ..utils.safe_http import EgressBlocked, ResponseTooLarge, safe_request
+from ..utils.telegram_api import api_url
 from ._secrets import resolve_secret
-from .base import BaseChannel, Notification, SendResult
-from .telegram_config import LABELS, bot_key, public_view_url
+from .base import HEALTHCHECK_TIMEOUT_SEC, BaseChannel, Notification, SendResult
+from .telegram_config import action_labels, bot_key, public_view_url
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +41,8 @@ _SEVERITY_PREFIX = {
 
 
 class TelegramChannel(BaseChannel):
-    """Async POST to api.telegram.org Bot API."""
+    """POST to the Telegram Bot API (``api_url``, default api.telegram.org —
+    a self-hosted Bot API server works too), through safe_http."""
 
     kind = "telegram"
 
@@ -55,7 +59,9 @@ class TelegramChannel(BaseChannel):
 
         text = format_message(notif, config.get("parse_mode", "Markdown"))
 
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        base = api_url(config)
+        url = f"{base}/bot{token}/sendMessage"
+        timeout = float(config.get("timeout_sec") or 10)
         body = {
             "chat_id": str(chat_id),
             "text": text,
@@ -67,14 +73,14 @@ class TelegramChannel(BaseChannel):
         if isinstance(keyboard, dict):
             rows = [list(row) for row in keyboard.get("inline_keyboard", [])]
             if view_url:
-                rows.append([{"text": LABELS[config.get("actions_locale", "en")]["view"], "url": view_url}])
+                rows.append([{"text": action_labels(config.get("actions_locale"))["view"], "url": view_url}])
             body["reply_markup"] = {"inline_keyboard": rows}
         # The bot token is in the URL path: the activity log gets a masked one.
-        shown_url = "https://api.telegram.org/bot<redacted>/sendMessage"
+        shown_url = f"{base}/bot<redacted>/sendMessage"
         started = time.monotonic()
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                r = await client.post(url, json=body)
+            r = await safe_request("POST", url, json=body, timeout=timeout,
+                                   block_private=get_settings().block_private_egress)
             note_exchange(method="POST", url=shown_url, url_is_masked=True, status=r.status_code,
                           duration_ms=int((time.monotonic() - started) * 1000), request_body=body,
                           response_body=r.content, response_headers=r.headers)
@@ -96,6 +102,9 @@ class TelegramChannel(BaseChannel):
                     retry_after = 30.0
             return SendResult(ok=False, error=redact_url(err), retry_after=retry_after,
                               permanent=r.status_code in (400, 401, 403, 404))
+        except (EgressBlocked, ResponseTooLarge) as e:
+            # The reason names the host only; the token is in the path.
+            return SendResult(ok=False, error=e.reason)
         except httpx.TimeoutException:
             note_exchange(method="POST", url=shown_url, url_is_masked=True, status=None,
                           duration_ms=int((time.monotonic() - started) * 1000), request_body=body, error="timeout")
@@ -112,15 +121,17 @@ class TelegramChannel(BaseChannel):
         token = resolve_secret(config, "bot_token", "bot_token_ref")
         if not token:
             return {"reachable": False, "error": "no token configured"}
-        url = f"https://api.telegram.org/bot{token}/getMe"
+        url = f"{api_url(config)}/bot{token}/getMe"
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                r = await client.get(url)
+            r = await safe_request("GET", url, timeout=HEALTHCHECK_TIMEOUT_SEC,
+                                   block_private=get_settings().block_private_egress)
             return {
                 "reachable": r.status_code == 200,
                 "status": r.status_code,
                 "bot_name": r.json().get("result", {}).get("username") if r.status_code == 200 else None,
             }
+        except EgressBlocked as e:
+            return {"reachable": False, "error": e.reason}
         except Exception as e:
             return {"reachable": False, "error": transport_error_text(e)[:200]}
 

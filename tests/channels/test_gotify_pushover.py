@@ -115,3 +115,15 @@ async def test_an_unreadable_receipt_is_logged_without_the_token(monkeypatch, ca
             assert await pushover_mod.receipt_status({**PUSHOVER, "app_token": token}, "rcpt_abcdefgh") is None
         assert "acknowledgement unknown" in caplog.text
         assert token not in caplog.text
+
+
+async def test_pushover_api_url_and_timeout_are_settings_of_the_channel(monkeypatch):
+    """Pre-open-source audit: the Pushover API base was a constant."""
+    http = FakeHTTP.install(monkeypatch, pushover_mod).will(reply(200, {"status": 1, "request": "r"}))
+    cfg = {**PUSHOVER, "api_url": "https://pushover-proxy.example/1/", "timeout_sec": 4}
+    assert (await PushoverChannel().send(notification(), cfg)).ok
+    assert http.calls[0]["url"] == "https://pushover-proxy.example/1/messages.json"
+    assert http.calls[0]["timeout"] == 4.0
+    http.will(reply(200, {"status": 1, "acknowledged": 1}))
+    await pushover_mod.receipt_status(cfg, "rcpt1")
+    assert http.calls[-1]["url"] == "https://pushover-proxy.example/1/receipts/rcpt1.json"

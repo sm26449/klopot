@@ -1,7 +1,7 @@
 # Bot Telegram dedicat Klopot
 
 Canalul Telegram poate trimite alerte fără butoane, ca înainte. Opțiunea
-`inline_actions` adaugă **Confirmă**, **Amână 1h**, **Amână până la 08:00** și,
+`inline_actions` adaugă **Confirmă**, **Amână 1h**, **Amână până la 08:00** (ora din `ALERTD_SNOOZE_MORNING_HOUR`, implicit 8) și,
 opțional, **Deschide în Klopot**. Este dezactivată implicit.
 
 ## Configurare
@@ -40,6 +40,10 @@ opțional, **Deschide în Klopot**. Este dezactivată implicit.
    negativ. `allowed_user_ids` conține ID-urile utilizatorilor, separat de
    destinația `chat_id`. `admin_url` este opțional și trebuie să fie adresa
    completă a interfeței, fără query, fragment sau credențiale.
+   `api_url` (implicit `https://api.telegram.org`) se schimbă doar pentru un
+   [Bot API server](https://github.com/tdlib/telegram-bot-api) propriu sau un
+   proxy; cererile trec, ca toate celelalte, prin filtrul de egress
+   (`ALERTD_BLOCK_PRIVATE_EGRESS` blochează un server din rețeaua locală).
 6. Leagă un template de canal și trimite o alertă obișnuită pentru verificarea
    completă. Mesajele trimise prin funcția de test nu au butoane de acțiune.
 
@@ -51,7 +55,8 @@ opțional, **Deschide în Klopot**. Este dezactivată implicit.
 - **Amână** creează un snooze pe **tipul alertei**, comun tuturor regulilor și
   canalelor pentru acel tip. Escaladările sunt blocate pe durata snooze-ului;
   cele deja în coadă păstrează limita normală de o oră până la expirare.
-  Ora 08:00 se calculează în `ALERTD_TZ`, inclusiv la schimbarea orei.
+  Ora de dimineață (`ALERTD_SNOOZE_MORNING_HOUR`, implicit 8) se calculează
+  în `ALERTD_TZ`, inclusiv la schimbarea orei.
 - Butoanele expiră după 24 de ore. Prima acțiune acceptată consumă toate cele
   trei butoane ale acelei livrări. Acțiunile ulterioare se fac din Klopot.
   Butonul de navigare rămâne disponibil și cere autentificarea obișnuită.

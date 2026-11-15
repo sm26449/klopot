@@ -30,11 +30,15 @@ import httpx
 
 from ..config import get_settings
 from ..core import rendering
-from ..utils.http_retry import BACKPRESSURE_STATUSES, is_permanent_client_error, parse_retry_after
+from ..utils.http_retry import (
+    BACKPRESSURE_STATUSES,
+    is_permanent_client_error,
+    retry_after_or_default,
+)
 from ..utils.redact import redact_url, transport_error_text
 from ..utils.safe_http import EgressBlocked, ResponseTooLarge, safe_request
 from ._secrets import resolve_secret
-from .base import BaseChannel, Notification, SendResult
+from .base import HEALTHCHECK_TIMEOUT_SEC, BaseChannel, Notification, SendResult
 from .sms_config import LEGACY_BODY as DEFAULT_BODY
 from .sms_config import PROVIDERS, success_statuses
 from .webhook import _build_template_ctx
@@ -42,7 +46,15 @@ from .webhook import _build_template_ctx
 logger = logging.getLogger(__name__)
 
 _DEFAULT_MAX_CHARS = 320  # 2 segments
-_TWILIO_URL = "https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json"
+TWILIO_API_URL = "https://api.twilio.com"
+
+
+def _twilio_api(config: dict[str, Any]) -> str:
+    return (str(config.get("api_url") or "").strip() or TWILIO_API_URL).rstrip("/")
+
+
+def _timeout(config: dict[str, Any]) -> float:
+    return float(config.get("timeout_sec") or 15)
 
 
 class _SendError(Exception):
@@ -104,7 +116,7 @@ def _check(r: httpx.Response, success_statuses: frozenset[int] = frozenset()) ->
     # echo a credential — redact it (audit S-10).
     message = redact_url(f"HTTP {r.status_code}: {r.text[:200]}")
     if r.status_code in BACKPRESSURE_STATUSES:
-        raise _SendError(message, retry_after=parse_retry_after(r.headers.get("Retry-After")) or 60.0)
+        raise _SendError(message, retry_after=retry_after_or_default(r.headers.get("Retry-After")))
     raise _SendError(message, permanent=is_permanent_client_error(r.status_code))
 
 
@@ -152,13 +164,13 @@ class SMSChannel(BaseChannel):
         provider = config.get("provider") or "http"
         url = {
             "http": config.get("health_url"),
-            "twilio": "https://api.twilio.com/",
+            "twilio": _twilio_api(config) + "/",
             "teltonika": (config.get("router_url") or "").rstrip("/") + "/api/login" if config.get("router_url") else None,
         }.get(provider)
         if not url:
             return {"reachable": None, "note": "no health_url configured"}
         try:
-            r = await safe_request("GET", url, timeout=3.0, block_private=get_settings().block_private_egress)
+            r = await safe_request("GET", url, timeout=HEALTHCHECK_TIMEOUT_SEC, block_private=get_settings().block_private_egress)
             # Reachability, not authorization: any HTTP answer below 500 means
             # the service is there (a login endpoint answers 405 to a GET).
             return {"reachable": r.status_code < 500, "status": r.status_code}
@@ -190,7 +202,7 @@ async def _send_http(notif: Notification, config: dict[str, Any], phone: str, te
             raise _SendError(f"rendered body is not valid JSON: {e}") from None
     headers = {"Content-Type": content_type, **_auth_headers(config)}
     r = await safe_request((config.get("method") or "POST").upper(), url, content=body, headers=headers,
-                           timeout=15.0, block_private=block)
+                           timeout=_timeout(config), block_private=block)
     return _check(r, success_statuses(config))
 
 
@@ -202,8 +214,8 @@ async def _send_twilio(config: dict[str, Any], phone: str, text: str, block: boo
         raise _SendError("Twilio needs account_sid, auth_token and from_number")
     basic = base64.b64encode(f"{sid}:{token}".encode()).decode()
     r = await safe_request(
-        "POST", _TWILIO_URL.format(sid=sid), data={"To": phone, "From": sender, "Body": text},
-        headers={"Authorization": f"Basic {basic}"}, timeout=15.0, block_private=block,
+        "POST", f"{_twilio_api(config)}/2010-04-01/Accounts/{sid}/Messages.json", data={"To": phone, "From": sender, "Body": text},
+        headers={"Authorization": f"Basic {basic}"}, timeout=_timeout(config), block_private=block,
     )
     body = _check(r) or {}
     return {"sid": body.get("sid"), "status": body.get("status")}
@@ -216,7 +228,7 @@ async def _teltonika_login(config: dict[str, Any], block: bool) -> str:
     if not (base and user and password):
         raise _SendError("Teltonika needs router_url, username and password")
     r = await safe_request("POST", f"{base}/api/login", json={"username": user, "password": password},
-                           timeout=10.0, block_private=block)
+                           timeout=_timeout(config), block_private=block)
     body = _check(r) or {}
     data = body.get("data")
     token = (data.get("token") if isinstance(data, dict) else None) or body.get("token")
@@ -230,6 +242,6 @@ async def _send_teltonika(config: dict[str, Any], token: str, phone: str, text: 
     r = await safe_request(
         "POST", f"{base}/api/messages/actions/send",
         json={"data": {"number": phone, "message": text, "modem": config.get("modem") or "1-1"}},
-        headers={"Authorization": f"Bearer {token}"}, timeout=15.0, block_private=block,
+        headers={"Authorization": f"Bearer {token}"}, timeout=_timeout(config), block_private=block,
     )
     return _check(r)

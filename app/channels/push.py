@@ -38,7 +38,7 @@ from sqlalchemy import delete, false, select, update
 
 from ..config import get_settings
 from ..db.models import PushSubscription, Severity
-from ..utils.http_retry import parse_retry_after
+from ..utils.http_retry import retry_after_or_default
 from ..utils.redact import redact_url, transport_error_text
 from ..utils.safe_http import EgressBlocked, ResponseTooLarge, safe_request
 from ..utils.time import utc_now
@@ -219,7 +219,7 @@ async def send_to_device(
         return DeviceOutcome(sub.id, False, status=r.status_code, gone=True, error=detail)
     if r.status_code in (429, 503):
         return DeviceOutcome(sub.id, False, status=r.status_code, error=detail,
-                             retry_after=parse_retry_after(r.headers.get("retry-after")) or 60.0)
+                             retry_after=retry_after_or_default(r.headers.get("retry-after")))
     return DeviceOutcome(sub.id, False, status=r.status_code, error=detail)
 
 

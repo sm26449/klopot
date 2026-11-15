@@ -31,7 +31,7 @@ from ..config import get_settings
 from ..utils.redact import redact_url, transport_error_text
 from ..utils.safe_http import EgressBlocked, ResponseTooLarge, safe_request
 from ._secrets import resolve_secret, scrub
-from .base import BaseChannel, Notification, SendResult, admin_link
+from .base import HEALTHCHECK_TIMEOUT_SEC, BaseChannel, Notification, SendResult, admin_link
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +114,7 @@ class NtfyChannel(BaseChannel):
         server = (config.get("server_url") or DEFAULT_SERVER).rstrip("/")
         try:
             r = await safe_request(
-                "GET", f"{server}/v1/health", timeout=3.0,
+                "GET", f"{server}/v1/health", timeout=HEALTHCHECK_TIMEOUT_SEC,
                 block_private=get_settings().block_private_egress,
             )
             healthy = r.status_code == 200 and bool((r.json() or {}).get("healthy"))

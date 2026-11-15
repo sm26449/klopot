@@ -13,6 +13,7 @@ from typing import Any
 
 import aiomqtt
 
+from ..config import get_settings
 from ..core import rendering
 from ..metrics import ENGINE_LAST_TICK
 from ..utils.egress import broker_blocked
@@ -199,8 +200,10 @@ class MQTTChannel(BaseChannel):
                 body = asdict(notif)
                 body.update(fired_at=context["fired_at"], delivery_id=context["delivery_id"])
             payload = json.dumps(body, ensure_ascii=False, default=str, allow_nan=False)
-            if len(payload.encode()) > 262144:
-                raise ValueError("MQTT payload exceeds 256 KiB")
+            # The same cap as inbound MQTT (ALERTD_MQTT_MAX_PAYLOAD_BYTES).
+            limit = get_settings().mqtt_max_payload_bytes
+            if len(payload.encode()) > limit:
+                raise ValueError(f"MQTT payload exceeds {limit} bytes (ALERTD_MQTT_MAX_PAYLOAD_BYTES)")
             async with asyncio.timeout(config.get("timeout_sec", 10)):
                 publisher = await self._publisher(config)
                 await publisher.publish(topic, payload, config.get("qos", 1), config.get("retain", False))

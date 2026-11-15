@@ -19,7 +19,7 @@ from ..config import get_settings
 from ..utils.redact import redact_url, transport_error_text
 from ..utils.safe_http import EgressBlocked, ResponseTooLarge, safe_request
 from ._secrets import resolve_secret, scrub
-from .base import BaseChannel, Notification, SendResult, admin_link
+from .base import HEALTHCHECK_TIMEOUT_SEC, BaseChannel, Notification, SendResult, admin_link
 
 DEFAULT_PRIORITY = {"info": 2, "warning": 5, "critical": 8}
 
@@ -93,7 +93,7 @@ class GotifyChannel(BaseChannel):
         if not server:
             return {"reachable": False, "error": "no server_url configured"}
         try:
-            r = await safe_request("GET", f"{server}/health", timeout=3.0,
+            r = await safe_request("GET", f"{server}/health", timeout=HEALTHCHECK_TIMEOUT_SEC,
                                    block_private=get_settings().block_private_egress)
             return {"reachable": r.status_code < 500, "status": r.status_code}
         except EgressBlocked as e:

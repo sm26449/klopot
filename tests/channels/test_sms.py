@@ -224,3 +224,14 @@ async def test_a_failed_healthcheck_does_not_return_the_url():
         h = await SMSChannel().healthcheck({**HTTP, "health_url": "http://gw/api/health?token=s3cr3t-value"})
     assert h["reachable"] is False
     assert "s3cr3t-value" not in h["error"]
+
+
+async def test_twilio_api_url_and_timeout_are_settings_of_the_channel():
+    """Pre-open-source audit: the Twilio URL and the 15 s timeout were fixed."""
+    cfg = {"provider": "twilio", "phone": "+40700", "account_sid": "AC1", "auth_token": "tk",
+           "from_number": "+1555", "api_url": "https://twilio-proxy.example/", "timeout_sec": 4}
+    patcher, mock = _patch_send(status=201, body={"sid": "SM9", "status": "queued"})
+    with patcher:
+        assert (await SMSChannel().send(_notif(), cfg)).ok
+    assert mock.call_args.args[1] == "https://twilio-proxy.example/2010-04-01/Accounts/AC1/Messages.json"
+    assert mock.call_args.kwargs["timeout"] == 4.0

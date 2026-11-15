@@ -19,8 +19,9 @@ test("an unset provider counts as its default (http)", () => {
 });
 
 test("each provider shows only its own fields", () => {
-  assert.deepEqual(shown({ provider: "twilio" }).filter((n) => !["provider", "phone", "max_chars"].includes(n)),
-    ["account_sid", "auth_token", "from_number"]);
+  assert.deepEqual(shown({ provider: "twilio" }).filter((n) => !["provider", "phone", "max_chars", "timeout_sec"].includes(n)),
+    ["account_sid", "auth_token", "from_number", "api_url"]);
+  assert.ok(!shown({ provider: "http" }).includes("api_url"), "Twilio's API origin is not an http-gateway field");
   assert.ok(shown({ provider: "teltonika" }).includes("modem"));
 });
 

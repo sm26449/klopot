@@ -91,6 +91,9 @@ class BaseChannel(ABC):
 # Type of the notification POST /v1/channels/{id}/test sends.
 CHANNEL_TEST_TYPE = "channel_test"
 
+# Every adapter's reachability probe (the channel test's "health" step).
+HEALTHCHECK_TIMEOUT_SEC = 5.0
+
 
 def admin_link(config: dict[str, object], notif: Notification) -> str | None:
     """Where tapping a notification opens Klopot (channels with ``admin_url``).

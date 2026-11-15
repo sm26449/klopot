@@ -131,3 +131,16 @@ async def test_rendered_wildcard_and_nonobject_payload_are_rejected(mqtt):
     assert not (await mqtt.send(notification(type='alarm/#'), CONFIG)).ok
     assert not (await mqtt.send(notification(), {**CONFIG, 'payload_template': '[]'})).ok
     assert Client.instances == []
+
+
+async def test_the_publish_cap_is_the_mqtt_payload_setting(mqtt, monkeypatch):
+    """Copilot hygiene #9: publish rejected > 262144 bytes whatever
+    ALERTD_MQTT_MAX_PAYLOAD_BYTES said; inbound used the setting."""
+    from app.config import get_settings
+
+    message = notification(message="x" * 4096)
+    monkeypatch.setattr(get_settings(), "mqtt_max_payload_bytes", 2048)
+    assert not (await mqtt.send(message, CONFIG)).ok
+    assert (await mqtt.send(notification(message="small"), CONFIG)).ok
+    monkeypatch.setattr(get_settings(), "mqtt_max_payload_bytes", 300_000)
+    assert (await mqtt.send(notification(message="y" * 270_000), CONFIG)).ok, "above the old fixed 256 KiB"

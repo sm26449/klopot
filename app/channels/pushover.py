@@ -29,11 +29,20 @@ from ..config import get_settings
 from ..utils.redact import transport_error_text
 from ..utils.safe_http import EgressBlocked, ResponseTooLarge, safe_request
 from ._secrets import resolve_secret, scrub
-from .base import BaseChannel, Notification, SendResult, admin_link
+from .base import HEALTHCHECK_TIMEOUT_SEC, BaseChannel, Notification, SendResult, admin_link
 
 logger = logging.getLogger(__name__)
 
-API = "https://api.pushover.net/1"
+DEFAULT_API_URL = "https://api.pushover.net/1"
+
+
+def _api(config: dict[str, Any]) -> str:
+    """The API base of a channel config (``api_url``, default Pushover's)."""
+    return (str(config.get("api_url") or "").strip() or DEFAULT_API_URL).rstrip("/")
+
+
+def _timeout(config: dict[str, Any]) -> float:
+    return float(config.get("timeout_sec") or 10)
 DEFAULT_PRIORITY = {"info": -1, "warning": 0, "critical": 1}
 RECEIPT_PREFIX = "pushover:receipt:"
 
@@ -87,8 +96,8 @@ class PushoverChannel(BaseChannel):
             return SendResult(ok=False, error="pushover missing app_token or user_key")
         try:
             r = await safe_request(
-                "POST", f"{API}/messages.json", data=build_form(notif, config, token, user),
-                timeout=float(config.get("timeout_sec") or 10),
+                "POST", f"{_api(config)}/messages.json", data=build_form(notif, config, token, user),
+                timeout=_timeout(config),
                 block_private=get_settings().block_private_egress,
             )
         except EgressBlocked as e:
@@ -119,8 +128,8 @@ class PushoverChannel(BaseChannel):
         if not token or not user:
             return {"reachable": False, "error": "missing app_token or user_key"}
         try:
-            r = await safe_request("POST", f"{API}/users/validate.json", data={"token": token, "user": user},
-                                   timeout=5.0, block_private=get_settings().block_private_egress)
+            r = await safe_request("POST", f"{_api(config)}/users/validate.json", data={"token": token, "user": user},
+                                   timeout=HEALTHCHECK_TIMEOUT_SEC, block_private=get_settings().block_private_egress)
             data = r.json() if r.status_code < 500 else {}
             return {"reachable": r.status_code < 500, "valid": bool(data.get("status") == 1)}
         except Exception as e:
@@ -142,8 +151,8 @@ async def cancel_receipt(config: dict[str, Any], receipt: str) -> str | None:
     if not token:
         return "missing app_token"
     try:
-        r = await safe_request("POST", f"{API}/receipts/{receipt}/cancel.json", data={"token": token},
-                               timeout=10.0, block_private=get_settings().block_private_egress)
+        r = await safe_request("POST", f"{_api(config)}/receipts/{receipt}/cancel.json", data={"token": token},
+                               timeout=_timeout(config), block_private=get_settings().block_private_egress)
     except Exception as e:
         return scrub(transport_error_text(e), token, user)[:200]
     if r.status_code // 100 == 2:
@@ -158,8 +167,8 @@ async def receipt_status(config: dict[str, Any], receipt: str) -> dict[str, Any]
     if not token:
         return None
     try:
-        r = await safe_request("GET", f"{API}/receipts/{receipt}.json", params={"token": token},
-                               timeout=10.0, block_private=get_settings().block_private_egress)
+        r = await safe_request("GET", f"{_api(config)}/receipts/{receipt}.json", params={"token": token},
+                               timeout=_timeout(config), block_private=get_settings().block_private_egress)
         if r.status_code // 100 != 2:
             # A revoked token or a gone receipt: say so, or an emergency
             # acknowledged in the app stays open here with nothing in the logs.

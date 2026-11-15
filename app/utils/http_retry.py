@@ -7,6 +7,8 @@ from email.utils import parsedate_to_datetime
 # A Retry-After longer than this is treated as this (a delivery gives up after
 # an hour anyway — outbox.MAX_DELIVERY_AGE_SEC).
 MAX_RETRY_AFTER_SEC = 3600.0
+# How long to wait when a 429/503 has no (usable) Retry-After header.
+DEFAULT_RETRY_AFTER_SEC = 60.0
 # Statuses that mean "slow down / come back later", not "this failed".
 BACKPRESSURE_STATUSES = frozenset({429, 503})
 
@@ -36,3 +38,8 @@ def is_permanent_client_error(status: int) -> bool:
     """A 4xx a retry will not fix (bad request, auth, conflict…) — everything
     in 400–499 except 408 Request Timeout and 429 Too Many Requests."""
     return 400 <= status < 500 and status not in (408, 429)
+
+
+def retry_after_or_default(value: str | None) -> float:
+    """The Retry-After header's wait, or DEFAULT_RETRY_AFTER_SEC without one."""
+    return parse_retry_after(value) or DEFAULT_RETRY_AFTER_SEC

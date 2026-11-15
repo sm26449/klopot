@@ -24,6 +24,9 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+- Telegram goes through `safe_http` like every other channel (egress
+  screening, IP pinning, no redirects, response cap); it used a plain httpx
+  client.
 - No publicly known credential is a default: the database URL and MySQL
   passwords (above), the demo admin key and the dev admin password. The MySQL
   healthcheck passes the password through `MYSQL_PWD`, not as a `-p`
@@ -37,6 +40,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Channel settings that were fixed in the code: `api_url` for Telegram (a
+  self-hosted Bot API server), Pushover and Twilio, with today's addresses as
+  defaults; `timeout_sec` for Telegram and SMS. `ALERTD_SNOOZE_MORNING_HOUR`
+  (default 8) sets the "snooze until morning" hour, and the Telegram button
+  label follows it.
 - README screenshots of the admin UI (`docs/screenshots/`), generated from
   synthetic data by `scripts/screenshots.sh`; `scripts/e2e.sh` takes
   `E2E_AFTER` (a command run on the throwaway stack) and `E2E_ONLY=none`.
@@ -51,6 +59,9 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Webhook: `timeout_sec`, offered in the channel form, was ignored (always
+  10 s). MQTT publish used a fixed 256 KiB limit instead of
+  `ALERTD_MQTT_MAX_PAYLOAD_BYTES`, the limit inbound MQTT already used.
 - Search (Ctrl+K): text typed right after the palette opened could be wiped
   by its reset; the reset now runs when the palette closes.
 - Activity log: a rule created or changed was ignored for up to a minute on

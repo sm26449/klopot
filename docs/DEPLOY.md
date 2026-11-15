@@ -178,7 +178,7 @@ Other knobs, all documented in `app/config.py`:
   `ALERTD_AUTH_HISTORY_DAYS` (30), `ALERTD_CIRCUIT_BREAKER_THRESHOLD` (3),
   `ALERTD_CIRCUIT_BREAKER_OPEN_SEC` (60), `ALERTD_EVAL_ERROR_DISABLE_THRESHOLD`
   (50), `ALERTD_ESCALATION_AFTER_MIN` (15), `ALERTD_ESCALATION_CHANNEL`
-  (empty = escalation off; name the channel to re-page through), `ALERTD_DIGEST_HOUR` (21), `ALERTD_CORS_ORIGINS` (empty),
+  (empty = escalation off; name the channel to re-page through), `ALERTD_DIGEST_HOUR` (21), `ALERTD_SNOOZE_MORNING_HOUR` (8), `ALERTD_CORS_ORIGINS` (empty),
   `ALERTD_BLOCK_PRIVATE_EGRESS` (`false`), `ALERTD_ACTIVITY_QUEUE_MAX` (5000).
 
 ### Secrets for channels, inputs and packs (`secrets.env`)

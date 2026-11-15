@@ -101,6 +101,9 @@ _CHANNELS: dict[str, list[dict[str, Any]]] = {
            help="Language of message action buttons."),
         _f("admin_url", "string", default="",
            help="Optional full admin URL for the read-only Open in Klopot link; no credentials, query or fragment."),
+        _f("api_url", "string", default="https://api.telegram.org",
+           help="Bot API server. Change it only for a self-hosted Telegram Bot API server or a proxy."),
+        _f("timeout_sec", "int", default=10),
     ],
     "sms": [
         _f("provider", "select", default="http", options=["http", "twilio", "teltonika"],
@@ -133,12 +136,15 @@ _CHANNELS: dict[str, list[dict[str, Any]]] = {
         _f("account_sid", "string", show_if={"provider": ["twilio"]}),
         _f("auth_token", "string", show_if={"provider": ["twilio"]}, help="Twilio auth token (write-only)."),
         _f("from_number", "string", show_if={"provider": ["twilio"]}, help="Your Twilio number, E.164."),
+        _f("api_url", "string", default="https://api.twilio.com", show_if={"provider": ["twilio"]},
+           help="Twilio API origin. Change it only for a proxy or a test double."),
         # provider = teltonika
         _f("router_url", "string", show_if={"provider": ["teltonika"]},
            help="Router address, e.g. https://192.0.2.1 (RutOS REST API)."),
         _f("username", "string", show_if={"provider": ["teltonika"]}),
         _f("password", "string", show_if={"provider": ["teltonika"]}, help="Router password (write-only)."),
         _f("modem", "string", default="1-1", show_if={"provider": ["teltonika"]}, help="Modem id on the router."),
+        _f("timeout_sec", "int", default=15, help="Seconds to wait for the gateway, Twilio or the router."),
     ],
     "email": [
         _f("to", "string", required=True, help="Recipient address(es), comma-separated."),
@@ -195,6 +201,8 @@ _CHANNELS: dict[str, list[dict[str, Any]]] = {
         _f("retry_sec", "int", default=60, help="Emergency: seconds between repeats (≥ 30)."),
         _f("expire_sec", "int", default=3600, help="Emergency: stop repeating after (≤ 10800)."),
         _f("admin_url", "string", help="Public Klopot URL — adds a link to the alert."),
+        _f("api_url", "string", default="https://api.pushover.net/1",
+           help="Pushover API base. Change it only for a proxy or a test double."),
         _f("timeout_sec", "int", default=10),
     ],
     "webhook": [

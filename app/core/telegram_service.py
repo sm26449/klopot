@@ -16,7 +16,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 
 from ..channels._secrets import resolve_secret
-from ..channels.telegram_config import LABELS, bot_key, validate_actions_config
+from ..channels.telegram_config import action_labels, bot_key, validate_actions_config
 from ..db import get_session_factory
 from ..db.models import (
     Channel,
@@ -30,7 +30,7 @@ from ..db.models import (
     TelegramBotState,
 )
 from ..metrics import CHANNEL_COMMANDS_TOTAL
-from ..utils.telegram_api import TelegramAPIError, call_bot
+from ..utils.telegram_api import TelegramAPIError, api_url, call_bot
 from ..utils.time import utc_now
 from . import channel_actions, outbox
 
@@ -150,7 +150,8 @@ class TelegramService:
         request: dict[str, Any] = {"timeout": 25, "limit": 100, "allowed_updates": ["callback_query"]}
         if offset and not idle:
             request["offset"] = offset
-        updates = await call_bot(token, "getUpdates", request, io_timeout=30)
+        base = api_url(config)
+        updates = await call_bot(token, "getUpdates", request, base_url=base, io_timeout=30)
         if not isinstance(updates, list) or len(updates) > 100:
             raise ValueError("invalid Telegram update batch")
         processed = 0
@@ -176,7 +177,8 @@ class TelegramService:
                         elif command and command.state == "failed":
                             text = "Action failed; check Klopot audit"
                 try:
-                    await call_bot(token, "answerCallbackQuery", {"callback_query_id": callback["id"], "text": text, "cache_time": 0})
+                    await call_bot(token, "answerCallbackQuery",
+                                   {"callback_query_id": callback["id"], "text": text, "cache_time": 0}, base_url=base)
                 except TelegramAPIError:
                     pass  # transient UI feedback never rolls back the durable action
             processed += 1
@@ -269,13 +271,13 @@ class TelegramService:
             else:
                 rows = []
                 if ref.view_url:
-                    labels = LABELS.get(cfg.get("actions_locale", "en"), LABELS["en"])
+                    labels = action_labels(cfg.get("actions_locale"))
                     rows = [[{"text": labels["view"], "url": ref.view_url}]]
                 try:
                     await call_bot(token, "editMessageReplyMarkup", {
                         "chat_id": ref.chat_id, "message_id": ref.message_id,
                         "reply_markup": {"inline_keyboard": rows},
-                    })
+                    }, base_url=api_url(cfg))
                     command.state = "sent"
                     command.next_attempt_at = None
                     command.last_error = None

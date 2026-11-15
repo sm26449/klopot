@@ -14,7 +14,7 @@ from ..audit import record_change
 from ..auth import Actor
 from ..channels._secrets import resolve_secret
 from ..channels.telegram_config import (
-    LABELS,
+    action_labels,
     actor_allowed,
     allowed_users,
     bot_key,
@@ -50,7 +50,7 @@ def issue_tokens(delivery: Delivery, config: dict[str, Any], now: datetime) -> d
     secret = resolve_secret(config, "bot_token", "bot_token_ref")
     if not secret:
         return None
-    labels = LABELS[config.get("actions_locale", "en")]
+    labels = action_labels(config.get("actions_locale"))
     buttons = []
     for action in ACTIONS:
         token = ChannelActionToken(
@@ -98,12 +98,14 @@ def snooze_deadline(action: str, now: datetime) -> datetime | None:
         return (now + timedelta(hours=1)).replace(microsecond=0)
     if action != "snooze_morning":
         return None
-    zone = ZoneInfo(get_settings().tz)
+    settings = get_settings()
+    zone = ZoneInfo(settings.tz)
+    morning = time(settings.snooze_morning_hour)
     local = now.replace(tzinfo=UTC).astimezone(zone)
     date = local.date()
-    if local.time() >= time(8):
+    if local.time() >= morning:
         date += timedelta(days=1)
-    return datetime.combine(date, time(8), tzinfo=zone).astimezone(UTC).replace(tzinfo=None, microsecond=0)
+    return datetime.combine(date, morning, tzinfo=zone).astimezone(UTC).replace(tzinfo=None, microsecond=0)
 
 
 async def ingest_update(session: AsyncSession, key: str, payload: dict[str, Any]) -> tuple[str, str | None]:

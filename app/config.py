@@ -172,6 +172,8 @@ class Settings(BaseSettings):
     # Daily suppressed-alerts digest, fired at this local hour
     # (settings.tz). -1 disables.
     digest_hour: int = Field(default=21, ge=-1, le=23)
+    # "Snooze until morning" (Telegram buttons): this local hour (settings.tz).
+    snooze_morning_hour: int = Field(default=8, ge=0, le=23)
 
     # ── Legacy delivery-gate variable (deprecated) ────────────
     # Before migration 0030 every template's ``require_pv_kw`` compared
