@@ -243,8 +243,17 @@ const [data, loading, reload, error] = useLoader((signal) => api.get("/v1/rules"
 //         empty → <Empty/>; error && data → <StaleBanner/> above the old rows
 ```
 
-- Load small resources whole (`limit=500`) and group client-side; use `Pager`
-  only for unbounded history (log, audit).
+- Load small resources whole and group client-side; use `Pager` only for
+  unbounded history (log, audit). A page that loads one `limit=500` page
+  shows `ListMeta` ("500 of N") when there are more.
+- Picker options, autocomplete and search use `getAll(path, query)`
+  (`lib/api.js`): it pages with `skip` until it has every row, so a list never
+  stops silently at 500.
+- A secondary lookup (options, a count beside a form, live values) goes
+  through `lookup(promise, fallback)` (`lib/lookup.js`): the page keeps
+  working on the fallback and the operator gets one notice. Never
+  `.catch(() => {})` / `.catch(() => [])` — an empty list must not pass for
+  "there is nothing". A view's own main list shows `ErrorState` instead.
 - Server-side filters for anything an API user would also want; client-side
   only for presentation (grouping, collapse).
 

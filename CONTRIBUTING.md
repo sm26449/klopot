@@ -22,15 +22,15 @@ pip install -e ".[dev]"
 > **One command for everything CI runs:** `scripts/check.sh` (add `--mysql`
 > to also run the MySQL gate against a throwaway container).
 
-The admin-UI tests also need Node (`node --test tests/js/*.mjs`); the
+The admin-UI tests also need Node — 24 LTS, as in CI (`.nvmrc`; 18 and later
+work) — `node --test tests/js/*.mjs`; the
 accessibility suite and the browser tests install their dev tooling with `npm ci`.
 
-> **CI while the repository is private.** GitHub Actions runs only when
-> started by hand (Actions → CI → *Run workflow*); it switches itself back on
-> for every push and pull request once the repository is public. Until then,
-> `scripts/check.sh` is the gate before every commit, and images are built and
-> deployed locally with `scripts/deploy.sh` (`--runtime-dir=DIR` when the
-> running install lives outside the checkout — see docs/DEPLOY.md, "Upgrades").
+> **CI.** GitHub Actions runs on every push to `main` and every pull request;
+> a `v*` tag also publishes the image to GHCR. Run `scripts/check.sh` before
+> you push — it is the same gate, minus the MySQL and browser jobs
+> (`--mysql`, `--e2e` add them). A fork that is private runs CI only when
+> started by hand (Actions → CI → *Run workflow*).
 
 Then either run the development stack (alertd + MySQL + a local MQTT
 broker, built from your checkout):

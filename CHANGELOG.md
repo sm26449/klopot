@@ -51,6 +51,9 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- CI runs Node 24 LTS (from `.nvmrc`) with `actions/setup-node@v7`; it ran
+  Node 20, past its end of life, through a deprecated action. The admin-UI
+  test harness works on Node 21+ too (`navigator` became a read-only global).
 - ntfy, Gotify, Pushover and webhook share one request / health-check path
   (`app/channels/_http.py`) instead of four copies of the same error
   handling. A webhook transport error now reads `webhook HTTP error: …`.

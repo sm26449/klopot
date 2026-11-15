@@ -43,7 +43,9 @@ export async function setupDom() {
     "MouseEvent", "KeyboardEvent", "getComputedStyle", "requestAnimationFrame",
     "cancelAnimationFrame", "MutationObserver", "localStorage", "sessionStorage", "location",
   ]) {
-    globalThis[k] = w[k];
+    // defineProperty, not assignment: since Node 21 `navigator` is a
+    // getter-only global and `globalThis.navigator = …` throws.
+    Object.defineProperty(globalThis, k, { value: w[k], configurable: true, writable: true });
   }
   globalThis.window = w;
   globalThis.document = w.document;

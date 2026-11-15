@@ -1,11 +1,9 @@
 name: CI
 
-# While the repository is private, CI runs only when started by hand
-# (Actions → CI → Run workflow): checks, builds and deploys happen locally
-# (scripts/check.sh, scripts/deploy.sh) to save Actions minutes. Once the
-# repository is public, every push to main and every pull request runs it
-# automatically — the job-level `if: ${{ !github.event.repository.private … }}`
-# below lifts itself on publication, with no edit needed.
+# Runs on every push to main and every pull request; a v* tag also publishes
+# the image. In a private copy (a private fork) the job-level
+# `if: ${{ !github.event.repository.private … }}` keeps it to manual runs
+# (Actions → CI → Run workflow), to save Actions minutes.
 on:
   push:
     branches: [main]
@@ -249,9 +247,9 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version-file: .nvmrc
           cache: npm
       - run: npm ci
       - run: node --test tests/js/*.mjs
@@ -268,9 +266,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version-file: .nvmrc
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
@@ -401,9 +399,9 @@ jobs:
         run: |
           git diff --exit-code -- openapi/v1.json \
             || { echo "::error::openapi/v1.json is stale — run scripts/dump_openapi.py and commit it"; exit 1; }
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version-file: .nvmrc
           cache: npm
       - name: SDKs match the spec
         run: |
