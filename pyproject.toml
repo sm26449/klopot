@@ -17,13 +17,13 @@ dependencies = [
     # -249/-2280/-2281 (and the 0.49.1 StaticFiles range DoS, A-03). FastAPI
     # >=0.140 no longer caps starlette, so pin the floor here directly.
     "starlette>=1.3.1,<2",
-    "uvicorn[standard]>=0.32.0,<0.33",
-    "gunicorn>=23.0.0,<24",
+    "uvicorn[standard]>=0.32.0,<0.55",
+    "gunicorn>=23.0.0,<28",
     # Validation / config
     "pydantic>=2.9.0,<3",
     "pydantic-settings>=2.6.0,<3",
     # Database (async)
-    "sqlalchemy>=2.0.36,<2.1",
+    "sqlalchemy>=2.0.36,<2.2",
     "aiomysql>=0.3.0,<0.4",
     "alembic>=1.14.0,<2",
     "cryptography>=43.0.0",  # required by aiomysql for caching_sha2_password
@@ -37,14 +37,14 @@ dependencies = [
     # backtracking, so a rule regex can't freeze the event loop (audit V10)
     "google-re2>=1.1,<2",
     # Crypto for API keys
-    "bcrypt>=4.2.0,<5",
+    "bcrypt>=4.2.0,<6",
     # Password hashing for admin_users (argon2id — memory-hard; bcrypt
     # stays for high-entropy API keys)
-    "argon2-cffi>=23.1.0,<24",
+    "argon2-cffi>=23.1.0,<26",
     # Cron parsing (schedules in S7)
-    "croniter>=3.0.0,<4",
+    "croniter>=3.0.0,<8",
     # Logging
-    "structlog>=24.4.0,<25",
+    "structlog>=24.4.0,<27",
     # Email channel (S6)
     "aiosmtplib>=5.1.2,<6",
     # Web Push channel (S6)
@@ -52,26 +52,26 @@ dependencies = [
     # Config import/export (S8)
     "pyyaml>=6.0,<7",
     # Metrics (S12)
-    "prometheus-client>=0.21.0,<0.22",
+    "prometheus-client>=0.21.0,<0.27",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.3.0,<9",
-    "pytest-asyncio>=0.24.0,<0.25",
-    "pytest-cov>=6.0.0,<7",
+    "pytest>=8.3.0,<10",
+    "pytest-asyncio>=0.24.0,<1.6",
+    "pytest-cov>=6.0.0,<8",
     "httpx>=0.28.0,<0.29",  # also test client
-    "aiosqlite>=0.20.0,<0.22",  # in-memory test DB (S12c)
-    "ruff>=0.7.0,<0.8",
-    "black>=24.10.0,<25",
-    "mypy>=1.13.0,<2",
+    "aiosqlite>=0.20.0,<0.23",  # in-memory test DB (S12c)
+    "ruff>=0.7.0,<0.18",
+    "black>=24.10.0,<27",
+    "mypy>=1.13.0,<3",
     "mypy-baseline>=0.7,<1",
     "types-croniter",
     "types-PyYAML",
     "pre-commit>=4.0.0,<5",
     # SDK generation (scripts/generate_sdks.sh). 0.30 targets the "httpx2"
     # fork; 0.29.1 is the last release generating for httpx.
-    "openapi-python-client==0.29.1",
+    "openapi-python-client==0.30.0",
 ]
 
 [project.urls]
