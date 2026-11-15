@@ -162,7 +162,7 @@ See `.env.example`. The main ones:
 | `MYSQL_INNODB_BUFFER_POOL_SIZE` | `256M` | DB container only |
 | `MYSQL_DATABASE` | `alertd` | DB container only |
 | `MYSQL_USER` | `alertd` | DB container only |
-| `MYSQL_PASSWORD` | `alertd` | DB container only |
+| `MYSQL_PASSWORD` | — (required with the bundled MySQL) | DB container only; also goes into `ALERTD_DATABASE_URL` |
 
 Other knobs, all documented in `app/config.py`:
 
@@ -170,6 +170,8 @@ Other knobs, all documented in `app/config.py`:
   login-lockout settings (`ALERTD_SESSION_IDLE_HOURS`, `ALERTD_SESSION_MAX_DAYS`,
   `ALERTD_LOGIN_MAX_FAILURES`, `ALERTD_LOGIN_MAX_FAILURES_PER_IP`,
   `ALERTD_LOGIN_LOCKOUT_MIN`), `ALERTD_TRUSTED_PROXY_CIDRS`,
+  `ALERTD_FIRE_CONTEXT_MAX_BYTES` (16384 — the largest `context` `/v1/fire`
+  accepts, as compact JSON; nesting is capped at 16 levels),
   `ALERTD_DOCS_ENABLED` / `ALERTD_METRICS_REQUIRE_AUTH` (blank = auto),
   `ALERTD_ADAPTER_SEND_TIMEOUT_SEC` (30) and the admission caps
   `ALERTD_MAX_RULES` (100), `ALERTD_MAX_INPUTS` (50), `ALERTD_MAX_CHANNELS` (20).

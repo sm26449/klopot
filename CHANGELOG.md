@@ -52,6 +52,10 @@ adheres to [Semantic Versioning](https://semver.org/).
   when the input is saved; `auth_required` must be a boolean (the string
   "false" used to mean "required"), and a disabled input answers `404` like
   a missing one instead of revealing it exists.
+- `POST /v1/fire` bounds its `context`: at most `ALERTD_FIRE_CONTEXT_MAX_BYTES`
+  (default 16 KiB) as compact JSON and 16 levels deep, `422` beyond. It is
+  stored, hashed and rendered for every fire — even of an unknown type — and
+  only the 1 MiB request cap bounded it.
 - Proxy trust fails closed: `ALERTD_TRUSTED_PROXY_CIDRS` is parsed once at
   startup with the parser every request uses; a typo no longer turns into
   "trust nothing" silently, and IPv4-mapped IPv6 peers match their IPv4

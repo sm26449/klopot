@@ -222,6 +222,9 @@ class Settings(BaseSettings):
     # proxy and use the direct peer address. An invalid entry, or a /0, stops
     # the service at startup.
     trusted_proxy_cidrs: str = ""
+    # Largest `context` POST /v1/fire accepts, as compact JSON in bytes
+    # (utils/context_budget.py; nesting is capped at 16 levels too).
+    fire_context_max_bytes: int = Field(default=16384, ge=1024, le=1_048_576)
     # ── Activity log (docs/ACTIVITY_LOG.md) ────────────────────
     # false: keep every activity row but no request / response bodies.
     activity_log_bodies: bool = True

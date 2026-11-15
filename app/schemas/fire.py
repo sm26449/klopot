@@ -3,7 +3,10 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from ..config import get_settings
+from ..utils.context_budget import check_context
 
 
 class FireRequest(BaseModel):
@@ -26,6 +29,14 @@ class FireRequest(BaseModel):
     )
     status: Literal["firing", "resolved"] = "firing"
     resolved_type: str | None = Field(default=None, min_length=1, max_length=64)
+
+    @field_validator("context")
+    @classmethod
+    def _context_within_budget(cls, v: dict[str, Any]) -> dict[str, Any]:
+        # Stored, hashed and rendered for every fire — even of an unknown type
+        # (utils/context_budget.py, public-exposure review).
+        check_context(v, max_bytes=get_settings().fire_context_max_bytes)
+        return v
 
 
 class FireResponse(BaseModel):

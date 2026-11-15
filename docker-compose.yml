@@ -74,6 +74,7 @@ services:
       ALERTD_LOGIN_LOCKOUT_MIN: ${ALERTD_LOGIN_LOCKOUT_MIN:-15}
       # ── Reverse proxy, API surface & secret-ref policy ──────
       ALERTD_TRUSTED_PROXY_CIDRS: ${ALERTD_TRUSTED_PROXY_CIDRS:-}
+      ALERTD_FIRE_CONTEXT_MAX_BYTES: ${ALERTD_FIRE_CONTEXT_MAX_BYTES:-16384}
       ALERTD_SECRET_REF_ALLOW: ${ALERTD_SECRET_REF_ALLOW:-}
       # Activity log: false keeps the rows but no request/response bodies.
       ALERTD_ACTIVITY_LOG_BODIES: ${ALERTD_ACTIVITY_LOG_BODIES:-true}
