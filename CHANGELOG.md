@@ -24,6 +24,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 - Search (Ctrl+K): text typed right after the palette opened could be wiped
   by its reset; the reset now runs when the palette closes.
+- Activity log: a rule created or changed was ignored for up to a minute on
+  a host up for less than a minute (the rule cache took "loaded at 0" for
+  fresh, and `monotonic()` counts from boot); a load racing a change no longer
+  keeps the old rule set either.
+- Admin UI: JSON blocks (the why-fired drawer) are keyboard-focusable, so a
+  wide value that scrolls sideways can be reached without a mouse.
 - CI: `scripts/generate_sdks.sh` finds `openapi-python-client` on `PATH` when
   there is no `.venv` (the GitHub runner), and the browser e2e runs with
   reduced motion and waits for state instead of checking it once, so a slow

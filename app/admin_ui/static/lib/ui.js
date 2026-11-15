@@ -204,7 +204,9 @@ export function DraftBanner({ onRestore, onDiscard }) {
 export function Json({ value }) {
   let text;
   try { text = JSON.stringify(value, null, 2); } catch { text = String(value); }
-  return html`<pre class="json">${text}</pre>`;
+  // Focusable: the block scrolls when a value is wide, and a keyboard user
+  // must be able to reach and scroll it (axe scrollable-region-focusable).
+  return html`<pre class="json" tabindex="0">${text}</pre>`;
 }
 
 // ── Modal ──────────────────────────────────────────────────────────

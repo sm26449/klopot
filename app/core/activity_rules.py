@@ -60,20 +60,31 @@ class Rule:
 class RuleCache:
     def __init__(self) -> None:
         self._rules: list[Rule] = []
-        self._loaded_at = 0.0
+        # None = never loaded / invalidated. Not 0.0: monotonic() counts from
+        # an arbitrary point (boot on Linux), so on a host up for less than
+        # the TTL "0.0" still looked fresh and a new rule was ignored.
+        self._loaded_at: float | None = None
+        # Bumped by invalidate(); a load that started before it must not
+        # stamp the set it read as fresh.
+        self._generation = 0
         self._lock = asyncio.Lock()
         # rule id → [count, last_at, last_ip] not yet written to the table.
         self._hits: dict[int, list[Any]] = {}
 
     def invalidate(self) -> None:
-        self._loaded_at = 0.0
+        self._generation += 1
+        self._loaded_at = None
+
+    def _fresh(self) -> bool:
+        return self._loaded_at is not None and time.monotonic() - self._loaded_at < _TTL_SEC
 
     async def rules(self) -> list[Rule]:
-        if time.monotonic() - self._loaded_at < _TTL_SEC:
+        if self._fresh():
             return self._rules
         async with self._lock:
-            if time.monotonic() - self._loaded_at < _TTL_SEC:
+            if self._fresh():
                 return self._rules
+            generation = self._generation
             try:
                 from sqlalchemy import select
 
@@ -87,7 +98,8 @@ class RuleCache:
                                     r.match_ip, r.action, r.keep_days, r.request_body, r.response_body) for r in rows]
             except Exception:
                 logger.debug("activity rules: load failed; keeping the previous set", exc_info=True)
-            self._loaded_at = time.monotonic()
+            if generation == self._generation:
+                self._loaded_at = time.monotonic()
         return self._rules
 
     async def match(self, **request: Any) -> Rule | None:

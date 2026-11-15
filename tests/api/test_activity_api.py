@@ -289,3 +289,32 @@ async def test_callers_who_did_not_get_in_leave_no_body(db_client, admin_key, db
     assert len(anonymous) >= 5
     assert all(x.request_body is None for x in anonymous), [(x.path, x.status) for x in anonymous if x.request_body]
     assert any(x.request_body and "AAAA" in x.request_body for x in rows if x.path == "/v1/fire" and x.actor_name)
+
+
+async def test_a_new_rule_applies_on_a_host_booted_less_than_a_ttl_ago(db_client, admin_key, monkeypatch):
+    """CI on a fresh VM: monotonic() counts from boot, so with "0.0 = never
+    loaded" a cache on a host up for less than the TTL looked fresh and the
+    new ignore rule was not applied (the rule set loaded before it was kept)."""
+    from app.core import activity_rules
+
+    monkeypatch.setattr(activity_rules.time, "monotonic", lambda: 5.0)
+    h = _h(admin_key)
+    await db_client.get("/v1/templates", headers=h)          # loads the (empty) rule set
+    await db_client.post("/v1/activity/rules", headers=h, json={
+        "name": "boot", "match_method": "GET", "match_path": "/v1/templates*", "action": "ignore"})
+    await _flush()
+    before = len(await _requests(db_client, admin_key, route="/v1/templates"))
+    await db_client.get("/v1/templates", headers=h)
+    assert len(await _requests(db_client, admin_key, route="/v1/templates")) == before
+
+
+async def test_a_load_racing_an_invalidate_is_not_kept_as_fresh():
+    """A load that read the rules before a change committed must not stamp
+    that old set as fresh for a whole TTL."""
+    from app.core.activity_rules import RuleCache
+
+    cache = RuleCache()
+    gen = cache._generation
+    cache.invalidate()                     # a rule changed while a load was running
+    assert cache._generation == gen + 1
+    assert cache._fresh() is False
