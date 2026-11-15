@@ -52,7 +52,10 @@ async def test_anonymous_callers_learn_nothing_and_leave_no_body(db_client, admi
     assert other_kind.status_code == 404
     assert other_kind.json() == missing.json(), "a non-webhook input must look like a missing one"
     assert "secret_poller" not in other_kind.text
-    assert not_running.status_code == 401, "the token is checked before the adapter's state is revealed"
+    # A disabled input is not there: the same answer as an id that does not
+    # exist, whatever the token (public-exposure review).
+    assert not_running.status_code == 404
+    assert not_running.json() == missing.json()
     assert "paused_hook" not in not_running.text
 
     stored = await _bodies(db_session)

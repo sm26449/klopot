@@ -70,9 +70,11 @@ CREATE TABLE inputs (
         -- Per-kind shape (validated at write time by Pydantic):
         -- mqtt: {host, port, username, password_ref, client_id, qos}
         -- http_poll: {url, method, headers, interval_sec, json_path, timeout_sec}
-        -- webhook: {auth_required, allowed_ips}
+        -- webhook: {auth_required, auth_token | auth_token_ref}
+        -- alertmanager: {auth_required, auth_token | auth_token_ref, type_label, …}
         -- schedule: {cron}
-        -- sms_inbox: {auth_required, auth_token_ref} (receives forwarded SMS)
+        -- sms_inbox: {auth_required, auth_token | auth_token_ref} (receives forwarded SMS)
+        -- inbound kinds: a token is required unless auth_required is false (0041)
         -- email_imap: {host, port, username, password_ref, mailbox, filter}
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

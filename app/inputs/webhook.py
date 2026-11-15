@@ -7,7 +7,7 @@ and delivers them to the resolver via the manager's on_value
 callback.
 
 Adapter responsibilities:
-- Hold per-input config (auth_token_ref, allowed_ips)
+- Hold per-input config (auth_token / auth_token_ref, auth_required)
 - Verify auth on each delivery (called from the API endpoint)
 - Track health (last_msg_ts, count, errors)
 - Update on config changes (no socket to recycle, just config swap)
@@ -15,6 +15,13 @@ Adapter responsibilities:
 Topic scheme: a single virtual topic per webhook input,
 ``webhook:<input_name>``. Variables map to it the same way they
 map to MQTT topics. JSONPath into the payload still works.
+
+Inbound authentication (shared by every kind posting to that endpoint —
+webhook, sms_inbox, alertmanager) is defined here once: a token is required
+unless the configuration says ``auth_required: false``, and a configuration
+that requires a token without having one is refused when it is saved
+(``validate_inbound_auth``), not discovered later as an input that rejects —
+or, before 1.2, accepted — everything.
 """
 from __future__ import annotations
 
@@ -39,10 +46,6 @@ class WebhookInput(BaseInput):
         self._last_msg_ts: float | None = None
         self._msg_count: int = 0
         self._last_error: str | None = None
-        # Secure default: if a token is configured but auth_required is not
-        # explicitly set, enforce auth — a configured token must not give
-        # false assurance while unauthenticated posts are accepted (audit
-        # F35). An explicit auth_required=False is a deliberate opt-out.
         self._auth_required = auth_required(config)
 
     @property
@@ -90,16 +93,32 @@ class WebhookInput(BaseInput):
             raise
 
 
-def auth_required(config: dict[str, Any]) -> bool:
-    """Whether a webhook input demands a token.
+# Kinds that receive posts at POST /v1/inputs/{id}/webhook.
+INBOUND_KINDS = frozenset({"webhook", "sms_inbox", "alertmanager"})
 
-    Secure default: if a token is configured but ``auth_required`` is not
-    explicitly set, enforce auth — a configured token must not give false
-    assurance while unauthenticated posts are accepted (audit F35). An
-    explicit ``auth_required=False`` is a deliberate opt-out."""
-    if "auth_required" in config:
-        return bool(config.get("auth_required"))
-    return bool(config.get("auth_token") or config.get("auth_token_ref"))
+
+def auth_required(config: dict[str, Any]) -> bool:
+    """Whether an inbound input demands a token: always, unless its config
+    says ``auth_required: false`` — the literal boolean (anything else,
+    including the string "false", fails closed). Until 1.2 a missing flag
+    meant "only if a token is set", which left an input without a token open
+    to anyone (public-exposure review)."""
+    return config.get("auth_required", True) is not False
+
+
+def validate_inbound_auth(config: dict[str, Any]) -> None:
+    """Refuse an inbound input's config that cannot authenticate as intended:
+    ``auth_required`` that is not a boolean, or auth required (the default)
+    with no ``auth_token`` / ``auth_token_ref``. Raises ``ValueError`` with
+    the fix in the message."""
+    flag = config.get("auth_required", True)
+    if not isinstance(flag, bool):
+        raise ValueError("auth_required must be true or false")
+    if flag and not (config.get("auth_token") or config.get("auth_token_ref")):
+        raise ValueError(
+            "this input needs a token: set auth_token (or auth_token_ref) — or set "
+            "auth_required to false to accept posts without one"
+        )
 
 
 def webhook_auth_ok(config: dict[str, Any], header_token: str | None) -> bool:

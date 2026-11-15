@@ -538,7 +538,10 @@ An input of `kind=alertmanager` accepts Prometheus Alertmanager
 (`webhook_configs`, payload v4) and Grafana alerting (webhook contact point)
 at `POST /v1/inputs/{id}/webhook`. The token goes in `X-Input-Token` or
 `Authorization: Bearer` (the same endpoint serves `webhook` and
-`sms_inbox` inputs) — Alertmanager:
+`sms_inbox` inputs). Every inbound input requires its token unless its config
+says `auth_required: false`; saving one that requires a token without having
+one is refused (`422`), and a disabled input answers `404` like a missing one
+— Alertmanager:
 
 ```yaml
 receivers:

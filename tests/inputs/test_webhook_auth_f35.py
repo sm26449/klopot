@@ -20,10 +20,14 @@ def test_auth_required_defaults_true_when_token_configured():
     assert wh.check_auth("secret") is True
 
 
-def test_auth_required_false_when_no_token_and_unset():
+def test_without_a_flag_a_token_is_required_and_none_means_closed():
+    # Until 1.2 "no flag, no token" meant open to anyone (public-exposure
+    # review); now a token is required unless auth_required is false, and an
+    # input with neither rejects every post.
     wh = _wh({})
-    assert wh._auth_required is False
-    assert wh.check_auth(None) is True  # deliberately open webhook
+    assert wh._auth_required is True
+    assert wh.check_auth(None) is False
+    assert wh.check_auth("anything") is False
 
 
 def test_explicit_auth_required_false_is_honored_even_with_token():

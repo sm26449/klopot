@@ -18,7 +18,7 @@ from ...config import get_settings
 from ...core.manager import get_manager
 from ...db import get_session
 from ...db.models import Input, Variable
-from ...inputs.webhook import WebhookInput, webhook_auth_ok
+from ...inputs.webhook import INBOUND_KINDS, WebhookInput, validate_inbound_auth, webhook_auth_ok
 from ...schemas.common import InputKind, Page
 from ...schemas.input import InputCreate, InputHealth, InputRead, InputUpdate
 from ...secrets_registry import mask_config, merge_secret_update, secret_status
@@ -43,6 +43,17 @@ def _require_supported_kind(kind: Any) -> None:
                 f"Supported kinds: {sorted(REGISTRY)}"
             ),
         )
+
+
+def _require_valid_auth(kind: Any, config: dict[str, Any] | None) -> None:
+    """An inbound input must be able to authenticate as configured
+    (inputs/webhook.py ``validate_inbound_auth``): 422 otherwise."""
+    if getattr(kind, "value", kind) not in INBOUND_KINDS:
+        return
+    try:
+        validate_inbound_auth(config or {})
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e)) from None
 
 
 def _to_read(obj: Input) -> InputRead:
@@ -91,6 +102,7 @@ async def create_input(
     actor: Actor = Depends(require_scope("admin")),
 ) -> InputRead:
     _require_supported_kind(body.kind)
+    _require_valid_auth(body.kind, body.config)
     await enforce_create_cap(session, Input, get_settings().max_inputs, entity="Input")
     obj = Input(**body.model_dump())
     session.add(obj)
@@ -134,6 +146,9 @@ async def update_input(
         # value; "" clears; anything else replaces (secrets_registry).
         kind = patch.get("kind") or obj.kind
         patch["config"] = merge_secret_update("input", kind, obj.config, patch["config"])
+    # Judge the result (merged secrets, the kind it ends up with).
+    _require_valid_auth(patch.get("kind") or obj.kind,
+                        patch["config"] if patch.get("config") is not None else obj.config)
     for k, v in patch.items():
         setattr(obj, k, v)
     await flush_or_409(session, "Input update")
@@ -271,8 +286,10 @@ async def receive_webhook(
     # Anonymous endpoint: nothing about an input — its name, kind or state —
     # is said before the caller's token is checked (review K10). Anything that
     # is not a webhook-kind input looks like no input at all.
+    # A disabled input is not there either: it gets the same answer as an id
+    # that does not exist, before its token is looked at.
     obj = await session.get(Input, input_id)
-    if obj is None or obj.kind.value not in ("webhook", "sms_inbox", "alertmanager"):
+    if obj is None or not obj.enabled or obj.kind.value not in INBOUND_KINDS:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Input not found")
 
     # Auth check (per-input), from the stored config. Alertmanager / Grafana

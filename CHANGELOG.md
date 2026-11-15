@@ -24,6 +24,13 @@ adheres to [Semantic Versioning](https://semver.org/).
   producer's "send a test" button keeps working, but a test is now throttled
   among tests (`min_repeat_min`), and `suppressed_reason` says when one was
   held. Migration `0040` (adds `throttle_state.is_test`) runs on startup.
+- **Inbound inputs (webhook, SMS inbox, Alertmanager) require their token**
+  unless their config says `auth_required: false`. Migration `0041` keeps
+  every existing input's behaviour: one that had no token and no flag was
+  open to anyone and now says `auth_required: false` explicitly — the
+  Inputs page marks it "no token"; set a token, or keep it for a sender on
+  your own network. Saving an input that requires a token without one is
+  refused with `422`; a config import is refused the same way.
 
 ### Added
 
@@ -40,6 +47,11 @@ adheres to [Semantic Versioning](https://semver.org/).
   claimed and throttled in a pool of their own (`throttle_state` keyed on
   `(type, is_test)`, like `dedup_claims`), so a test never delays or absorbs
   a real alert, and lifting the silencing is an administrator's privilege.
+- An inbound input without a token accepted posts from anyone, and the API
+  saved one without a word. A token is now required by default and checked
+  when the input is saved; `auth_required` must be a boolean (the string
+  "false" used to mean "required"), and a disabled input answers `404` like
+  a missing one instead of revealing it exists.
 - Proxy trust fails closed: `ALERTD_TRUSTED_PROXY_CIDRS` is parsed once at
   startup with the parser every request uses; a typo no longer turns into
   "trust nothing" silently, and IPv4-mapped IPv6 peers match their IPv4

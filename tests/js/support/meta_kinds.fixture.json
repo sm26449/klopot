@@ -1033,7 +1033,7 @@
           "required": false,
           "secret": false,
           "default": true,
-          "help": "Require X-Input-Token on POST /v1/inputs/{id}/webhook."
+          "help": "Require X-Input-Token on POST /v1/inputs/{id}/webhook. On by default, and saving needs a token then. Turn it off only for a sender on your own network that cannot send a header: anyone who can reach Klopot could post here."
         },
         {
           "name": "auth_token",
@@ -1054,7 +1054,7 @@
           "required": false,
           "secret": false,
           "default": true,
-          "help": "Require X-Input-Token on the inbound POST /v1/inputs/{id}/webhook. Set False to opt out explicitly."
+          "help": "Require X-Input-Token on the inbound POST /v1/inputs/{id}/webhook. On by default, and saving needs a token then. Turn it off only for a sender on your own network that cannot send a header: anyone who can reach Klopot could post here."
         },
         {
           "name": "auth_token",
@@ -1115,7 +1115,7 @@
           "required": false,
           "secret": false,
           "default": true,
-          "help": "Require the token as X-Input-Token or Authorization: Bearer."
+          "help": "Require the token as X-Input-Token or Authorization: Bearer. On by default, and saving needs a token then. Turn it off only for a sender on your own network that cannot send a header: anyone who can reach Klopot could post here."
         },
         {
           "name": "auth_token",

@@ -12,6 +12,11 @@ import { FieldInput, useFieldErrors, FieldErrorSummary, SecretField, applySecret
 import { t, tnode } from "../lib/i18n.js";
 import { InputPayloads } from "./activity.js";
 
+// Kinds posted to at POST /v1/inputs/{id}/webhook (app/inputs/webhook.py INBOUND_KINDS).
+const INBOUND = ["webhook", "sms_inbox", "alertmanager"];
+// Open = an inbound input that takes posts without a token (auth_required: false).
+const isOpen = (kind, config) => INBOUND.includes(kind) && (config || {}).auth_required === false;
+
 export function InputsView() {
   const [items, setItems] = useState(null);
   const [total, setTotal] = useState(null);
@@ -39,6 +44,7 @@ export function InputsView() {
         actions=${[{ label: t("inputs.newInput"), primary: true, onClick: () => setEditing({ __new: true }) }, { label: t("inputs.blank.api"), href: "#/api" }, ...starterActions()]} />`
       : html`<div class="cards">${items.map((i) => html`<div key=${i.id} class="ch-card" ...${clickable(() => setEditing(i), t("inputs.editAria", { name: i.name }))}>
           <div class="ch-top"><b>${i.name}</b><span class="spacer"></span>
+            ${isOpen(i.kind, i.config) ? html`<span class="badge warning plain" title=${t("inputs.openTitle")}>${t("inputs.badgeOpen")}</span>` : null}
             <span class="badge ${i.enabled ? "ok" : ""} plain">${i.enabled ? t("inputs.badgeEnabled") : t("inputs.badgeDisabled")}</span></div>
           <div class="small muted"><span class="mono">${i.kind}</span></div>
           ${Object.keys(i.secret_fields_set || {}).length ? html`<div class="small muted">🔒 ${Object.keys(i.secret_fields_set).join(", ")}</div>` : null}
@@ -121,6 +127,8 @@ function InputEditor({ input, meta, onClose, onSaved }) {
             error=${fieldErrs.msgFor(f.name)} onValidity=${(ok) => validity.setValidity(f.name, ok)} />`)
         : html`<p class="muted">${t("inputs.pickKindHint")}</p>`}
 
+      ${isOpen(kind, config) ? html`<div class="alert warn" role="status">${t("inputs.openWarning")}</div>` : null}
+
       ${kind ? html`<div class="field"><label class="chk"><input type="checkbox" checked=${enabled} onChange=${(e) => setEnabled(e.target.checked)} /> ${t("inputs.enabledLabel")}</label></div>` : null}
 
       <div class="editor-actions">
@@ -133,7 +141,7 @@ function InputEditor({ input, meta, onClose, onSaved }) {
 
       ${health ? html`<div class="result"><b>${t("inputs.healthLabel")}</b> ${health.connected ? html`<span class="badge ok plain">${t("inputs.badgeConnected")}</span>` : html`<span class="badge critical plain">${t("inputs.badgeDown")}</span>`}<${Json} value=${health} /></div>` : null}
 
-      ${!isNew && ["webhook", "alertmanager", "sms_inbox"].includes(kind) ? html`<${InputPayloads} inputId=${input.id} />` : null}
+      ${!isNew && INBOUND.includes(kind) ? html`<${InputPayloads} inputId=${input.id} />` : null}
       <${KindHelp} help=${tnode(kind ? "inputs.help." + kind : "inputs.help.intro")} />
     </div>
     <${DangerConfirm} open=${confirmDel} token=${input.name} title=${t("inputs.deleteTitle", { name: input.name })}

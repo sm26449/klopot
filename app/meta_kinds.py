@@ -231,6 +231,10 @@ _CHANNELS: dict[str, list[dict[str, Any]]] = {
 
 # ── Input kinds ────────────────────────────────────────────────────
 
+# The same for every inbound kind (app/inputs/webhook.py validate_inbound_auth).
+_OPEN_INPUT_HELP = ("On by default, and saving needs a token then. Turn it off only for a sender on your "
+                    "own network that cannot send a header: anyone who can reach Klopot could post here.")
+
 _INPUTS: dict[str, list[dict[str, Any]]] = {
     "mqtt": [
         _f("host", "string", required=True, help="Broker host."),
@@ -254,18 +258,15 @@ _INPUTS: dict[str, list[dict[str, Any]]] = {
     ],
     "webhook": [
         _f("auth_required", "bool", default=True,
-           help="Require X-Input-Token on POST /v1/inputs/{id}/webhook."),
+           help="Require X-Input-Token on POST /v1/inputs/{id}/webhook. " + _OPEN_INPUT_HELP),
         _f("auth_token", "string", help="Expected inbound token (write-only)."),
     ],
     "sms_inbox": [
         # The adapter does NOT poll — it receives inbound SMS forwarded as
         # HTTP POST to /v1/inputs/{id}/webhook (same path as the webhook
-        # input). auth_required defaults True so a configured token is
-        # actually enforced; set it False to accept unauthenticated posts
-        # (audit F35).
+        # input), with the same authentication rule.
         _f("auth_required", "bool", default=True,
-           help="Require X-Input-Token on the inbound POST "
-                "/v1/inputs/{id}/webhook. Set False to opt out explicitly."),
+           help="Require X-Input-Token on the inbound POST /v1/inputs/{id}/webhook. " + _OPEN_INPUT_HELP),
         _f("auth_token", "string",
            help="Expected inbound token (write-only), checked when "
                 "auth_required is true."),
@@ -285,7 +286,7 @@ _INPUTS: dict[str, list[dict[str, Any]]] = {
         _f("max_alerts", "int", default=200,
            help="Alerts processed per request; the rest count as truncated."),
         _f("auth_required", "bool", default=True,
-           help="Require the token as X-Input-Token or Authorization: Bearer."),
+           help="Require the token as X-Input-Token or Authorization: Bearer. " + _OPEN_INPUT_HELP),
         _f("auth_token", "string",
            help="Expected token (write-only). In Alertmanager: http_config.authorization.credentials."),
     ],

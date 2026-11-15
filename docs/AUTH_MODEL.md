@@ -138,10 +138,10 @@ Hierarchical — `admin` implies all others.
 
 | Scope | Allowed endpoints |
 |-------|-------------------|
-| `fire` | `POST /v1/fire` |
+| `fire` | `POST /v1/fire` — a fire with `test: true` is marked as a test but gated, throttled and de-duplicated like a real alert |
 | `read` | `GET` endpoints, except the admin-only reads below; also the side-effect-free `POST /v1/rules/validate`, `POST /v1/rules/{id}/eval-now`, `POST /v1/templates/{type}/preview`, `POST /v1/activity/rules/preview`, and `POST /v1/push/subscriptions` (signed-in session only) |
 | `ack` | `POST /v1/log/{id}/ack`, `POST /v1/incidents/{id}/ack`, `POST /v1/incidents/{id}/resolve`, `POST /v1/snooze`, `DELETE /v1/snooze/{id}` |
-| `admin` | All endpoints: every create/update/delete, channel/rule/schedule tests, config export/import, packs inspect/preview/apply, setup dismiss/reopen, plus the reads `GET /v1/api_keys`, `GET /v1/config/export` and `GET /v1/activity/requests/{id}` |
+| `admin` | All endpoints: every create/update/delete, channel/rule/schedule tests (and its `test: true` fires skip throttle, the delivery gate, quiet hours and de-duplication), config export/import, packs inspect/preview/apply, setup dismiss/reopen, plus the reads `GET /v1/api_keys`, `GET /v1/config/export` and `GET /v1/activity/requests/{id}` |
 
 Public (no scope): `/v1/health`, `/v1/health/ready`, `/v1/version`,
 `POST /v1/auth/login`, `POST /v1/inputs/{id}/webhook` (per-input
@@ -149,6 +149,15 @@ Public (no scope): `/v1/health`, `/v1/health/ready`, `/v1/version`,
 (default: on when `ALERTD_COOKIE_SECURE` is true) requires a `read` key. `/v1/auth/*` besides login
 needs a browser session. Each operation's scope is in `/openapi.json` as
 `x-required-scope`.
+
+**Inbound inputs** (`POST /v1/inputs/{id}/webhook` — webhook, sms_inbox,
+alertmanager) require their token unless the input's config says
+`auth_required: false` (the boolean; any other value fails closed). An input
+that requires a token without having one is refused when it is saved (REST
+or import). A disabled input answers like a missing one (`404`), before the
+token is looked at. Turning authentication off is for a sender on your own
+network that cannot send a header; the public traefik overlay never opens
+this endpoint (docs/DEPLOY.md).
 
 Multiple scopes per key: `["fire", "read"]` is fine. The middleware
 allows the request if any of the key's scopes covers the endpoint.
