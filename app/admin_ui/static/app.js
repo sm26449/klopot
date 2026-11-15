@@ -15,6 +15,7 @@ import { t, getLang, setLang, LANGS } from "./lib/i18n.js";
 import { Wordmark, BrandIcon } from "./lib/brand.js";
 import { Modal, ErrorState } from "./lib/ui.js";
 import { skipToMain } from "./lib/a11y.js";
+import { stackTables } from "./lib/stack_tables.js";
 import { CHANGELOG } from "./changelog.js";
 import { LoginView } from "./views/login.js";
 import { ChangePasswordView } from "./views/password.js";
@@ -332,3 +333,5 @@ function App() {
 setLang(getLang());
 applyTheme(readFamily(), readMode());
 render(html`<${App} />`, document.getElementById("app"));
+// Phone: list tables become one card per row (lib/stack_tables.js).
+stackTables(document.getElementById("app"));

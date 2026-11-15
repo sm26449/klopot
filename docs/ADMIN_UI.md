@@ -339,8 +339,15 @@ variable opens its page filtered (`?search=`).
   values on save. The UI tests render from
   `tests/js/support/meta_kinds.fixture.json`, which must equal the server's
   output (`tests/test_admin_ui.py` regenerates-or-fails).
-- A table wider than a phone scrolls inside its own box (`.scroll-x` with
-  `tabindex="0"`, or a card holding a `.tbl`), never the page.
+- On a phone (≤ 640 px) a list table becomes one card per row, each cell
+  showing its column name: `lib/stack_tables.js` (started in `app.js`) gives
+  every `table.tbl` with a `<thead>` the class `stacked`, a `data-label` per
+  cell from its header (a view's own `data-label` wins; an actions or
+  selection column gets none) and explicit table roles, which
+  `display: block` would otherwise drop in some screen readers. Matrix and
+  compact tables (`routing`, `diff`, `compact`) and tables without a header
+  keep scrolling inside their own box (`.scroll-x` with `tabindex="0"`, or a
+  card holding a `.tbl`) — never the page.
 
 ## Testing the UI
 

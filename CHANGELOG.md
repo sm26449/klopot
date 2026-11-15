@@ -12,6 +12,14 @@ adheres to [Semantic Versioning](https://semver.org/).
   synthetic data by `scripts/screenshots.sh`; `scripts/e2e.sh` takes
   `E2E_AFTER` (a command run on the throwaway stack) and `E2E_ONLY=none`.
 
+### Changed
+
+- Admin UI on a phone: list tables (alerts log, incidents, rules, variables,
+  API keys, audit, push devices…) become one card per row below 640 px, each
+  value under its column name, instead of a table scrolling sideways with
+  clipped titles and squeezed selects. Matrix and compact tables still scroll
+  inside their box; screen readers keep the table semantics.
+
 ## [1.1.0] — 2026-11-15
 
 Schema `0028`–`0039`, applied on startup, forward-only: take a backup first

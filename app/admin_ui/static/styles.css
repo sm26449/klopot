@@ -786,6 +786,35 @@ details.cheat td { padding: 3px 8px; border: 0; }
 /* Never let the page itself scroll sideways. */
 html, body { overflow-x: hidden; }
 
+/* Phone: a list table becomes one card per row; each cell shows its column
+   name (lib/stack_tables.js sets `stacked`, `data-label` and the table roles).
+   Matrix / compact tables keep scrolling sideways in their box. */
+@media (max-width: 640px) {
+  table.tbl.stacked, .tbl.stacked > tbody, .tbl.stacked > tbody > tr, .tbl.stacked > tbody > tr > td { display: block; width: 100%; }
+  /* The header stays for screen readers (explicit roles keep it a header),
+     out of sight and out of the layout: every part of it, or its row would
+     still be laid out as wide as the table. */
+  .tbl.stacked > thead, .tbl.stacked > thead > tr, .tbl.stacked > thead > tr > th, .tbl.stacked > thead .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; border: 0;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .tbl.stacked > tbody > tr { border: 1px solid var(--border); border-radius: 10px; padding: 6px 12px; margin: 0 0 10px; background: var(--surface); }
+  .tbl.stacked > tbody > tr:last-child { margin-bottom: 0; }
+  /* The label is column 1 over the whole cell; everything the cell holds
+     (a name and its summary, a badge) stacks in column 2 at its own width. */
+  .tbl.stacked > tbody > tr > td { border: 0; padding: 5px 0; display: grid; grid-template-columns: minmax(6.5em, 32%) minmax(0, 1fr);
+    column-gap: 10px; row-gap: 0; align-items: baseline; justify-items: start; overflow-wrap: anywhere; }
+  .tbl.stacked > tbody > tr > td > * { grid-column: 2; max-width: 100%; }
+  .tbl.stacked > tbody > tr > td::before { content: attr(data-label); grid-column: 1; grid-row: 1 / span 12; color: var(--text-muted);
+    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  /* No column name (an actions or a selection column): the content spans the card. */
+  .tbl.stacked > tbody > tr > td[data-label=""] { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tbl.stacked > tbody > tr > td[data-label=""]::before { content: none; }
+  .tbl.stacked > tbody > tr > td.num { text-align: left; }
+  .tbl.stacked select, .tbl.stacked input:not([type=checkbox]):not([type=radio]) { width: 100%; }
+  .tbl.stacked input[type=checkbox], .tbl.stacked input[type=radio] { width: auto; }
+  .card:has(> table.tbl.stacked) { overflow-x: visible; }
+}
+
 /* ── Responsive ─────────────────────────────────────────── */
 @media (max-width: 860px) {
   .shell { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }

@@ -103,3 +103,27 @@ test("phone · dashboard: Refresh sits beside the title, not on a row of its own
   }));
   assert.ok(m.btn.top < m.h1.bottom, "button starts beside the heading");
 });
+
+test("phone · a list table is one card per row, each cell labelled by its column", async () => {
+  await go(page, "log");
+  const m = await page.evaluate(() => {
+    const vw = window.innerWidth;
+    const table = document.querySelector("main table.tbl");
+    const row = table.querySelector("tbody tr");
+    const cells = [...row.children];
+    return {
+      stacked: table.classList.contains("stacked"),
+      rowDisplay: getComputedStyle(row).display,
+      headerShown: table.querySelector("thead").getBoundingClientRect().height > 2,
+      labels: cells.map((c) => getComputedStyle(c, "::before").content).filter((c) => c && c !== "none"),
+      past: cells.filter((c) => c.getBoundingClientRect().right > vw + 1).length,
+      role: table.getAttribute("role"),
+    };
+  });
+  assert.ok(m.stacked, "the log table is stacked");
+  assert.equal(m.rowDisplay, "block", "a row is a card");
+  assert.equal(m.headerShown, false, "the header row is visually hidden");
+  assert.ok(m.labels.length >= 3, `cells show their column names (${m.labels.join(", ")})`);
+  assert.equal(m.past, 0, "no cell runs past the screen");
+  assert.equal(m.role, "table", "table semantics kept for screen readers");
+});
