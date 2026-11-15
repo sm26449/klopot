@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+
+- Dev tooling: Playwright 1.48.2 → 1.61.1 (GHSA for < 1.55.1: browsers were
+  downloaded without checking the TLS certificate). Test-only; not in the
+  image. 1.61 is the last line that runs on Node 18; 1.62+ needs Node 20.
+
 ## [1.1.1] — 2026-11-15
 
 Hardening after the pre-open-source audits: no publicly known default
