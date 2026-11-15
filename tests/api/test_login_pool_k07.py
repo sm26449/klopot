@@ -82,13 +82,41 @@ async def test_sign_ins_beyond_the_queue_get_503(db_client, admin_user, monkeypa
 
 @pytest.mark.mysql
 async def test_concurrent_logins_hold_no_pooled_connection(db_client, admin_user, monkeypatch):
+    """Twice as many sign-ins as hashing slots: while the first wave hashes and
+    the second waits for a slot, the pool has nothing checked out.
+
+    The first wave measures together (a barrier) and nobody leaves the hash
+    before every one of them has measured: a sign-in that finished hashing
+    writes its failure and briefly takes a connection, which a measurement
+    of the global pool must not see (the earlier, unsynchronised version
+    failed in CI 1 time in ~30 with one sample of 1)."""
+    import itertools
+    import threading
+
     from app.db import session as session_module
 
-    seen: list[int] = []
     pool = session_module._engine.pool
-    monkeypatch.setattr(passwords, "verify_password", _slow_verify(seen, pool.checkedout))
+    slots = crypto_pool.get_settings().hash_max_concurrency
+    real = passwords.verify_password
+    seen: list[int] = []
+    first_wave = itertools.count()
+    lock = threading.Lock()
+    barrier = threading.Barrier(slots, timeout=20)
+
+    def verify(stored_hash, plaintext):
+        with lock:
+            measuring = next(first_wave) < slots
+        if measuring:
+            barrier.wait()           # the whole first wave is hashing; the rest wait for a slot
+            time.sleep(0.3)          # …and have finished their reads by now
+            seen.append(pool.checkedout())
+            barrier.wait()           # nobody goes on to write its failure before all measured
+        return real(stored_hash, plaintext)
+
+    monkeypatch.setattr(passwords, "verify_password", verify)
     attempts = [db_client.post("/v1/auth/login", json={"username": f"user{i}", "password": "x" * 12})
-                for i in range(8)]
+                for i in range(2 * slots)]
     codes = [r.status_code for r in await asyncio.gather(*attempts)]
-    assert codes == [401] * 8
-    assert max(seen) == 0, f"connections checked out while hashing: {seen}"
+    assert codes == [401] * (2 * slots)
+    assert len(seen) == slots
+    assert max(seen) == 0, f"connections checked out while hashing or waiting for a slot: {seen}"
