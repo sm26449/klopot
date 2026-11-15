@@ -1,0 +1,43 @@
+# OpenSSF Scorecard: rates the repository's supply-chain practices (branch
+# protection, pinned dependencies, token permissions, code review, …) and
+# publishes the result to scorecard.dev and the Security tab (the README
+# badge). Weekly, on pushes to main, and when branch protection changes.
+# Kept to the official template: with publish_results the job may use only
+# these actions and must not set env/defaults.
+name: Scorecard
+
+on:
+  branch_protection_rule:
+  schedule:
+    - cron: "17 4 * * 1"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    if: ${{ !github.event.repository.private }}
+    permissions:
+      security-events: write   # upload the SARIF to code scanning
+      id-token: write          # publish_results: sign the result for scorecard.dev
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ossf/scorecard-action@v2.5.0
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+      - uses: actions/upload-artifact@v7
+        with:
+          name: scorecard-sarif
+          path: results.sarif
+          retention-days: 5
+      - uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: results.sarif

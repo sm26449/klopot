@@ -18,6 +18,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/sm26449/klopot?labelColor=0C1016" alt="License"></a>
   <img src="https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white&labelColor=0C1016" alt="Python 3.12">
   <a href="https://klopot.dev"><img src="https://img.shields.io/badge/web-klopot.dev-FFB31A?labelColor=0C1016" alt="klopot.dev"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/sm26449/klopot"><img src="https://api.scorecard.dev/projects/github.com/sm26449/klopot/badge" alt="OpenSSF Scorecard"></a>
 </p>
 
 <p align="center">

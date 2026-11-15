@@ -24,3 +24,22 @@ updates:
         patterns: ["*"]
     commit-message:
       prefix: "ci"
+
+  # npm dev tooling (Playwright, jsdom, axe-core, openapi-typescript) — tests
+  # and SDK generation only; nothing of it ships in the image.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 2
+    groups:
+      npm-dev:
+        patterns: ["*"]
+    ignore:
+      # 1.62+ needs Node 20; the host that runs scripts/e2e.sh has Node 18.
+      # Lift this once that host moves to Node 20+ (CI already runs Node 24).
+      - dependency-name: "playwright"
+        versions: [">=1.62.0"]
+    commit-message:
+      prefix: "build"
+      include: "scope"
