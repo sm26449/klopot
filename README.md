@@ -12,6 +12,15 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/sm26449/klopot/actions/workflows/ci.yml?query=branch%3Amain"><img src="https://github.com/sm26449/klopot/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/sm26449/klopot/releases/latest"><img src="https://img.shields.io/github/v/release/sm26449/klopot?color=FFB31A&labelColor=0C1016" alt="Release"></a>
+  <a href="https://github.com/sm26449/klopot/pkgs/container/klopot"><img src="https://img.shields.io/badge/image-ghcr.io-2496ED?logo=docker&logoColor=white&labelColor=0C1016" alt="Container image"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/sm26449/klopot?labelColor=0C1016" alt="License"></a>
+  <img src="https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white&labelColor=0C1016" alt="Python 3.12">
+  <a href="https://klopot.dev"><img src="https://img.shields.io/badge/web-klopot.dev-FFB31A?labelColor=0C1016" alt="klopot.dev"></a>
+</p>
+
+<p align="center">
   <a href="LICENSE">Apache-2.0</a> ·
   Python 3.12 · FastAPI · MySQL 8 ·
   <a href="README.ro.md">Română</a>
