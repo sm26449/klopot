@@ -1,7 +1,10 @@
 """Shared admission-claim protocol for fire dedup (audit R01, V04).
 
-A non-test fire claims its ``(type, is_test=False, context_hash)`` slot so two
-simultaneous identical fires resolve to a single winner. The claim is released
+A fire claims its ``(type, is_test, context_hash)`` slot so two simultaneous
+identical fires resolve to a single winner. Real and test fires claim in
+separate pools (``is_test``), so a test never coalesces a real alert onto
+itself; only an administrator's test skips the claim (dispatcher
+``override_silencing``). The claim is released
 when the notification reaches a terminal state that must NOT coalesce future
 fires — a full failure — so an identical fire can mint a fresh notification
 instead of coalescing onto the dead one.
@@ -15,27 +18,33 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import delete, false, select
+from sqlalchemy import ColumnElement, delete, false, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db.models import DedupClaim
 
 
+def _pool(test: bool) -> ColumnElement[bool]:
+    """``is_test = <literal>`` — an equality, which MySQL can use as a key
+    match (see the FOR UPDATE note in claim_fire)."""
+    return DedupClaim.is_test == (true() if test else false())
+
+
 async def claim_fire(
     session: AsyncSession, type_: str, context_hash: str,
-    notif_id: str, now: datetime, cutoff: datetime,
+    notif_id: str, now: datetime, cutoff: datetime, *, test: bool,
 ) -> str:
     """Atomically claim the admission slot for a ``(type, context)`` fire.
 
     Returns the notification_id that holds the claim: ``notif_id`` when this
     fire won, or the concurrent winner's id. The upsert overwrites an existing
     claim only when it is stale (``claimed_at < cutoff``), so two simultaneous
-    identical fires resolve to a single winner (audit R01). Claims are
-    non-test only; the is_test column is always False here.
+    identical fires resolve to a single winner (audit R01). ``test`` picks
+    the pool: a test fire never wins or loses against a real one.
     """
     dialect = session.bind.dialect.name if session.bind is not None else "sqlite"
     values = {
-        "type": type_, "is_test": False, "context_hash": context_hash,
+        "type": type_, "is_test": test, "context_hash": context_hash,
         "notification_id": notif_id, "claimed_at": now,
     }
     if dialect == "sqlite":
@@ -77,7 +86,7 @@ async def claim_fire(
     # of one type then deadlock (1213) and the loser's alert is rolled back.
     sel = select(DedupClaim.notification_id).where(
         DedupClaim.type == type_,
-        DedupClaim.is_test == false(),
+        _pool(test),
         DedupClaim.context_hash == context_hash,
     )
     if dialect != "sqlite":
@@ -86,7 +95,7 @@ async def claim_fire(
 
 
 async def release_claim(
-    session: AsyncSession, type_: str, context_hash: str, notif_id: str,
+    session: AsyncSession, type_: str, context_hash: str, notif_id: str, *, test: bool,
 ) -> None:
     """Delete this fire's admission claim (only if it still holds it), so an
     identical retry of a terminally-failed fire isn't coalesced onto it
@@ -94,7 +103,7 @@ async def release_claim(
     await session.execute(
         delete(DedupClaim).where(
             DedupClaim.type == type_,
-            DedupClaim.is_test == false(),
+            _pool(test),
             DedupClaim.context_hash == context_hash,
             DedupClaim.notification_id == notif_id,
         )

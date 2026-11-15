@@ -76,7 +76,7 @@ async def test_test_fire_respects_channel_snooze(template, db_session):
     """Snooze is a gate-2 mute, respected even by test fires."""
     await _add_snooze(db_session, SnoozeScope.channel, "ui")
     d = await evaluate(
-        GateInput(template=template, rule_id=None, channel_names=["ui"], test=True),
+        GateInput(template=template, rule_id=None, channel_names=["ui"], override_silencing=True),
         db_session,
     )
     assert d.reason == "snoozed"
@@ -117,7 +117,7 @@ async def test_test_fire_bypasses_channel_quiet(template, db_session, make_chann
     await db_session.commit()
     with patch(_TZ_NOW, return_value=time(3, 0)):
         d = await evaluate(
-            GateInput(template=template, rule_id=None, channel_names=["ui"], test=True),
+            GateInput(template=template, rule_id=None, channel_names=["ui"], override_silencing=True),
             db_session,
         )
     assert d.channels == ["ui"]

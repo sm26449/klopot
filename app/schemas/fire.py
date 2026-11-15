@@ -11,7 +11,11 @@ class FireRequest(BaseModel):
 
     type: str = Field(min_length=1, max_length=64)
     context: dict[str, Any] = Field(default_factory=dict)
-    test: bool = False
+    test: bool = Field(default=False, description=(
+        "Mark the notification as a test (shown with a Test badge, kept apart from real fires "
+        "for de-duplication, sent without action buttons). With the `admin` scope the test also "
+        "skips throttle, the delivery gate, quiet hours and de-duplication; with any other scope "
+        "it is gated and counted like a real fire."))
     source: str | None = Field(default=None, max_length=64)
     # Episode lifecycle (optional). With an idempotency_key the fire belongs
     # to an episode: the first "firing" opens it and notifies, repeats while

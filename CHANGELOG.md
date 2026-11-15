@@ -18,6 +18,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 - **`ALERTD_TRUSTED_PROXY_CIDRS` is required by `compose.traefik.yml`**, and
   an invalid entry or a `/0` now stops Klopot at startup (it used to be
   logged and skipped).
+- **`test: true` on `/v1/fire` no longer lifts the silencing for a `fire`
+  key.** It still marks the alert as a test; only an `admin` key or session
+  also skips throttle, the delivery gate, quiet hours and de-duplication. A
+  producer's "send a test" button keeps working, but a test is now throttled
+  among tests (`min_repeat_min`), and `suppressed_reason` says when one was
+  held. Migration `0040` (adds `throttle_state.is_test`) runs on startup.
 
 ### Added
 
@@ -28,6 +34,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+- `test: true` turned any `fire` key into an unthrottled pager (it skipped
+  throttle, quiet hours, the delivery gate, the duplicate claim and the
+  per-type cooldown). The test flag is now only a tag: test fires are
+  claimed and throttled in a pool of their own (`throttle_state` keyed on
+  `(type, is_test)`, like `dedup_claims`), so a test never delays or absorbs
+  a real alert, and lifting the silencing is an administrator's privilege.
 - Proxy trust fails closed: `ALERTD_TRUSTED_PROXY_CIDRS` is parsed once at
   startup with the parser every request uses; a typo no longer turns into
   "trust nothing" silently, and IPv4-mapped IPv6 peers match their IPv4

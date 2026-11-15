@@ -88,6 +88,10 @@ def sync_detailed(
     sends `resolved_type` if one was given. `episode` in the response says what happened. `test: true`
     ignores the key.
 
+    `test: true` marks the notification as a test. Only an `admin` caller's test also skips throttle,
+    quiet hours and de-duplication; a `fire` key's test is gated like any other fire —
+    `suppressed_reason` says why one was held.
+
     Args:
         body (FireRequest): Body for ``POST /v1/fire``.
 
@@ -128,6 +132,10 @@ def sync(
     sends `resolved_type` if one was given. `episode` in the response says what happened. `test: true`
     ignores the key.
 
+    `test: true` marks the notification as a test. Only an `admin` caller's test also skips throttle,
+    quiet hours and de-duplication; a `fire` key's test is gated like any other fire —
+    `suppressed_reason` says why one was held.
+
     Args:
         body (FireRequest): Body for ``POST /v1/fire``.
 
@@ -162,6 +170,10 @@ async def asyncio_detailed(
     incident) and notifies, repeats while it is open notify nothing, `status: resolved` closes it and
     sends `resolved_type` if one was given. `episode` in the response says what happened. `test: true`
     ignores the key.
+
+    `test: true` marks the notification as a test. Only an `admin` caller's test also skips throttle,
+    quiet hours and de-duplication; a `fire` key's test is gated like any other fire —
+    `suppressed_reason` says why one was held.
 
     Args:
         body (FireRequest): Body for ``POST /v1/fire``.
@@ -202,6 +214,10 @@ async def asyncio(
     incident) and notifies, repeats while it is open notify nothing, `status: resolved` closes it and
     sends `resolved_type` if one was given. `episode` in the response says what happened. `test: true`
     ignores the key.
+
+    `test: true` marks the notification as a test. Only an `admin` caller's test also skips throttle,
+    quiet hours and de-duplication; a `fire` key's test is gated like any other fire —
+    `suppressed_reason` says why one was held.
 
     Args:
         body (FireRequest): Body for ``POST /v1/fire``.

@@ -154,7 +154,7 @@ async def test_throttled_writes_suppressed_row(template_with_channel, db_session
     assert r.suppressed_reason == "throttled"
 
 
-async def test_test_fire_bypasses_throttle(template_with_channel, db_session, fake_dispatch_ok):
+async def test_an_admin_test_fire_bypasses_throttle(template_with_channel, db_session, fake_dispatch_ok):
     from app.db.models import ThrottleState
 
     t, _ = template_with_channel
@@ -165,7 +165,7 @@ async def test_test_fire_bypasses_throttle(template_with_channel, db_session, fa
     await db_session.commit()
     with patch("app.channels.manager.ChannelManager.dispatch", new=fake_dispatch_ok):
         r = await fire(
-            FireEnvelope(type=t.type, context={}, test=True),
+            FireEnvelope(type=t.type, context={}, test=True, override_silencing=True),
             db_session,
         )
     assert r.dispatched is True
@@ -232,15 +232,15 @@ async def test_claim_fire_resolves_single_winner(db_session):
     now = datetime(2030, 1, 1, 12, 0, 0)
     cutoff = now - timedelta(minutes=5)
 
-    assert await claim_fire(db_session, "t", "h1", "ntf_A", now, cutoff) == "ntf_A"
+    assert await claim_fire(db_session, "t", "h1", "ntf_A", now, cutoff, test=False) == "ntf_A"
     # Same context within the window → coalesce onto the first winner.
-    assert await claim_fire(db_session, "t", "h1", "ntf_B", now, cutoff) == "ntf_A"
+    assert await claim_fire(db_session, "t", "h1", "ntf_B", now, cutoff, test=False) == "ntf_A"
     # Different context is independent.
-    assert await claim_fire(db_session, "t", "h2", "ntf_C", now, cutoff) == "ntf_C"
+    assert await claim_fire(db_session, "t", "h2", "ntf_C", now, cutoff, test=False) == "ntf_C"
     # Later, the first slot is stale → re-claimed by a new fire.
     now2 = now + timedelta(minutes=10)
     assert await claim_fire(
-        db_session, "t", "h1", "ntf_D", now2, now2 - timedelta(minutes=5)
+        db_session, "t", "h1", "ntf_D", now2, now2 - timedelta(minutes=5), test=False,
     ) == "ntf_D"
 
 

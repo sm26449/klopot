@@ -146,8 +146,8 @@ async def stop_pending(
         if log.delivery_status in (DeliveryStatus.failed, DeliveryStatus.cancelled) and log.context_hash:
             from .dedup_claims import release_claim
 
-            await release_claim(session, log.type, log.context_hash, log.id)
-            await gating.release_type_reservation(session, log.type, log.id)
+            await release_claim(session, log.type, log.context_hash, log.id, test=log.is_test)
+            await gating.release_type_reservation(session, log.type, log.id, test=log.is_test)
 
 
 async def acknowledge(session: AsyncSession, incident: Incident, actor: str) -> None:

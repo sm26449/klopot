@@ -32,7 +32,10 @@ router = APIRouter()
         "`status: firing` opens it (an incident) and notifies, repeats while it "
         "is open notify nothing, `status: resolved` closes it and sends "
         "`resolved_type` if one was given. `episode` in the response says what "
-        "happened. `test: true` ignores the key."
+        "happened. `test: true` ignores the key.\n\n"
+        "`test: true` marks the notification as a test. Only an `admin` caller's "
+        "test also skips throttle, quiet hours and de-duplication; a `fire` key's "
+        "test is gated like any other fire — `suppressed_reason` says why one was held."
     ),
 )
 async def post_fire(
@@ -47,8 +50,12 @@ async def post_fire(
                 status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="status=resolved needs the idempotency_key of the episode to close",
             )
+        # The test flag only marks the fire; lifting throttle, quiet hours
+        # and de-duplication is an administrator's privilege — a fire key
+        # with test=true is gated and counted like any other fire.
         result = await fire_service.fire(
             session, type=body.type, context=body.context, source=source, test=body.test,
+            override_silencing=body.test and actor.has_scope("admin"),
         )
         await session.commit()
         return FireResponse(**result.as_dict())

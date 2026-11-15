@@ -138,14 +138,14 @@ async def test_past_min_repeat_allows(template, db_session):
     assert d.allowed is True
 
 
-async def test_test_fire_bypasses_throttle(template, db_session):
+async def test_an_admin_test_fire_bypasses_throttle(template, db_session):
     template.min_repeat_min = 30
     db_session.add(
         ThrottleState(type=template.type, last_fired_at=datetime.utcnow())
     )
     await db_session.commit()
     d = await evaluate(
-        GateInput(template=template, rule_id=None, channel_names=["ui"], test=True),
+        GateInput(template=template, rule_id=None, channel_names=["ui"], override_silencing=True),
         db_session,
     )
     assert d.allowed is True
@@ -165,7 +165,7 @@ async def test_min_repeat_zero_never_throttles(template, db_session):
 
 
 async def test_record_fire_inserts_when_missing(template, db_session):
-    await record_fire(template.type, db_session)
+    await record_fire(template.type, db_session, test=False)
     await db_session.commit()
     from sqlalchemy import select
 
@@ -181,7 +181,7 @@ async def test_record_fire_updates_existing(template, db_session):
     old = datetime.utcnow() - timedelta(hours=1)
     db_session.add(ThrottleState(type=template.type, last_fired_at=old))
     await db_session.commit()
-    await record_fire(template.type, db_session)
+    await record_fire(template.type, db_session, test=False)
     await db_session.commit()
     from sqlalchemy import select
 
@@ -304,9 +304,10 @@ def _fresh_cache():
         reset_state_cache_for_tests()
 
 
-async def _gate(template, db_session, *, test=False):
+async def _gate(template, db_session, *, override_silencing=False):
     return await evaluate(
-        GateInput(template=template, rule_id=None, channel_names=["ui"], test=test), db_session,
+        GateInput(template=template, rule_id=None, channel_names=["ui"], override_silencing=override_silencing),
+        db_session,
     )
 
 
@@ -358,13 +359,14 @@ async def test_gate_noop_without_variable(template, db_session):
         assert (await _gate(template, db_session)).allowed is True
 
 
-async def test_gate_skipped_for_test_fires(template, db_session):
+async def test_gate_skipped_for_an_admin_test_fire(template, db_session):
     from app.core.state_cache import get_state_cache
 
     template.gate_variable, template.gate_min = "tank.level", 5.0
     with _fresh_cache():
         await get_state_cache().set("tank.level", 0.0)
-        assert (await _gate(template, db_session, test=True)).allowed is True  # test fires bypass silencing gates
+        # An administrator's test fire bypasses the silencing gates.
+        assert (await _gate(template, db_session, override_silencing=True)).allowed is True
 
 
 # ── F14: quiet hours use settings.tz, not a silent UTC fallback ────

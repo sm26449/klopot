@@ -34,7 +34,10 @@ class FireRequest:
             resolved_type (None | str | Unset):
             source (None | str | Unset):
             status (FireRequestStatus | Unset):  Default: FireRequestStatus.FIRING.
-            test (bool | Unset):  Default: False.
+            test (bool | Unset): Mark the notification as a test (shown with a Test badge, kept apart from real fires for
+                de-duplication, sent without action buttons). With the `admin` scope the test also skips throttle, the delivery
+                gate, quiet hours and de-duplication; with any other scope it is gated and counted like a real fire. Default:
+                False.
      """
 
     type_: str

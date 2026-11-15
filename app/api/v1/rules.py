@@ -372,10 +372,10 @@ async def delete_rule(
     response_model=FireResponse,
     summary="Test fire — bypass throttle/quiet, dry-run on mock context",
     description=(
-        "Fires the rule's template with caller-supplied context. The "
-        "envelope is marked test=True so throttle and quiet hours are "
-        "skipped (template.enabled and snooze still apply). Useful from "
-        "the UI to preview a rendered title/message."
+        "Fires the rule's template with caller-supplied context, as an "
+        "administrator's test: marked as a test, and throttle, quiet hours "
+        "and de-duplication are skipped (template.enabled and snooze still "
+        "apply). Useful from the UI to preview a rendered title/message."
     ),
 )
 async def test_rule(
@@ -389,6 +389,7 @@ async def test_rule(
         type=rule.template_type,
         context=dict(body.context),
         test=True,
+        override_silencing=True,      # admin-only route
         source=f"test:{actor.name}",
         rule_id=rule.id,
     )

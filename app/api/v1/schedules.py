@@ -179,6 +179,7 @@ async def test_schedule(
         type=obj.template_type,
         context=dict(obj.context or {}),
         test=True,
+        override_silencing=True,      # admin-only route
         source=f"schedule:{obj.name}:test",
     )
     result = await dispatcher_module.fire(envelope, session)

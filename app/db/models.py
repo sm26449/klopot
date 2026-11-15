@@ -35,6 +35,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
     func,
 )
 from sqlalchemy.dialects import mysql
@@ -770,11 +771,14 @@ class DedupClaim(Base):
 
 
 class ThrottleState(Base):
-    """Last-fire tracker per template type — single row per type."""
+    """Last-fire tracker per template type and pool: real fires and test fires
+    are throttled apart (migration 0040), so a test never delays a real alert
+    — the same split as ``dedup_claims``."""
 
     __tablename__ = "throttle_state"
 
     type: Mapped[str] = mapped_column(String(64), primary_key=True)
+    is_test: Mapped[bool] = mapped_column(Boolean, primary_key=True, default=False, server_default=false())
     last_fired_at: Mapped[datetime | None] = mapped_column(DateTime)
     persist_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     persist_last_seen: Mapped[datetime | None] = mapped_column(DateTime)

@@ -151,7 +151,7 @@ Singurul endpoint de care are nevoie orice apelant extern. Cere scope-ul
 |------|-----|------|
 | `type` | string (1–64) | Tipul de template/alertă de declanșat. Obligatoriu. |
 | `context` | obiect | Variabile pentru randarea titlului/mesajului. |
-| `test` | bool | Default `false`. Un fire de test sare peste gate-urile de *silențiere* (throttle, quiet hours) dar tot înregistrează și trimite; marcat `is_test` în log. |
+| `test` | bool | Default `false`. Marchează notificarea ca test: `is_test` în log, insigna Test, de-duplicată separat de fire-urile reale, fără butoane de acțiune. Cu scope-ul **`admin`** (sau o sesiune de admin) sare și peste throttle, delivery gate, quiet hours și de-duplicare; cu o cheie `fire` trece prin gate-uri și se numără ca orice fire, iar `suppressed_reason` spune de ce a fost reținut. |
 | `source` | string | Tag opțional de origine (text liber) pentru audit/log. |
 | `idempotency_key` | string (1–128, `A-Za-z0-9._:@/-`) | Opțional. Face fire-ul parte dintr-un **episod** — vezi mai jos. Separat pentru fiecare cheie API. Ignorat când `test` e true. |
 | `status` | `firing` \| `resolved` | Implicit `firing`. `resolved` închide episodul numit de `idempotency_key` (obligatoriu atunci). |

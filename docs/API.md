@@ -150,7 +150,7 @@ scope.
 |-------|------|-------|
 | `type` | string (1–64) | The template/alert type to fire. Required. |
 | `context` | object | Variables for rendering the title/message. |
-| `test` | bool | Default `false`. A test fire skips the *silencing* gates (throttle, quiet hours) but still records and dispatches; marked `is_test` in the log. |
+| `test` | bool | Default `false`. Marks the notification as a test: `is_test` in the log, a Test badge, de-duplicated apart from real fires, no action buttons. With the **`admin`** scope (or an admin session) it also skips throttle, the delivery gate, quiet hours and de-duplication; with a `fire` key it is gated and counted like any other fire, and `suppressed_reason` says why one was held. |
 | `source` | string | Optional free-text origin tag for the audit/log. |
 | `idempotency_key` | string (1–128, `A-Za-z0-9._:@/-`) | Optional. Makes the fire part of an **episode** — see below. Scoped to the calling key. Ignored when `test` is true. |
 | `status` | `firing` \| `resolved` | Default `firing`. `resolved` closes the episode named by `idempotency_key` (required then). |

@@ -84,6 +84,9 @@ class FireEnvelope:
 
     type: str
     context: dict[str, Any]
+    # A test fire: marked is_test in the log, kept apart from real fires for
+    # de-duplication, sent without action buttons. On its own it is gated and
+    # counted like any other fire.
     test: bool = False
     source: str | None = None
     rule_id: int | None = None
@@ -101,6 +104,17 @@ class FireEnvelope:
     # occurrence. If it would coalesce onto a recent identical notification,
     # it is logged as a suppressed "duplicate" row instead of disappearing.
     reoccurrence: bool = False
+    # An administrator's test fire: the silencing gates (throttle, delivery
+    # gate, quiet hours), the duplicate claim and the per-type cooldown do not
+    # apply, and it does not count toward the throttle. A privilege, not a
+    # caller's flag: only code that has checked the caller may set it
+    # (api/v1/fire.py grants it to the admin scope). Snoozes, a disabled
+    # template and the channels' own rate limits still apply.
+    override_silencing: bool = False
+
+    def __post_init__(self) -> None:
+        if self.override_silencing and not self.test:
+            raise ValueError("override_silencing is only for a test fire")
 
 
 @dataclass
@@ -226,6 +240,7 @@ async def fire(envelope: FireEnvelope, session: AsyncSession) -> DispatchResult:
                 rule_id=envelope.rule_id,
                 channel_names=channel_names,
                 test=envelope.test,
+                override_silencing=envelope.override_silencing,
             ),
             session,
         )
@@ -275,18 +290,19 @@ async def fire(envelope: FireEnvelope, session: AsyncSession) -> DispatchResult:
     # two simultaneous identical fires can't both pass the SELECT-based dedup
     # and each create a notification. _find_recent_dup already coalesced onto
     # any older settled row; this closes the narrow concurrent window before
-    # the winner commits its log. Test fires are exempt (duplicate test rows
-    # send nothing and are used intentionally for repeated probes).
+    # the winner commits its log. An administrator's test fire is exempt
+    # (repeated probes are intentional); any other test fire is claimed, so a
+    # caller cannot use the test flag to repeat a notification.
     from ..config import get_settings as _get_settings
     from . import outbox
     ctx_hash = _envelope_hash(envelope)
     claimed = False
     _win = max(0, _get_settings().idempotency_window_sec)
-    if _win > 0 and not envelope.test:
+    if _win > 0 and not envelope.override_silencing:
         _cnow = utc_now()
         _winner = await claim_fire(
             session, template.type, ctx_hash,
-            notif_id, _cnow, _cnow - timedelta(seconds=_win),
+            notif_id, _cnow, _cnow - timedelta(seconds=_win), test=envelope.test,
         )
         claimed = _winner == notif_id
         if _winner != notif_id:
@@ -320,18 +336,18 @@ async def fire(envelope: FireEnvelope, session: AsyncSession) -> DispatchResult:
     # distinct-context racer reaches and loses this reservation. The reservation
     # is released on terminal failure (below + the worker) and superseded by the
     # confirmed cooldown (record_fire) on first success.
-    if template.min_repeat_min > 0 and not envelope.test:
+    if template.min_repeat_min > 0 and not envelope.override_silencing:
         _rnow = utc_now()
         _holder = await gating.reserve_type_slot(
             session, template.type, notif_id, _rnow,
-            _rnow - timedelta(seconds=template.min_repeat_min * 60),
+            _rnow - timedelta(seconds=template.min_repeat_min * 60), test=envelope.test,
         )
         if _holder != notif_id:
             # Lost the cooldown slot to a concurrent/recent fire. Release the
             # context claim we just won so this suppressed row holds no admission
             # claim, matching the gating-path throttle suppressions.
             if claimed:
-                await release_claim(session, template.type, ctx_hash, notif_id)
+                await release_claim(session, template.type, ctx_hash, notif_id, test=envelope.test)
             return _persist_suppressed(
                 session, envelope, template, notif_id, trace_id,
                 title, message, "throttled",
@@ -477,20 +493,23 @@ async def fire(envelope: FireEnvelope, session: AsyncSession) -> DispatchResult:
     # rule lifetime counter — through an idempotent CAS that a later retry shares
     # (audit V08). Gated on the persisted channel list, so a partial success
     # (one channel sent, another pending) still counts here and can't be dropped
-    # or, when the pending channel later retries, double-counted.
-    if not envelope.test and row.dispatched_to:
+    # or, when the pending channel later retries, double-counted. Every fire
+    # counts in its own pool (a test throttles only tests), so the delivery
+    # worker can do the same on a retry without knowing who fired it.
+    if row.dispatched_to:
         await gating.account_first_success(row, session)
 
     # Release the admission claim when the fire fully FAILED, so an identical
     # retry can create a fresh notification instead of coalescing onto this
     # failed one — matching the disposition-aware dedup (audit A02/A03 × R01).
     if claimed and status == DeliveryStatus.failed:
-        await release_claim(session, template.type, ctx_hash, notif_id)
+        await release_claim(session, template.type, ctx_hash, notif_id, test=envelope.test)
     # Release the per-type cooldown reservation too (audit B-10): a fire that
     # delivered nothing must not keep the type throttled for the rest of the
     # window. A partial/full success keeps it (record_fire set last_fired_at).
-    if status == DeliveryStatus.failed and template.min_repeat_min > 0 and not envelope.test:
-        await gating.release_type_reservation(session, template.type, notif_id)
+    # A no-op when this fire holds no reservation (an administrator's test).
+    if status == DeliveryStatus.failed and template.min_repeat_min > 0:
+        await gating.release_type_reservation(session, template.type, notif_id, test=envelope.test)
 
     return DispatchResult(
         id=notif_id,

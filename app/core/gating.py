@@ -17,9 +17,10 @@ Order:
                      in the service timezone.
 
 ``persist`` is enforced by the ENGINE via ``rule_state`` counters
-(it's a property of the rule, not of the dispatch). ``test=True``
-on a fire envelope bypasses 3 + 4 (the silencing gates) but still
-respects 1 + 2.
+(it's a property of the rule, not of the dispatch). An administrator's
+test fire (``override_silencing``) bypasses 3 + 4 (the silencing gates)
+but still respects 1 + 2; a test fire without that privilege is gated
+like any other.
 """
 from __future__ import annotations
 
@@ -29,7 +30,17 @@ from datetime import datetime, time
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import LargeBinary, String, and_, cast, or_, select, update
+from sqlalchemy import (
+    LargeBinary,
+    String,
+    and_,
+    cast,
+    false,
+    or_,
+    select,
+    true,
+    update,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -84,7 +95,10 @@ class GateInput:
     template: Template
     rule_id: int | None
     channel_names: list[str]
+    # Which throttle pool to consult: real fires and test fires are
+    # throttled apart (ThrottleState, migration 0040).
     test: bool = False
+    override_silencing: bool = False
 
 
 # ── Public entry point ────────────────────────────────────────────
@@ -111,10 +125,11 @@ async def evaluate(g: GateInput, session: AsyncSession) -> GateDecision:
         if not channels:
             return GateDecision.deny("snoozed")
 
-    # Test fires skip the silencing gates 3 + 4 but still respect 1 + 2
-    if not g.test:
+    # An administrator's test fire skips the silencing gates 3 + 4 but still
+    # respects 1 + 2 (dispatcher.FireEnvelope.override_silencing).
+    if not g.override_silencing:
         # 3. throttle
-        if await _is_throttled(g.template, session):
+        if await _is_throttled(g.template, session, test=g.test):
             return GateDecision.deny("throttled")
 
         # 3b. Delivery gate (audit A34, generic since 0030) — a template may
@@ -231,14 +246,19 @@ def _below_gate(template: Template) -> bool:
 # ── Throttle ──────────────────────────────────────────────────────
 
 
-async def _is_throttled(template: Template, session: AsyncSession) -> bool:
-    """True if last fire is within ``template.min_repeat_min`` of now."""
+def _slot(type_: str, test: bool) -> ColumnElement[bool]:
+    """The throttle row of ``type_`` in its pool. ``is_test = <literal>``,
+    never ``IS``: MySQL uses only an equality as a key match, and the
+    reservation reads this row FOR UPDATE (app/core/dedup_claims.py)."""
+    return and_(ThrottleState.type == type_, ThrottleState.is_test == (true() if test else false()))
+
+
+async def _is_throttled(template: Template, session: AsyncSession, *, test: bool) -> bool:
+    """True if the last fire of this pool is within ``template.min_repeat_min``."""
     if template.min_repeat_min <= 0:
         return False
     row = (
-        await session.execute(
-            select(ThrottleState.last_fired_at).where(ThrottleState.type == template.type)
-        )
+        await session.execute(select(ThrottleState.last_fired_at).where(_slot(template.type, test)))
     ).first()
     if row is None or row[0] is None:
         return False
@@ -249,7 +269,7 @@ async def _is_throttled(template: Template, session: AsyncSession) -> bool:
     return elapsed_s < (template.min_repeat_min * 60)
 
 
-async def record_fire(type_: str, session: AsyncSession) -> None:
+async def record_fire(type_: str, session: AsyncSession, *, test: bool) -> None:
     """Update last_fired_at after a successful (non-suppressed)
     dispatch. Caller commits.
 
@@ -275,23 +295,23 @@ async def record_fire(type_: str, session: AsyncSession) -> None:
         from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
         stmt = sqlite_insert(ThrottleState).values(
-            type=type_, last_fired_at=now,
+            type=type_, is_test=test, last_fired_at=now,
         ).on_conflict_do_update(
-            index_elements=[ThrottleState.type],
+            index_elements=[ThrottleState.type, ThrottleState.is_test],
             set_={"last_fired_at": now},
         )
     else:
         from sqlalchemy.dialects.mysql import insert as mysql_insert
 
         stmt = mysql_insert(ThrottleState).values(
-            type=type_, last_fired_at=now,
+            type=type_, is_test=test, last_fired_at=now,
         ).on_duplicate_key_update(last_fired_at=now)
     await session.execute(stmt)
 
 
 async def reserve_type_slot(
     session: AsyncSession, type_: str, notif_id: str,
-    now: datetime, cutoff: datetime,
+    now: datetime, cutoff: datetime, *, test: bool,
 ) -> str | None:
     """Atomically reserve the per-type cooldown slot at admission (audit B-10).
 
@@ -314,7 +334,7 @@ async def reserve_type_slot(
         or_(ThrottleState.reserved_at.is_(None), ThrottleState.reserved_at < cutoff),
         or_(ThrottleState.last_fired_at.is_(None), ThrottleState.last_fired_at < cutoff),
     )
-    values = {"type": type_, "reserved_at": now, "reserved_by": notif_id}
+    values = {"type": type_, "is_test": test, "reserved_at": now, "reserved_by": notif_id}
     # Dialect-conditional claim. The sqlite and mysql Insert constructs are
     # distinct types with dialect-only methods, so each branch runs its own
     # statement(s).
@@ -324,7 +344,7 @@ async def reserve_type_slot(
 
         # One atomic upsert whose WHERE gates the whole claim on `free`.
         stmt = sqlite_insert(ThrottleState).values(**values).on_conflict_do_update(
-            index_elements=["type"],
+            index_elements=["type", "is_test"],
             set_={"reserved_at": now, "reserved_by": notif_id},
             where=free,
         )
@@ -344,28 +364,28 @@ async def reserve_type_slot(
         await session.execute(ensure)
         await session.execute(
             update(ThrottleState)
-            .where(ThrottleState.type == type_, free)
+            .where(_slot(type_, test), free)
             .values(reserved_at=now, reserved_by=notif_id)
         )
 
     # Read the winning holder back with a CURRENT read (FOR UPDATE on MySQL), for
     # the same REPEATABLE-READ-snapshot reason as claim_fire: the loser of a true
     # race must see the winner's just-committed row, not a stale snapshot.
-    sel = select(ThrottleState.reserved_by).where(ThrottleState.type == type_)
+    sel = select(ThrottleState.reserved_by).where(_slot(type_, test))
     if dialect != "sqlite":
         sel = sel.with_for_update()
     return (await session.execute(sel)).scalar_one_or_none()
 
 
 async def release_type_reservation(
-    session: AsyncSession, type_: str, notif_id: str,
+    session: AsyncSession, type_: str, notif_id: str, *, test: bool,
 ) -> None:
     """Release this fire's per-type cooldown reservation (only if it still holds
     it), so a terminally-failed fire that delivered nothing does not keep the
     type throttled for the rest of the window (audit B-10)."""
     await session.execute(
         update(ThrottleState)
-        .where(ThrottleState.type == type_, ThrottleState.reserved_by == notif_id)
+        .where(_slot(type_, test), ThrottleState.reserved_by == notif_id)
         .values(reserved_at=None, reserved_by=None)
     )
 
@@ -399,8 +419,10 @@ async def account_first_success(
     if not won:
         return False
     log.success_counted = True
-    await record_fire(log.type, session)
-    if log.rule_id is not None and log.incident_event != "resolved":
+    # Into the notification's own pool: a test success throttles only tests.
+    await record_fire(log.type, session, test=log.is_test)
+    # A rule's lifetime counter counts real fires only (a rule test is not one).
+    if log.rule_id is not None and log.incident_event != "resolved" and not log.is_test:
         await session.execute(
             update(Rule)
             .where(Rule.id == log.rule_id)

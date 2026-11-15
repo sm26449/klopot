@@ -610,7 +610,7 @@ class RuleEngine:
                 template = await dispatcher_module._load_template(s, template_type)
                 if template is None:
                     return False
-                return await gating_module._is_throttled(template, s)
+                return await gating_module._is_throttled(template, s, test=False)
         except Exception:
             logger.exception("throttle pre-check for %s", template_type)
         return False

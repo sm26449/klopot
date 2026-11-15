@@ -81,9 +81,9 @@ def sync_detailed(
 ) -> Response[FireResponse | HTTPValidationError]:
     """ Test fire — bypass throttle/quiet, dry-run on mock context
 
-     Fires the rule's template with caller-supplied context. The envelope is marked test=True so throttle
-    and quiet hours are skipped (template.enabled and snooze still apply). Useful from the UI to preview
-    a rendered title/message.
+     Fires the rule's template with caller-supplied context, as an administrator's test: marked as a
+    test, and throttle, quiet hours and de-duplication are skipped (template.enabled and snooze still
+    apply). Useful from the UI to preview a rendered title/message.
 
     Args:
         rule_id (int):
@@ -119,9 +119,9 @@ def sync(
 ) -> FireResponse | HTTPValidationError | None:
     """ Test fire — bypass throttle/quiet, dry-run on mock context
 
-     Fires the rule's template with caller-supplied context. The envelope is marked test=True so throttle
-    and quiet hours are skipped (template.enabled and snooze still apply). Useful from the UI to preview
-    a rendered title/message.
+     Fires the rule's template with caller-supplied context, as an administrator's test: marked as a
+    test, and throttle, quiet hours and de-duplication are skipped (template.enabled and snooze still
+    apply). Useful from the UI to preview a rendered title/message.
 
     Args:
         rule_id (int):
@@ -152,9 +152,9 @@ async def asyncio_detailed(
 ) -> Response[FireResponse | HTTPValidationError]:
     """ Test fire — bypass throttle/quiet, dry-run on mock context
 
-     Fires the rule's template with caller-supplied context. The envelope is marked test=True so throttle
-    and quiet hours are skipped (template.enabled and snooze still apply). Useful from the UI to preview
-    a rendered title/message.
+     Fires the rule's template with caller-supplied context, as an administrator's test: marked as a
+    test, and throttle, quiet hours and de-duplication are skipped (template.enabled and snooze still
+    apply). Useful from the UI to preview a rendered title/message.
 
     Args:
         rule_id (int):
@@ -190,9 +190,9 @@ async def asyncio(
 ) -> FireResponse | HTTPValidationError | None:
     """ Test fire — bypass throttle/quiet, dry-run on mock context
 
-     Fires the rule's template with caller-supplied context. The envelope is marked test=True so throttle
-    and quiet hours are skipped (template.enabled and snooze still apply). Useful from the UI to preview
-    a rendered title/message.
+     Fires the rule's template with caller-supplied context, as an administrator's test: marked as a
+    test, and throttle, quiet hours and de-duplication are skipped (template.enabled and snooze still
+    apply). Useful from the UI to preview a rendered title/message.
 
     Args:
         rule_id (int):

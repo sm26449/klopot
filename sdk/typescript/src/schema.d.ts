@@ -554,6 +554,8 @@ export interface paths {
          * @description External callers (Node-RED, scripts, third-party apps) post here with `type` and `context` (vars used by the template). The service handles routing, throttling, and channel dispatch. Caller does NOT need to know channels, credentials, or templates.
          *
          *     With `idempotency_key` the fire belongs to an **episode**: the first `status: firing` opens it (an incident) and notifies, repeats while it is open notify nothing, `status: resolved` closes it and sends `resolved_type` if one was given. `episode` in the response says what happened. `test: true` ignores the key.
+         *
+         *     `test: true` marks the notification as a test. Only an `admin` caller's test also skips throttle, quiet hours and de-duplication; a `fire` key's test is gated like any other fire — `suppressed_reason` says why one was held.
          */
         post: operations["post_fire_v1_fire_post"];
         delete?: never;
@@ -1188,7 +1190,7 @@ export interface paths {
         put?: never;
         /**
          * Test fire — bypass throttle/quiet, dry-run on mock context
-         * @description Fires the rule's template with caller-supplied context. The envelope is marked test=True so throttle and quiet hours are skipped (template.enabled and snooze still apply). Useful from the UI to preview a rendered title/message.
+         * @description Fires the rule's template with caller-supplied context, as an administrator's test: marked as a test, and throttle, quiet hours and de-duplication are skipped (template.enabled and snooze still apply). Useful from the UI to preview a rendered title/message.
          */
         post: operations["test_rule_v1_rules__rule_id__test_post"];
         delete?: never;
@@ -2148,6 +2150,7 @@ export interface components {
             status: "firing" | "resolved";
             /**
              * Test
+             * @description Mark the notification as a test (shown with a Test badge, kept apart from real fires for de-duplication, sent without action buttons). With the `admin` scope the test also skips throttle, the delivery gate, quiet hours and de-duplication; with any other scope it is gated and counted like a real fire.
              * @default false
              */
             test: boolean;

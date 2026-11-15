@@ -427,12 +427,14 @@ Last-fire tracker per type — single row per template type.
 
 ```sql
 CREATE TABLE throttle_state (
-    type VARCHAR(64) PRIMARY KEY,
+    type VARCHAR(64) NOT NULL,
+    is_test BOOLEAN NOT NULL DEFAULT FALSE,   -- real and test fires throttle apart (0040)
     last_fired_at TIMESTAMP,
     persist_count INT NOT NULL DEFAULT 0,
     persist_last_seen TIMESTAMP,
     reserved_at TIMESTAMP,               -- cooldown admission (audit B-10)
-    reserved_by VARCHAR(64)              -- the notification holding the reservation
+    reserved_by VARCHAR(64),             -- the notification holding the reservation
+    PRIMARY KEY (type, is_test)
 );
 ```
 
@@ -769,6 +771,7 @@ All shipped. Migrations run automatically at container startup
 | `0037` | Added (2026-11-15, 1.1.0) | `push_subscriptions.paused_reason` (`service` / `operator`): who paused a device, recorded instead of inferred; existing paused rows classified once; forward-only |
 | `0038` | Added (2026-11-15, 1.1.0) | Index `ix_delivery_provider_ref` on `deliveries (provider_ref)`: the per-minute Pushover receipt poll scanned the delivery history; forward-only |
 | `0039` | Added (2026-11-15, 1.1.0) | Indexes `ix_login_attempts_ts`, `ix_sessions_last_seen`, `ix_inbound_events_received` for the retention deletes; forward-only |
+| `0040` | Added (2026-11-16) | `throttle_state.is_test`, primary key `(type, is_test)`: test fires are throttled among themselves and never delay a real alert; existing rows are real-fire state |
 
 ### Provider lifecycle (`0029`)
 

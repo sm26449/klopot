@@ -122,10 +122,9 @@ class DeliveryWorker:
                     select(Delivery).where(Delivery.notification_id == log.id)
                 )).scalars().all()
                 outbox.apply_rollup_to_log(log, list(siblings))
-                if log.delivery_status in (DeliveryStatus.failed, DeliveryStatus.cancelled) \
-                        and not log.is_test and log.context_hash:
-                    await release_claim(session, log.type, log.context_hash, log.id)
-                    await gating.release_type_reservation(session, log.type, log.id)
+                if log.delivery_status in (DeliveryStatus.failed, DeliveryStatus.cancelled) and log.context_hash:
+                    await release_claim(session, log.type, log.context_hash, log.id, test=log.is_test)
+                    await gating.release_type_reservation(session, log.type, log.id, test=log.is_test)
                 logger.warning("notification %s was left pending with every channel settled; now %s",
                                log.id, log.delivery_status)
             await session.commit()
@@ -221,10 +220,10 @@ class DeliveryWorker:
             )
         ).scalars().all()
         outbox.apply_rollup_to_log(log, list(siblings))
-        if log.delivery_status in (DeliveryStatus.failed, DeliveryStatus.cancelled) and not log.is_test and log.context_hash:
+        if log.delivery_status in (DeliveryStatus.failed, DeliveryStatus.cancelled) and log.context_hash:
             from .dedup_claims import release_claim
-            await release_claim(session, log.type, log.context_hash, log.id)
-            await gating.release_type_reservation(session, log.type, log.id)
+            await release_claim(session, log.type, log.context_hash, log.id, test=log.is_test)
+            await gating.release_type_reservation(session, log.type, log.id, test=log.is_test)
 
     async def _process_one(
         self, session: AsyncSession, delivery_id: int, mgr, icons: dict, now,
@@ -351,14 +350,14 @@ class DeliveryWorker:
         # Otherwise the claim keeps pointing at the dead id and an identical
         # in-window fire ghost-coalesces onto it as 'pending' with no new
         # delivery (audit V04).
-        if log.delivery_status == DeliveryStatus.failed and not log.is_test and log.context_hash:
+        if log.delivery_status == DeliveryStatus.failed and log.context_hash:
             from .dedup_claims import release_claim
-            await release_claim(session, log.type, log.context_hash, log.id)
+            await release_claim(session, log.type, log.context_hash, log.id, test=log.is_test)
             # Release the per-type cooldown reservation too (audit B-10), so a
             # fire that failed on every channel does not keep the type throttled
             # for the rest of the window. No-op when it held none (min_repeat=0
             # or a sibling already superseded it).
-            await gating.release_type_reservation(session, log.type, log.id)
+            await gating.release_type_reservation(session, log.type, log.id, test=log.is_test)
 
         # Account the first successful delivery exactly once — the same
         # idempotent CAS the sync dispatch uses (audit F21/V08). When this retry
@@ -366,7 +365,7 @@ class DeliveryWorker:
         # when a different channel already counted it synchronously, the CAS is a
         # no-op, so a partial sync success followed by this retry is neither
         # dropped nor double-counted.
-        if log.dispatched_to and not log.is_test:
+        if log.dispatched_to:       # in the notification's own pool (gating.account_first_success)
             await gating.account_first_success(log, session)
         return True
 

@@ -125,7 +125,7 @@ async def test_released_reservation_admits_a_distinct_fire(routed_template, db_s
         await db_session.commit()
 
         # Simulate the terminal-failure release hook.
-        await gating.release_type_reservation(db_session, t.type, a.id)
+        await gating.release_type_reservation(db_session, t.type, a.id, test=False)
         await db_session.commit()
 
         b = await fire(FireEnvelope(type=t.type, context={"dev": "B"}), db_session)
@@ -143,16 +143,16 @@ async def test_reserve_slot_winner_loser_stale_and_release(db_session):
     cutoff = now - timedelta(minutes=30)
 
     # First fire wins the slot.
-    assert await gating.reserve_type_slot(db_session, "ty", "n_A", now, cutoff) == "n_A"
+    assert await gating.reserve_type_slot(db_session, "ty", "n_A", now, cutoff, test=False) == "n_A"
     # A second within the window loses — the holder stays the first.
-    assert await gating.reserve_type_slot(db_session, "ty", "n_B", now, cutoff) == "n_A"
+    assert await gating.reserve_type_slot(db_session, "ty", "n_B", now, cutoff, test=False) == "n_A"
     # Releasing by the holder frees it for the next fire.
-    await gating.release_type_reservation(db_session, "ty", "n_A")
-    assert await gating.reserve_type_slot(db_session, "ty", "n_C", now, cutoff) == "n_C"
+    await gating.release_type_reservation(db_session, "ty", "n_A", test=False)
+    assert await gating.reserve_type_slot(db_session, "ty", "n_C", now, cutoff, test=False) == "n_C"
     # Outside the window the slot is stale and re-reserved.
     now2 = now + timedelta(minutes=31)
     assert await gating.reserve_type_slot(
-        db_session, "ty", "n_D", now2, now2 - timedelta(minutes=30)
+        db_session, "ty", "n_D", now2, now2 - timedelta(minutes=30), test=False,
     ) == "n_D"
 
 
@@ -165,6 +165,6 @@ async def test_confirmed_cooldown_blocks_reservation(db_session):
 
     # reserved_by is NULL on that row → a losing reserve returns None (≠ notif).
     holder = await gating.reserve_type_slot(
-        db_session, "ty", "n_X", now, now - timedelta(minutes=30)
+        db_session, "ty", "n_X", now, now - timedelta(minutes=30), test=False,
     )
     assert holder != "n_X"

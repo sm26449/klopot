@@ -59,11 +59,14 @@ class EpisodeOutcome:
 
 async def fire(
     session: AsyncSession, *, type: str, context: dict[str, Any], source: str | None,
-    test: bool = False,
+    test: bool = False, override_silencing: bool = False,
 ) -> dispatcher.DispatchResult:
-    """A one-off notification. The caller commits."""
+    """A one-off notification. The caller commits. ``override_silencing`` is
+    the administrator's test privilege (dispatcher.FireEnvelope); the caller
+    decides who has it."""
     return await dispatcher.fire(dispatcher.FireEnvelope(
         type=type, context=context, test=test, source=source, rule_id=None,
+        override_silencing=override_silencing,
     ), session)
 
 
