@@ -54,6 +54,10 @@ class MeResponse(BaseModel):
     user: UserRead
     scopes: list[str]
     session: SessionRead
+    # The address this request came from as Klopot sees it (behind a trusted
+    # proxy: the client's, not the proxy's) — what an API key's source
+    # allowlist is matched against.
+    client_ip: str | None = None
 
 
 class PasswordChangeRequest(BaseModel):

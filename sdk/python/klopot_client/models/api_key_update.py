@@ -25,11 +25,14 @@ T = TypeVar("T", bound="ApiKeyUpdate")
 class ApiKeyUpdate:
     """ 
         Attributes:
+            allowed_cidrs (list[str] | None | Unset): Addresses the key may be used from: IPs or CIDRs (IPv4 and IPv6).
+                Empty = any address. A request from elsewhere gets 403 and counts as a wrong key for that address.
             enabled (bool | None | Unset):
             expires_at (datetime.datetime | None | Unset):
             scopes (list[str] | None | Unset):
      """
 
+    allowed_cidrs: list[str] | None | Unset = UNSET
     enabled: bool | None | Unset = UNSET
     expires_at: datetime.datetime | None | Unset = UNSET
     scopes: list[str] | None | Unset = UNSET
@@ -40,6 +43,16 @@ class ApiKeyUpdate:
 
 
     def to_dict(self) -> dict[str, Any]:
+        allowed_cidrs: list[str] | None | Unset
+        if isinstance(self.allowed_cidrs, Unset):
+            allowed_cidrs = UNSET
+        elif isinstance(self.allowed_cidrs, list):
+            allowed_cidrs = self.allowed_cidrs
+
+
+        else:
+            allowed_cidrs = self.allowed_cidrs
+
         enabled: bool | None | Unset
         if isinstance(self.enabled, Unset):
             enabled = UNSET
@@ -69,6 +82,8 @@ class ApiKeyUpdate:
         field_dict.update(self.additional_properties)
         field_dict.update({
         })
+        if allowed_cidrs is not UNSET:
+            field_dict["allowed_cidrs"] = allowed_cidrs
         if enabled is not UNSET:
             field_dict["enabled"] = enabled
         if expires_at is not UNSET:
@@ -83,6 +98,24 @@ class ApiKeyUpdate:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
+        def _parse_allowed_cidrs(data: object) -> list[str] | None | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            try:
+                if not isinstance(data, list):
+                    raise TypeError()
+                allowed_cidrs_type_0 = cast(list[str], data)
+
+                return allowed_cidrs_type_0
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
+            return cast(list[str] | None | Unset, data)
+
+        allowed_cidrs = _parse_allowed_cidrs(d.pop("allowed_cidrs", UNSET))
+
+
         def _parse_enabled(data: object) -> bool | None | Unset:
             if data is None:
                 return data
@@ -132,6 +165,7 @@ class ApiKeyUpdate:
 
 
         api_key_update = cls(
+            allowed_cidrs=allowed_cidrs,
             enabled=enabled,
             expires_at=expires_at,
             scopes=scopes,

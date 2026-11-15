@@ -2,6 +2,7 @@
 // delete, with the plaintext shown exactly once in a copy modal.
 import { html, useState, useEffect, useCallback } from "../lib/h.js";
 import { api, getAll } from "../lib/api.js";
+import { lookup } from "../lib/lookup.js";
 import { toast } from "../lib/toast.js";
 import { Drawer, useDirty, Modal, Spinner, Empty, ErrorState, StaleBanner, DangerConfirm, DraftBanner } from "../lib/ui.js";
 import { useDraft } from "../lib/draft.js";
@@ -40,12 +41,15 @@ export function ApiKeysView() {
         actions=${[{ label: t("apikeys.newKey"), primary: true, onClick: () => setEditing({ __new: true }) }, { label: t("apikeys.blank.reference"), href: "#/api" }]} />`
       : html`<div class="card scroll-x" style="padding:0" tabindex="0" role="region" aria-label=${t("apikeys.tableAria")}>
         <table class="tbl">
-          <thead><tr><th>${t("apikeys.colName")}</th><th>${t("apikeys.colPrefix")}</th><th>${t("apikeys.colScopes")}</th><th>${t("apikeys.colState")}</th><th>${t("apikeys.colExpires")}</th><th>${t("apikeys.colLastUsed")}</th></tr></thead>
+          <thead><tr><th>${t("apikeys.colName")}</th><th>${t("apikeys.colPrefix")}</th><th>${t("apikeys.colScopes")}</th><th>${t("apikeys.colState")}</th><th>${t("apikeys.colAddresses")}</th><th>${t("apikeys.colExpires")}</th><th>${t("apikeys.colLastUsed")}</th></tr></thead>
           <tbody>${items.map((k) => html`<tr key=${k.id} style="cursor:pointer" ...${clickable(() => setEditing(k), t("apikeys.editAria", { name: k.name }))}>
             <td><b>${k.name}</b>${k.rotated_from_id ? html` <span class="muted small">${t("apikeys.rotatedFrom", { id: k.rotated_from_id })}</span>` : null}</td>
             <td class="mono small">${k.key_prefix}…</td>
             <td>${k.scopes.map((s) => html`<span key=${s} class="chip tag">${s}</span>`)}</td>
             <td>${k.enabled ? html`<span class="badge ok plain">${t("apikeys.badgeEnabled")}</span>` : html`<span class="badge plain">${t("apikeys.badgeRevoked")}</span>`}</td>
+            <td>${(k.allowed_cidrs || []).length
+              ? html`<span class="chip tag" title=${k.allowed_cidrs.join("\n")}>${t("apikeys.addressesCount", { count: k.allowed_cidrs.length })}</span>`
+              : html`<span class="muted small">${t("apikeys.addressesAny")}</span>`}</td>
             <td title=${fmtDateTime(k.expires_at)}>${k.expires_at ? fmtRelative(k.expires_at) : t("apikeys.never")}</td>
             <td title=${fmtDateTime(k.last_used_at)}>${k.last_used_at ? html`${fmtRelative(k.last_used_at)}${k.last_used_ip ? html` <span class="muted small mono">${k.last_used_ip}</span>` : null}` : t("apikeys.never")}</td>
           </tr>`)}</tbody></table></div>`}
@@ -92,12 +96,18 @@ function KeyEditor({ apikey, onClose, onSaved, onPlaintext }) {
   const [enabled, setEnabled] = useState(isNew ? true : apikey.enabled);
   const [expires, setExpires] = useState(isNew ? "" : toLocalDatetimeInput(apikey.expires_at));
   const [grace, setGrace] = useState("0");
+  // The source allowlist as typed: one address or network per line.
+  const [cidrs, setCidrs] = useState(isNew ? "" : (apikey.allowed_cidrs || []).join("\n"));
+  const [myIp, setMyIp] = useState(null);
+  useEffect(() => { lookup(api.me().then((m) => setMyIp(m.client_ip || null))); }, []);
   const [busy, setBusy] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
   const fe = useFieldErrors();
   const nameOk = !isNew || /^[a-z][a-z0-9_-]*$/.test(name);
 
   function toggleScope(s) { setScopes((cur) => cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]); }
+  const cidrList = cidrs.split(/[\s,]+/).map((x) => x.trim()).filter(Boolean);
+  const addAddress = (ip) => { if (ip && !cidrList.includes(ip)) setCidrs((cur) => (cur.trim() ? cur.trimEnd() + "\n" : "") + ip); };
   const expiresIso = expires ? new Date(expires).toISOString() : null;
 
   async function save() {
@@ -107,11 +117,11 @@ function KeyEditor({ apikey, onClose, onSaved, onPlaintext }) {
     setBusy(true);
     try {
       if (isNew) {
-        const created = await api.post("/v1/api_keys", { name, scopes, enabled, expires_at: expiresIso });
+        const created = await api.post("/v1/api_keys", { name, scopes, enabled, expires_at: expiresIso, allowed_cidrs: cidrList });
         draft.clear();
         onPlaintext({ name: created.name, key: created.key });
       } else {
-        await api.patch(`/v1/api_keys/${apikey.id}`, { scopes, enabled, expires_at: expiresIso });
+        await api.patch(`/v1/api_keys/${apikey.id}`, { scopes, enabled, expires_at: expiresIso, allowed_cidrs: cidrList });
         toast.ok(t("apikeys.keyUpdated")); draft.clear(); onSaved();
       }
     } catch (e) { if (!fe.show(e)) toast.error(e); } finally { setBusy(false); }
@@ -129,14 +139,14 @@ function KeyEditor({ apikey, onClose, onSaved, onPlaintext }) {
     catch (e) { toast.error(e); setConfirmDel(false); } finally { setBusy(false); }
   }
 
-  const dirty = useDirty({ name, scopes, enabled, expires, grace });
-  const draft = useDraft("apikeys", isNew ? null : apikey.id, { name, scopes, enabled, expires, grace }, dirty);
-  const restoreDraft = () => { const d = draft.recovered; setName(d.name); setScopes(d.scopes); setEnabled(d.enabled); setExpires(d.expires); setGrace(d.grace); draft.restore(); };
+  const dirty = useDirty({ name, scopes, enabled, expires, grace, cidrs });
+  const draft = useDraft("apikeys", isNew ? null : apikey.id, { name, scopes, enabled, expires, grace, cidrs }, dirty);
+  const restoreDraft = () => { const d = draft.recovered; setName(d.name); setScopes(d.scopes); setEnabled(d.enabled); setExpires(d.expires); setGrace(d.grace); setCidrs(d.cidrs ?? ""); draft.restore(); };
   const closeDraft = () => { draft.clear(); onClose(); };
   return html`<${Drawer} open=${true} width=${560} title=${isNew ? t("apikeys.newKeyTitle") : apikey.name} onClose=${closeDraft} dirty=${dirty}>
     ${draft.recovered ? html`<${DraftBanner} onRestore=${restoreDraft} onDiscard=${draft.dismiss} />` : null}
     <${FieldErrorSummary} errors=${fe.errors}
-      idFor=${(f) => ({ name: "k-name", expires_at: "k-expires" }[f.split(".").pop()] || "k-name")} />
+      idFor=${(f) => ({ name: "k-name", expires_at: "k-expires", allowed_cidrs: "k-cidrs" }[f.split(".").pop()] || "k-name")} />
     <div class="editor">
       ${isNew ? html`<div class="field"><label for="k-name">${t("apikeys.fieldName")} <span class="req">*</span></label>
         <input id="k-name" value=${name} onInput=${(e) => setName(e.target.value)}
@@ -149,6 +159,20 @@ function KeyEditor({ apikey, onClose, onSaved, onPlaintext }) {
         ${SCOPES.map(([s, desc]) => html`<label key=${s} class="chk scope-row">
           <input type="checkbox" checked=${scopes.includes(s)} onChange=${() => toggleScope(s)} />
           <span><b>${s}</b> <span class="muted small">— ${desc()}</span></span></label>`)}</fieldset>
+
+      <div class=${"field" + (fe.msgFor("allowed_cidrs") ? " has-error" : "")}>
+        <label for="k-cidrs">${t("apikeys.fieldAddresses")}</label>
+        <textarea id="k-cidrs" rows="3" class="mono" value=${cidrs} onInput=${(e) => setCidrs(e.target.value)}
+          placeholder=${t("apikeys.addressesPlaceholder")} spellcheck="false"
+          aria-invalid=${fe.msgFor("allowed_cidrs") ? "true" : undefined}
+          aria-describedby=${"k-cidrs-help" + (fe.msgFor("allowed_cidrs") ? " " + fieldErrorId("allowed_cidrs") : "")}></textarea>
+        <div id="k-cidrs-help" class="hint">${t("apikeys.addressesHelp")}</div>
+        ${fe.msgFor("allowed_cidrs") ? html`<div id=${fieldErrorId("allowed_cidrs")} class="error small" role="alert">${fe.msgFor("allowed_cidrs")}</div>` : null}
+        <div class="form-actions" style="flex-wrap:wrap">
+          ${myIp ? html`<button type="button" class="btn sm" onClick=${() => addAddress(myIp)} disabled=${cidrList.includes(myIp)}>${t("apikeys.addMine", { ip: myIp })}</button>` : null}
+          ${!isNew && apikey.last_used_ip && apikey.last_used_ip !== myIp ? html`<button type="button" class="btn sm" onClick=${() => addAddress(apikey.last_used_ip)} disabled=${cidrList.includes(apikey.last_used_ip)}>${t("apikeys.addLastUsed", { ip: apikey.last_used_ip })}</button>` : null}
+        </div>
+      </div>
 
       <div class="row2">
         <div class=${"field" + (fe.msgFor("expires_at") ? " has-error" : "")}><label for="k-expires">${t("apikeys.expiresLabel")}</label>

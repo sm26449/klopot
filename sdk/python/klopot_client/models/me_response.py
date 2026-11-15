@@ -8,6 +8,7 @@ from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
+from ..types import UNSET, Unset
 from typing import cast
 
 if TYPE_CHECKING:
@@ -29,11 +30,13 @@ class MeResponse:
             scopes (list[str]):
             session (SessionRead):
             user (UserRead):
+            client_ip (None | str | Unset):
      """
 
     scopes: list[str]
     session: SessionRead
     user: UserRead
+    client_ip: None | str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
 
@@ -51,6 +54,12 @@ class MeResponse:
 
         user = self.user.to_dict()
 
+        client_ip: None | str | Unset
+        if isinstance(self.client_ip, Unset):
+            client_ip = UNSET
+        else:
+            client_ip = self.client_ip
+
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
@@ -59,6 +68,8 @@ class MeResponse:
             "session": session,
             "user": user,
         })
+        if client_ip is not UNSET:
+            field_dict["client_ip"] = client_ip
 
         return field_dict
 
@@ -82,10 +93,21 @@ class MeResponse:
 
 
 
+        def _parse_client_ip(data: object) -> None | str | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(None | str | Unset, data)
+
+        client_ip = _parse_client_ip(d.pop("client_ip", UNSET))
+
+
         me_response = cls(
             scopes=scopes,
             session=session,
             user=user,
+            client_ip=client_ip,
         )
 
 

@@ -413,6 +413,10 @@ Before you open it:
 - **One key per caller, scope `fire` only** (Admin UI → API keys), with an
   expiry. A `fire` key can send alerts and nothing else; revoke it alone if it
   leaks. Never use an admin key from outside.
+- **Limit each key to its caller's addresses** (the key's "Allowed
+  addresses", docs/AUTH_MODEL.md "Source allowlist"): a key copied elsewhere
+  then gets `403`, and its attempts count toward that address's wrong-key
+  limit.
 - **Set a read timeout on traefik's entrypoint** (static configuration, not a
   label), so a slow upload cannot hold a connection open:
   ```yaml

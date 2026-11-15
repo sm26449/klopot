@@ -277,6 +277,7 @@ async def me(
         session=SessionRead.model_validate(sess, from_attributes=True).model_copy(
             update={"current": True}
         ),
+        client_ip=_client_ip(request),
     )
 
 

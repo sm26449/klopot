@@ -111,6 +111,7 @@ async def create_key(
         scopes=body.scopes,
         enabled=body.enabled,
         expires_at=to_naive_utc(body.expires_at),
+        allowed_cidrs=body.allowed_cidrs or None,
     )
     session.add(obj)
     await flush_or_409(session, "API key create")
@@ -151,6 +152,8 @@ async def update_key(
         _validate_scopes(body.scopes)
     before = model_to_dict(obj)
     for k, v in body.model_dump(exclude_unset=True).items():
+        if k == "allowed_cidrs":
+            v = v or None           # empty = any address, stored as NULL like a new key
         setattr(obj, k, v)
     await flush_or_409(session, "API key update")
     await session.refresh(obj)
@@ -160,8 +163,9 @@ async def update_key(
         before=before, after=model_to_dict(obj),
     )
     await session.commit()
-    # Scope / enabled / expiry changes must take effect on the next
-    # request, not after the 30s resolve cache expires.
+    # Scope / enabled / expiry / allowlist changes must take effect on the
+    # next request, not after the 30s resolve cache expires; the key's live
+    # streams are closed too and must reconnect from an allowed address.
     invalidate_key_cache(obj.id)
     return ApiKeyRead.model_validate(obj)
 
@@ -216,6 +220,8 @@ async def rotate_key(
         scopes=list(old.scopes),
         enabled=True,
         expires_at=old.expires_at,
+        # The successor keeps the source allowlist: rotating must not lift it.
+        allowed_cidrs=list(old.allowed_cidrs) if old.allowed_cidrs else None,
         rotated_from_id=old.id,
     )
     if grace_sec > 0:

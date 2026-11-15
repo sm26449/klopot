@@ -1708,6 +1708,11 @@ export interface components {
         /** ApiKeyCreate */
         ApiKeyCreate: {
             /**
+             * Allowed Cidrs
+             * @description Addresses the key may be used from: IPs or CIDRs (IPv4 and IPv6). Empty = any address. A request from elsewhere gets 403 and counts as a wrong key for that address.
+             */
+            allowed_cidrs?: string[];
+            /**
              * Enabled
              * @default true
              */
@@ -1724,6 +1729,11 @@ export interface components {
          * @description Returned ONCE on POST /v1/api_keys — includes plaintext key.
          */
         ApiKeyCreated: {
+            /**
+             * Allowed Cidrs
+             * @description Addresses the key may be used from: IPs or CIDRs (IPv4 and IPv6). Empty = any address. A request from elsewhere gets 403 and counts as a wrong key for that address.
+             */
+            allowed_cidrs?: string[];
             /** Created At */
             created_at: string | null;
             /** Enabled */
@@ -1752,6 +1762,11 @@ export interface components {
          * @description Public read shape — never includes the plaintext key.
          */
         ApiKeyRead: {
+            /**
+             * Allowed Cidrs
+             * @description Addresses the key may be used from: IPs or CIDRs (IPv4 and IPv6). Empty = any address. A request from elsewhere gets 403 and counts as a wrong key for that address.
+             */
+            allowed_cidrs?: string[];
             /** Created At */
             created_at: string | null;
             /** Enabled */
@@ -1775,6 +1790,11 @@ export interface components {
         };
         /** ApiKeyUpdate */
         ApiKeyUpdate: {
+            /**
+             * Allowed Cidrs
+             * @description Addresses the key may be used from: IPs or CIDRs (IPv4 and IPv6). Empty = any address. A request from elsewhere gets 403 and counts as a wrong key for that address.
+             */
+            allowed_cidrs?: string[] | null;
             /** Enabled */
             enabled?: boolean | null;
             /** Expires At */
@@ -2561,6 +2581,8 @@ export interface components {
         };
         /** MeResponse */
         MeResponse: {
+            /** Client Ip */
+            client_ip?: string | null;
             /** Scopes */
             scopes: string[];
             session: components["schemas"]["SessionRead"];

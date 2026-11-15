@@ -885,6 +885,10 @@ class ApiKey(Base):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime)
     last_used_ip: Mapped[str | None] = mapped_column(String(45))
+    # The addresses (IPs or CIDRs, normalised) the key may be used from;
+    # NULL or empty = any address. Checked on every request (auth.py), after
+    # the key itself, against the real client address (utils/client_ip.py).
+    allowed_cidrs: Mapped[list[str] | None] = mapped_column(JSON)
     rotated_from_id: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("api_keys.id", ondelete="SET NULL"),

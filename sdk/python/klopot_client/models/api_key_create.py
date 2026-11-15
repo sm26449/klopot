@@ -26,12 +26,15 @@ class ApiKeyCreate:
     """ 
         Attributes:
             name (str):
+            allowed_cidrs (list[str] | Unset): Addresses the key may be used from: IPs or CIDRs (IPv4 and IPv6). Empty = any
+                address. A request from elsewhere gets 403 and counts as a wrong key for that address.
             enabled (bool | Unset):  Default: True.
             expires_at (datetime.datetime | None | Unset):
             scopes (list[str] | Unset):
      """
 
     name: str
+    allowed_cidrs: list[str] | Unset = UNSET
     enabled: bool | Unset = True
     expires_at: datetime.datetime | None | Unset = UNSET
     scopes: list[str] | Unset = UNSET
@@ -43,6 +46,12 @@ class ApiKeyCreate:
 
     def to_dict(self) -> dict[str, Any]:
         name = self.name
+
+        allowed_cidrs: list[str] | Unset = UNSET
+        if not isinstance(self.allowed_cidrs, Unset):
+            allowed_cidrs = self.allowed_cidrs
+
+
 
         enabled = self.enabled
 
@@ -66,6 +75,8 @@ class ApiKeyCreate:
         field_dict.update({
             "name": name,
         })
+        if allowed_cidrs is not UNSET:
+            field_dict["allowed_cidrs"] = allowed_cidrs
         if enabled is not UNSET:
             field_dict["enabled"] = enabled
         if expires_at is not UNSET:
@@ -81,6 +92,9 @@ class ApiKeyCreate:
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
         name = d.pop("name")
+
+        allowed_cidrs = cast(list[str], d.pop("allowed_cidrs", UNSET))
+
 
         enabled = d.pop("enabled", UNSET)
 
@@ -109,6 +123,7 @@ class ApiKeyCreate:
 
         api_key_create = cls(
             name=name,
+            allowed_cidrs=allowed_cidrs,
             enabled=enabled,
             expires_at=expires_at,
             scopes=scopes,

@@ -34,6 +34,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Per-key source allowlist**: an API key can be limited to IPs / CIDRs
+  (IPv4 and IPv6) — API keys → the key → *Allowed addresses*, with "Add my
+  address" — or `allowed_cidrs` on `/v1/api_keys`. From anywhere else it
+  gets `403` and counts as a wrong key for that address; checked on every
+  request, cached or not, HTTP and WebSocket; rotation keeps it; a change
+  applies at once. Empty = any address, as for every existing key
+  (migration `0042`). `GET /v1/auth/me` returns `client_ip`.
 - `compose.public.yml`: accept alerts from the internet — opens exactly
   `POST /v1/fire`, with a per-client rate limit, an overall in-flight limit
   and a 64 KiB body limit in traefik (docs/DEPLOY.md, "Exposing /v1/fire to

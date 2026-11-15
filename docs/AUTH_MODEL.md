@@ -45,6 +45,7 @@ CREATE TABLE api_keys (
     expires_at TIMESTAMP NULL,                -- optional auto-expiry
     last_used_at TIMESTAMP NULL,
     last_used_ip VARCHAR(45),
+    allowed_cidrs JSON NULL,                  -- source allowlist; NULL / [] = any address (0042)
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     rotated_from_id BIGINT NULL                -- chain rotated keys for audit
 );
@@ -121,6 +122,32 @@ Middleware:
 7. Endpoint-level decorator checks scope match
 8. Audit log entry on admin writes
 
+### Source allowlist
+
+A key may be limited to the addresses it is used from: `allowed_cidrs`, a
+list of IPs or CIDRs, IPv4 and IPv6 (at most 64; empty = any address, which
+every key has unless you set one). Set it in the admin UI (API keys → the
+key → Allowed addresses; "Add my address" fills in yours as Klopot sees it)
+or with `allowed_cidrs` on `POST` / `PATCH /v1/api_keys`. Entries are
+stored normalised (`10.0.0.7/24` → `10.0.0.0/24`); a `/0` is refused,
+because an empty list already means "any".
+
+- **Checked on every request** with the key — HTTP and the WebSocket
+  `?api_key=` alike, a cached key too — after the key is known to be right
+  and before its use is recorded, against the real client address (behind
+  `ALERTD_TRUSTED_PROXY_CIDRS`, as above; an IPv4-mapped IPv6 address
+  matches its IPv4 network).
+- **From elsewhere: `403`** ("This API key is not allowed from this
+  address"), counted **once** as a wrong key for that address — so a leaked
+  key used from outside its networks also runs into the `429` above.
+  `last_used_at` / `last_used_ip` are not updated by a refused request.
+- **Changes apply at once:** editing the list drops the key's cached
+  credentials and closes its live streams, which must reconnect from an
+  allowed address. Rotation copies the list to the new key.
+
+Give every key used from outside your network both a `fire`-only scope and
+the narrowest list you can.
+
 ### Rotation
 
 `POST /v1/api_keys/{id}/rotate` returns a new plaintext key and:
@@ -129,6 +156,7 @@ Middleware:
   stays valid for N seconds
 - During grace, both keys work; after grace, old returns 401
 - `rotated_from_id` chains forward for audit trail
+- The new key keeps the old key's scopes, expiry and source allowlist
 
 This lets rolling deploys swap secrets without downtime.
 

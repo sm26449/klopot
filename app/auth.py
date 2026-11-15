@@ -39,7 +39,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .config import get_settings
 from .db import get_session
 from .db.models import AdminSession, AdminUser, ApiKey
-from .utils.client_ip import real_client_ip
+from .utils.client_ip import Network, in_networks, parse_networks, real_client_ip
 from .utils.time import utc_now
 
 _HEADER = APIKeyHeader(
@@ -66,6 +66,10 @@ class Actor:
     name: str
     scopes: frozenset[str]
     session_id: int | None = None  # admin_sessions.id for kind="user"
+    # An API key's source allowlist (api_keys.allowed_cidrs), parsed; empty =
+    # any address. Kept on the cached actor so every request — a cache hit
+    # too — is checked against its own client address (_source_allowed).
+    allowed_networks: tuple[Network, ...] = ()
 
     def has_scope(self, required: str) -> bool:
         """``admin`` implies all other scopes."""
@@ -270,6 +274,28 @@ def reset_key_failures() -> None:
     _key_verifies_pending = 0
 
 
+class _WrongSource(Exception):
+    """A right key used from an address its allowlist does not include."""
+
+
+def _key_networks(row: ApiKey) -> tuple[Network, ...]:
+    # Stored normalised (schemas/api_key.py); parsing is cached per list.
+    return parse_networks(tuple(row.allowed_cidrs or ()), label="address",
+                          catch_all="allows every address; leave the list empty for that")
+
+
+def _source_allowed(actor: Actor, client_ip: str | None) -> bool:
+    """No allowlist, or the client address is in it. Without an address
+    (no peer) a restricted key is refused."""
+    if not actor.allowed_networks:
+        return True
+    return client_ip is not None and in_networks(client_ip, actor.allowed_networks)
+
+
+def _source_refused() -> HTTPException:
+    return HTTPException(status.HTTP_403_FORBIDDEN, detail="This API key is not allowed from this address")
+
+
 async def _resolve_key(
     raw: str,
     session: AsyncSession,
@@ -283,6 +309,11 @@ async def _resolve_key(
 
     Caches successful resolves for ``_KEY_CACHE_TTL_SEC`` seconds
     (audit M-7) to avoid bcrypt-checking every request.
+
+    A key restricted to some addresses (``allowed_cidrs``) used from another
+    one gets ``403`` — after the key is known to be right, before its use is
+    recorded — and counts once as a wrong key for that address, on every
+    path: cache hit, digest and bcrypt.
     """
     global _key_verifies_pending
     if not raw or len(raw) < 16:
@@ -291,6 +322,9 @@ async def _resolve_key(
     # Fast path — cache hit
     cached = _key_cache_get(raw)
     if cached is not None:
+        if not _source_allowed(cached, client_ip):
+            _note_key_failure(client_ip)
+            raise _source_refused()
         return cached
 
     # Capture the revocation generation BEFORE reading the key, so a
@@ -307,7 +341,11 @@ async def _resolve_key(
             await session.execute(select(ApiKey).where(ApiKey.key_digest == digest, ApiKey.enabled == true()))
         ).scalar_one_or_none()
         if row is not None:
-            return await _accept_key(session, row, raw, client_ip, gen0)
+            try:
+                return await _accept_key(session, row, raw, client_ip, gen0)
+            except _WrongSource:
+                _note_key_failure(client_ip)
+                raise _source_refused() from None
 
     # bcrypt path: keys issued before the digest column existed (their digest
     # is written below, on first use) and keys chosen by the operator.
@@ -347,7 +385,11 @@ async def _resolve_key(
             finally:
                 _key_verifies_pending -= 1
             if matches:
-                return await _accept_key(session, row, raw, client_ip, gen0, store_digest=digest)
+                try:
+                    return await _accept_key(session, row, raw, client_ip, gen0, store_digest=digest)
+                except _WrongSource:
+                    wrong = True        # keep the failure reserved above: counted once
+                    raise _source_refused() from None
 
         wrong = True
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
@@ -360,16 +402,21 @@ async def _accept_key(
     session: AsyncSession, row: ApiKey, raw: str, client_ip: str | None, gen0: int,
     *, store_digest: str | None = None,
 ) -> Actor:
-    """The key is right: enforce its expiry, stamp its use, cache the actor."""
+    """The key is right: enforce its expiry and source allowlist, stamp its
+    use, cache the actor. Raises ``_WrongSource`` for a refused address
+    (the caller counts it), before anything is recorded."""
     if row.expires_at is not None and row.expires_at < utc_now():
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="API key expired")
+    actor = Actor(kind="api_key", id=row.id, name=row.name, scopes=frozenset(row.scopes or []),
+                  allowed_networks=_key_networks(row))
+    if not _source_allowed(actor, client_ip):
+        raise _WrongSource
     # Best-effort, no commit barrier. On cached hits we skip this —
     # last_used_at lags by up to _KEY_CACHE_TTL_SEC. Acceptable for audit use.
     values: dict[str, object] = {"last_used_at": utc_now(), "last_used_ip": client_ip}
     if store_digest is not None:
         values["key_digest"] = store_digest
     await session.execute(update(ApiKey).where(ApiKey.id == row.id).values(**values))
-    actor = Actor(kind="api_key", id=row.id, name=row.name, scopes=frozenset(row.scopes or []))
     _key_cache_set(raw, actor, row.expires_at, gen=gen0)
     return actor
 

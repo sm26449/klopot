@@ -125,8 +125,7 @@ test("search: Ctrl+K finds a page and an item, Enter opens it", async () => {
   await input.fill("e2e_temperature");
   await page.getByRole("option", { name: /e2e_temperature_high/ }).waitFor();
   assert.deepEqual(await axe(page, ".palette"), [], "palette axe");
-  await page.keyboard.press("Enter");
-  await page.waitForURL(/#\/rules\/\d+/);
+  await enterOpens(/#\/rules\/\d+/);
   await page.locator(".drawer").waitFor();          // the rule's editor opened
   await page.keyboard.press("Escape");
   await page.locator(".drawer").waitFor({ state: "detached" });
@@ -135,9 +134,24 @@ test("search: Ctrl+K finds a page and an item, Enter opens it", async () => {
   // Wait for the new results: Enter on the previous list would open the old item.
   const fresh = await until(async () => /channel/i.test(await page.locator(".palette [role=option][aria-selected=true]").innerText().catch(() => "")));
   assert.ok(fresh, "the typo search selects the channels entry");
-  await page.keyboard.press("Enter");
-  await page.waitForURL(/#\/channels/);
+  await enterOpens(/#\/channels/);
 });
+
+/** Press Enter in the palette and wait for `url`; on a timeout, say what the
+ *  palette showed, where focus was and where the page went. */
+async function enterOpens(url) {
+  const state = () => page.evaluate(() => ({
+    highlighted: document.querySelector(".palette [role=option][aria-selected=true]")?.innerText?.replace(/\s+/g, " "),
+    options: document.querySelectorAll(".palette [role=option]").length,
+    focus: document.activeElement?.className || document.activeElement?.tagName,
+    open: !!document.querySelector(".palette"),
+    url: location.hash,
+  }));
+  const before = await state();
+  await page.keyboard.press("Enter");
+  const reached = await until(() => url.test(page.url()), { timeout: 10000 });
+  assert.ok(reached, `Enter did not open ${url}: before ${JSON.stringify(before)}, after ${JSON.stringify(await state())}`);
+}
 
 test("empty states: a filter with no match offers to clear it", async () => {
   await go(page, "rules");
@@ -218,4 +232,32 @@ test("activity rules: rows are numbered 1, 2 … and the plural reads right", as
   const first = await page.locator(".tbl tbody tr").first().locator("td").first().innerText();
   assert.equal(first.trim(), "1");
   assert.ok(!(await page.locator(".tbl").innerText()).includes("(s)"), "no day(s)");
+});
+
+test("api keys: a key limited to my address, labelled and accessible", async () => {
+  await go(page, "api-keys");
+  await page.getByRole("button", { name: /new key/i }).first().click();
+  const drawer = page.locator(".drawer");
+  await drawer.waitFor();
+  const field = drawer.getByLabel("Allowed addresses");
+  assert.ok(await field.isVisible(), "the allowlist field has a label");
+  const mine = drawer.getByRole("button", { name: /add my address/i });
+  await mine.waitFor();
+  await mine.click();
+  const typed = (await field.inputValue()).trim();
+  assert.match(typed, /^[0-9a-f.:]+$/i, "my address was filled in");
+  assert.equal(await mine.isDisabled(), true, "it is not offered twice");
+  assert.deepEqual(await axe(page, ".drawer"), [], "drawer axe");
+  await drawer.locator("#k-name").fill("e2e_allowlisted");
+  await drawer.getByRole("button", { name: /create/i }).click();
+  const shown = page.getByRole("dialog").filter({ hasText: /e2e_allowlisted/ });
+  await shown.waitFor();
+  const keys = await api("GET", "/v1/api_keys");
+  const made = keys.items.find((k) => k.name === "e2e_allowlisted");
+  assert.equal(made.allowed_cidrs.length, 1);
+  assert.ok(made.allowed_cidrs[0].startsWith(typed.split("/")[0]), made.allowed_cidrs[0]);
+  await shown.getByRole("checkbox").check();          // "I have saved it" — the key is shown once
+  await shown.getByRole("button", { name: /done/i }).click();
+  await until(async () => (await page.getByRole("cell", { name: "1 allowed" }).count()) > 0);
+  assert.ok(await page.getByRole("cell", { name: "1 allowed" }).count(), "the list shows the restriction");
 });

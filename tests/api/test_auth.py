@@ -297,3 +297,14 @@ async def test_garbage_cookie_is_401(db_client, admin_user):
 
 async def test_no_credentials_still_401(db_client, admin_user):
     assert (await db_client.get("/v1/templates")).status_code == 401
+
+
+async def test_me_says_which_address_klopot_sees(db_client, admin_user, monkeypatch):
+    """The admin UI's "Add my address" (API key allowlist) needs the address
+    as Klopot sees it — behind a trusted proxy, the client's, not the proxy's."""
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "trusted_proxy_cidrs", "127.0.0.0/8")
+    assert (await _login(db_client)).status_code == 200
+    me = (await db_client.get("/v1/auth/me", headers={"X-Forwarded-For": "203.0.113.7"})).json()
+    assert me["client_ip"] == "203.0.113.7"

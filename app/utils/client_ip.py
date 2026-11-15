@@ -23,34 +23,44 @@ from functools import lru_cache
 Network = ipaddress.IPv4Network | ipaddress.IPv6Network
 
 
-@lru_cache(maxsize=16)
-def parse_trusted_proxies(spec: str) -> tuple[Network, ...]:
-    """The networks of a comma-separated CIDR list (blank entries ignored).
+@lru_cache(maxsize=256)
+def parse_networks(entries: tuple[str, ...], *, label: str, catch_all: str) -> tuple[Network, ...]:
+    """The networks of ``entries`` (addresses or CIDRs; blank entries ignored).
 
     Raises ``ValueError`` naming the entry for one that is not an address or
-    network, and for a /0 — trusting every address as a proxy would let any
-    client choose its own address with X-Forwarded-For."""
+    network, and for a /0 (``catch_all`` says why that is refused where it is
+    used). Cached: a list is parsed once, not on every request."""
     nets: list[Network] = []
-    for raw in spec.split(","):
+    for raw in entries:
         entry = raw.strip()
         if not entry:
             continue
         try:
             net = ipaddress.ip_network(entry, strict=False)
         except ValueError:
-            raise ValueError(f"trusted proxy {entry!r} is not an IP address or CIDR") from None
+            raise ValueError(f"{label} {entry!r} is not an IP address or CIDR") from None
         if net.prefixlen == 0:
-            raise ValueError(f"trusted proxy {entry!r} trusts every address; list the proxies' own networks")
+            raise ValueError(f"{label} {entry!r} {catch_all}")
         nets.append(net)
     return tuple(nets)
 
 
-def _in_nets(ip: str, nets: tuple[Network, ...]) -> bool:
+def parse_trusted_proxies(spec: str) -> tuple[Network, ...]:
+    """The networks of a comma-separated trusted-proxy list. A /0 is refused:
+    trusting every address as a proxy would let any client choose its own
+    address with X-Forwarded-For."""
+    return parse_networks(tuple(spec.split(",")), label="trusted proxy",
+                          catch_all="trusts every address; list the proxies' own networks")
+
+
+def in_networks(ip: str, nets: tuple[Network, ...]) -> bool:
+    """Whether ``ip`` is inside one of ``nets``. An IPv4-mapped IPv6 address
+    (::ffff:10.0.0.5, as a dual-stack listener reports an IPv4 client) is the
+    IPv4 address it maps; a value that is not an address is in none."""
     try:
         addr = ipaddress.ip_address(ip)
     except ValueError:
         return False
-    # An IPv4-mapped IPv6 peer (::ffff:10.0.0.5) is the IPv4 address it maps.
     if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped is not None:
         addr = addr.ipv4_mapped
     return any(addr in n for n in nets)
@@ -66,11 +76,11 @@ def real_client_ip(peer: str | None, xff: str | None, trusted_cidrs: list[str]) 
     if not (peer and xff and trusted_cidrs):
         return peer
     nets = parse_trusted_proxies(",".join(trusted_cidrs))
-    if not nets or not _in_nets(peer, nets):
+    if not nets or not in_networks(peer, nets):
         return peer
     parts = [p.strip() for p in xff.split(",") if p.strip()]
     for cand in reversed(parts):
-        if not _in_nets(cand, nets):
+        if not in_networks(cand, nets):
             return cand
     # Every hop is "trusted": the leftmost entry is the client's own claim, so
     # trust none of them — use the peer (K15).

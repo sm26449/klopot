@@ -362,6 +362,14 @@
       },
       "ApiKeyCreate": {
         "properties": {
+          "allowed_cidrs": {
+            "description": "Addresses the key may be used from: IPs or CIDRs (IPv4 and IPv6). Empty = any address. A request from elsewhere gets 403 and counts as a wrong key for that address.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Cidrs",
+            "type": "array"
+          },
           "enabled": {
             "default": true,
             "title": "Enabled",
@@ -403,6 +411,14 @@
       "ApiKeyCreated": {
         "description": "Returned ONCE on POST /v1/api_keys \u2014 includes plaintext key.",
         "properties": {
+          "allowed_cidrs": {
+            "description": "Addresses the key may be used from: IPs or CIDRs (IPv4 and IPv6). Empty = any address. A request from elsewhere gets 403 and counts as a wrong key for that address.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Cidrs",
+            "type": "array"
+          },
           "created_at": {
             "anyOf": [
               {
@@ -501,6 +517,14 @@
       "ApiKeyRead": {
         "description": "Public read shape \u2014 never includes the plaintext key.",
         "properties": {
+          "allowed_cidrs": {
+            "description": "Addresses the key may be used from: IPs or CIDRs (IPv4 and IPv6). Empty = any address. A request from elsewhere gets 403 and counts as a wrong key for that address.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Cidrs",
+            "type": "array"
+          },
           "created_at": {
             "anyOf": [
               {
@@ -593,6 +617,21 @@
       },
       "ApiKeyUpdate": {
         "properties": {
+          "allowed_cidrs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Addresses the key may be used from: IPs or CIDRs (IPv4 and IPv6). Empty = any address. A request from elsewhere gets 403 and counts as a wrong key for that address.",
+            "title": "Allowed Cidrs"
+          },
           "enabled": {
             "anyOf": [
               {
@@ -2791,6 +2830,17 @@
       },
       "MeResponse": {
         "properties": {
+          "client_ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Ip"
+          },
           "scopes": {
             "items": {
               "type": "string"
