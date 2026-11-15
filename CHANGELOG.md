@@ -6,18 +6,43 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Upgrade notes
+
+- **`compose.traefik.yml` is private by default.** Only clients in
+  `KLOPOT_PRIVATE_CIDRS` (default: loopback and the private ranges) reach
+  the hostname; others get `403` from traefik. If you reach Klopot from a
+  public address today, list your networks in `KLOPOT_PRIVATE_CIDRS`, or open
+  only `POST /v1/fire` with the new `compose.public.yml`. A file-provider
+  route copied from `deploy/traefik/klopot.example.yml` needs the same
+  `klopot-private` middleware to get this behaviour.
+- **`ALERTD_TRUSTED_PROXY_CIDRS` is required by `compose.traefik.yml`**, and
+  an invalid entry or a `/0` now stops Klopot at startup (it used to be
+  logged and skipped).
+
+### Added
+
+- `compose.public.yml`: accept alerts from the internet — opens exactly
+  `POST /v1/fire`, with a per-client rate limit, an overall in-flight limit
+  and a 64 KiB body limit in traefik (docs/DEPLOY.md, "Exposing /v1/fire to
+  the internet"). Checked against traefik v3.
+
+### Security
+
+- Proxy trust fails closed: `ALERTD_TRUSTED_PROXY_CIDRS` is parsed once at
+  startup with the parser every request uses; a typo no longer turns into
+  "trust nothing" silently, and IPv4-mapped IPv6 peers match their IPv4
+  network. A TLS deployment without trusted proxies logs a warning at
+  startup. The setting is shown on the Settings page.
+- Dev tooling: Playwright 1.48.2 → 1.61.1 (GHSA for < 1.55.1: browsers were
+  downloaded without checking the TLS certificate). Test-only; not in the
+  image. 1.61 is the last line that runs on Node 18; 1.62+ needs Node 20.
+
 ### Fixed
 
 - Search (Ctrl+K): when the results arrived after you started typing, the
   list re-sorted and Enter opened whatever had moved under the highlight;
   the highlight now stays on the item you saw.
 - Tests: the concurrent-login pool check (K07) on MySQL is deterministic.
-
-### Security
-
-- Dev tooling: Playwright 1.48.2 → 1.61.1 (GHSA for < 1.55.1: browsers were
-  downloaded without checking the TLS certificate). Test-only; not in the
-  image. 1.61 is the last line that runs on Node 18; 1.62+ needs Node 20.
 
 ## [1.1.1] — 2026-11-15
 

@@ -58,14 +58,16 @@ the trade-offs.
 | File | Role |
 |------|------|
 | `docker-compose.yml` | **Production base**: `alertd` + MySQL 8 + backup sidecar. Host port bound to `127.0.0.1:${KLOPOT_HTTP_PORT:-5090}`; MySQL is never published. |
-| `compose.traefik.yml` | **Overlay** — joins an existing traefik's Docker network (`TRAEFIK_NETWORK`, alias `klopot`), adds docker-provider labels for `KLOPOT_HOSTNAME` with TLS + HSTS, forces `ALERTD_COOKIE_SECURE=true`. |
+| `compose.traefik.yml` | **Overlay** — joins an existing traefik's Docker network (`TRAEFIK_NETWORK`, alias `klopot`), adds docker-provider labels for `KLOPOT_HOSTNAME` with TLS + HSTS, forces `ALERTD_COOKIE_SECURE=true`. **Private**: only `KLOPOT_PRIVATE_CIDRS` (default: loopback + private ranges) may reach it; requires `ALERTD_TRUSTED_PROXY_CIDRS`. |
+| `compose.public.yml` | **Overlay on `compose.traefik.yml`** — opens exactly `POST /v1/fire` to any address, with a rate, concurrency and body limit. See "Exposing /v1/fire to the internet". |
 | `compose.external-db.yml` | **Overlay** — use an existing MySQL server instead of the bundled one: `mysql` and `backup` are not started; `ALERTD_DATABASE_URL` points at your server. |
 | `compose.dev.yml` | **Overlay** — builds from the checkout (`klopot:dev`), bundles an anonymous Mosquitto on `127.0.0.1:1883`, DEBUG logs, insecure cookies, `/docs` + `/v1/metrics` open, no backup sidecar (`--profile backup` to add it). |
 | `compose.demo.yml` | **Standalone** two-minute demo (MySQL on tmpfs, publisher, webhook sink). |
 
 ```bash
 docker compose up -d                                                 # production
-docker compose -f docker-compose.yml -f compose.traefik.yml up -d    # production behind traefik
+docker compose -f docker-compose.yml -f compose.traefik.yml up -d    # production behind traefik (private)
+docker compose -f docker-compose.yml -f compose.traefik.yml -f compose.public.yml up -d   # + POST /v1/fire public
 docker compose -f docker-compose.yml -f compose.dev.yml up --build   # development
 ```
 
@@ -357,18 +359,80 @@ front before exposing it. The admin UI requires HTTPS in production
    TRAEFIK_NETWORK=traefik            # the network your traefik container is on
    TRAEFIK_CERTRESOLVER=letsencrypt   # a resolver defined in traefik's static config
    ALERTD_TRUSTED_PROXY_CIDRS=…       # docker network inspect "$TRAEFIK_NETWORK" → Subnet
+   #KLOPOT_PRIVATE_CIDRS=…            # who may reach Klopot (default below)
    ```
 2. `docker compose up -d`. The container joins `TRAEFIK_NETWORK` under the
    alias `klopot`.
 3. Route discovery depends on how your traefik is configured:
    - **docker provider** — nothing else to do; the labels in
-     `compose.traefik.yml` define the router (TLS + HSTS).
+     `compose.traefik.yml` define the router (TLS + HSTS + the private allowlist).
    - **file provider** — copy [`deploy/traefik/klopot.example.yml`](../deploy/traefik/klopot.example.yml)
-     into traefik's dynamic-config directory, set the hostname and
-     `certResolver`. It targets `http://klopot:5090`.
+     into traefik's dynamic-config directory, set the hostname,
+     `certResolver` and the private networks. It targets `http://klopot:5090`.
 
-`ALERTD_TRUSTED_PROXY_CIDRS` matters: without it, every login appears to
-come from traefik's IP and the per-IP lockout locks out everyone at once.
+**Private by default.** The hostname answers only clients whose address is
+in `KLOPOT_PRIVATE_CIDRS` — by default loopback and the private ranges
+(`10/8`, `172.16/12`, `192.168/16`, `fc00::/7`), i.e. a LAN or a VPN. Anyone
+else gets `403` from traefik before reaching Klopot: the admin UI, login,
+every API route, the live streams, `/docs` and `/v1/metrics` included. Set
+`KLOPOT_PRIVATE_CIDRS` to your own networks (comma-separated) to narrow it;
+widening it to the whole internet is never needed — open only `/v1/fire`
+(next section). The list is matched against the address **traefik** sees:
+with a CDN in front, that is the CDN.
+
+**`ALERTD_TRUSTED_PROXY_CIDRS` is required** with this overlay (the compose
+file refuses to start without it): it is traefik's address as Klopot sees it.
+Without it every request appears to come from traefik, so one client's failed
+logins or wrong API keys lock everyone out. An entry that is not an address or
+network, or a `/0` (which would let any client choose its own address), stops
+Klopot at startup with the entry named.
+
+### Exposing /v1/fire to the internet
+
+Scripts and services elsewhere can send alerts without a VPN: add
+`compose.public.yml` on top of the traefik overlay.
+
+```bash
+COMPOSE_FILE=docker-compose.yml:compose.traefik.yml:compose.public.yml
+```
+
+It opens **exactly** `POST /v1/fire` (not `/v1/fire/`, not another method,
+not another path) to every address; everything else stays private. In front
+of Klopot, traefik applies:
+
+| Limit | Default | `.env` |
+|-------|---------|--------|
+| Requests per minute per client address | 60, bursts of 20 | `KLOPOT_PUBLIC_RATE_PER_MIN`, `KLOPOT_PUBLIC_BURST` |
+| Requests in progress, all clients together | 16 | `KLOPOT_PUBLIC_MAX_INFLIGHT` |
+| Request body | 64 KiB (`413` beyond) | `KLOPOT_PUBLIC_MAX_BODY` |
+
+Before you open it:
+
+- **One key per caller, scope `fire` only** (Admin UI → API keys), with an
+  expiry. A `fire` key can send alerts and nothing else; revoke it alone if it
+  leaks. Never use an admin key from outside.
+- **Set a read timeout on traefik's entrypoint** (static configuration, not a
+  label), so a slow upload cannot hold a connection open:
+  ```yaml
+  entryPoints:
+    websecure:
+      transport:
+        respondingTimeouts:
+          readTimeout: 15s
+  ```
+- **Behind a CDN** (Cloudflare…): traefik sees the CDN's address. Set
+  traefik's entrypoint `forwardedHeaders.trustedIPs` to the CDN's published
+  ranges and add the same ranges to `ALERTD_TRUSTED_PROXY_CIDRS`, so Klopot's
+  per-client controls see the visitor. Traefik's per-client rate limit counts
+  the CDN's address unless you also set its `sourceCriterion.ipStrategy`;
+  rely on the CDN's own rate rules in that case.
+- The inbound inputs (`/v1/inputs/{id}/webhook`) are **not** opened by this
+  overlay; keep their senders on the private network for now.
+
+The routing was checked against traefik v3: `POST /v1/fire` passes, a GET,
+`/v1/fire/`, `/admin/`, `/v1/stream/*` and the inputs get `403` from outside
+the private networks, a body over the limit gets `413`, and requests above the
+rate get `429`.
 
 ### Other proxies
 

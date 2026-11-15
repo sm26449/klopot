@@ -59,6 +59,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         "alertd starting", extra={"version": __version__, "tz": settings.tz}
     )
 
+    if settings.cookie_secure and not settings.trusted_proxy_cidr_list:
+        # Behind TLS means behind a proxy: without its address every request
+        # looks like it comes from the proxy, so one client's failed logins or
+        # wrong keys lock out everyone (docs/DEPLOY.md, "Reverse proxy").
+        logger.warning("ALERTD_COOKIE_SECURE is on but ALERTD_TRUSTED_PROXY_CIDRS is empty: "
+                       "every client will share the proxy's address for lockouts and rate limits")
+
     # 1. Migrations — wrapped in to_thread because alembic env.py uses
     #    asyncio.run() which can't nest inside our running event loop.
     #    Fail-fast: a container in a visible restart loop beats a

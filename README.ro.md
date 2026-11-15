@@ -124,12 +124,13 @@ open http://localhost:5090/admin/     # interfața admin
 open http://localhost:5090/docs       # OpenAPI / Swagger (deschis pe localhost HTTP)
 ```
 
-Repository-ul include trei variante de compose:
+Variantele de compose incluse în repository:
 
 | Variantă | Comandă |
 |----------|---------|
 | Producție, fără proxy | `docker compose up -d` |
-| Producție în spatele traefik (TLS) | `docker compose -f docker-compose.yml -f compose.traefik.yml up -d` |
+| Producție în spatele traefik (TLS), privat pentru LAN/VPN | `docker compose -f docker-compose.yml -f compose.traefik.yml up -d` |
+| … plus `POST /v1/fire` deschis spre internet, cu limite | `docker compose -f docker-compose.yml -f compose.traefik.yml -f compose.public.yml up -d` |
 | Dezvoltare (build local, broker MQTT inclus) | `docker compose -f docker-compose.yml -f compose.dev.yml up --build` |
 
 Migrările rulează la pornire. [Deploy](docs/DEPLOY.md) descrie configurarea

@@ -219,7 +219,8 @@ class Settings(BaseSettings):
     # peer address is inside one of these, the real client IP is taken from the
     # rightmost non-trusted X-Forwarded-For entry so per-IP login throttling
     # targets the actual client, not the proxy (audit S-07). Empty = trust no
-    # proxy and use the direct peer address.
+    # proxy and use the direct peer address. An invalid entry, or a /0, stops
+    # the service at startup.
     trusted_proxy_cidrs: str = ""
     # ── Activity log (docs/ACTIVITY_LOG.md) ────────────────────
     # false: keep every activity row but no request / response bodies.
@@ -275,6 +276,17 @@ class Settings(BaseSettings):
     @property
     def trusted_proxy_cidr_list(self) -> list[str]:
         return [c.strip() for c in self.trusted_proxy_cidrs.split(",") if c.strip()]
+
+    @field_validator("trusted_proxy_cidrs")
+    @classmethod
+    def _trusted_proxies_parse(cls, v: str) -> str:
+        # Fail closed at startup: a wrong entry must not be skipped silently,
+        # since login lockout, the wrong-key budget and address allowlists all
+        # key on the client address this list decides (utils/client_ip.py).
+        from .utils.client_ip import parse_trusted_proxies
+
+        parse_trusted_proxies(v)
+        return v
 
     @field_validator("docs_enabled", "metrics_require_auth", mode="before")
     @classmethod

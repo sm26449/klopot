@@ -1,26 +1,49 @@
-# traefik dynamic configuration (file provider) for Klopot.
+# traefik v3 dynamic configuration (file provider) for Klopot.
 #
 # Use this when your traefik discovers routes from files instead of Docker
 # labels. Copy it into traefik's dynamic-config directory (watched by
-# `providers.file.directory`), then edit the hostname and certResolver.
-# Start Klopot with compose.traefik.yml so the container joins traefik's
-# network under the alias `klopot`, which is what the service URL targets.
+# `providers.file.directory`), then edit the hostname, the certResolver and the
+# private networks. Start Klopot with compose.traefik.yml so the container joins
+# traefik's network under the alias `klopot`, which the service URL targets.
+#
+# Same design as the compose overlays: the hostname is PRIVATE (only the
+# networks in klopot-private); uncomment `klopot-public` and its middlewares to
+# accept `POST /v1/fire` from anywhere (docs/DEPLOY.md, "Exposing /v1/fire to
+# the internet").
 http:
   routers:
     klopot:
       rule: "Host(`alerts.example.com`)"
+      priority: 10
       entryPoints: [websecure]
-      middlewares: [klopot-hsts]
+      middlewares: [klopot-private, klopot-hsts]
       service: klopot
       tls:
         certResolver: letsencrypt
+    # klopot-public:
+    #   rule: "Host(`alerts.example.com`) && Method(`POST`) && Path(`/v1/fire`)"
+    #   priority: 100
+    #   entryPoints: [websecure]
+    #   middlewares: [klopot-public-body, klopot-public-inflight, klopot-public-rate, klopot-hsts]
+    #   service: klopot
+    #   tls:
+    #     certResolver: letsencrypt
   middlewares:
+    klopot-private:
+      ipAllowList:
+        sourceRange: [127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, "::1/128", "fc00::/7"]
     klopot-hsts:
       headers:
         forceSTSHeader: true
         stsSeconds: 31536000
         stsIncludeSubdomains: false
         stsPreload: false
+    # klopot-public-rate:
+    #   rateLimit: {average: 60, period: 1m, burst: 20}
+    # klopot-public-inflight:
+    #   inFlightReq: {amount: 16, sourceCriterion: {requestHost: true}}
+    # klopot-public-body:
+    #   buffering: {maxRequestBodyBytes: 65536, memRequestBodyBytes: 65536}
   services:
     klopot:
       loadBalancer:

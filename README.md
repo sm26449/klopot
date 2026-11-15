@@ -120,12 +120,13 @@ open http://localhost:5090/admin/     # admin UI
 open http://localhost:5090/docs       # OpenAPI / Swagger (open on plain-HTTP localhost)
 ```
 
-Three compose variants ship with the repo:
+Compose variants that ship with the repo:
 
 | Variant | Command |
 |---------|---------|
 | Production, no proxy | `docker compose up -d` |
-| Production behind traefik (TLS) | `docker compose -f docker-compose.yml -f compose.traefik.yml up -d` |
+| Production behind traefik (TLS), private to your LAN/VPN | `docker compose -f docker-compose.yml -f compose.traefik.yml up -d` |
+| … plus `POST /v1/fire` open to the internet, with limits | `docker compose -f docker-compose.yml -f compose.traefik.yml -f compose.public.yml up -d` |
 | Development (builds locally, bundled MQTT broker) | `docker compose -f docker-compose.yml -f compose.dev.yml up --build` |
 
 Migrations run on startup. [Deploy](docs/DEPLOY.md) covers the traefik setup

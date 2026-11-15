@@ -1,0 +1,44 @@
+# Klopot: accept alerts from the internet — overlay on top of compose.traefik.yml.
+#
+#   docker compose -f docker-compose.yml -f compose.traefik.yml -f compose.public.yml up -d
+#
+# Opens exactly one door: `POST /v1/fire` on KLOPOT_HOSTNAME, for any address.
+# Everything else on the hostname stays on compose.traefik.yml's private router
+# (admin UI, login, every other API route, the live streams, /docs, metrics,
+# and /v1/fire/ with a trailing slash). Read docs/DEPLOY.md, "Exposing /v1/fire
+# to the internet", first: give each caller its own `fire`-only key.
+#
+# The router matches before the private one (priority 100 > 10) and only for
+# that method and path, so a GET, a PUT or any other path falls through to the
+# private router and is refused from outside the private networks.
+#
+# Limits, in front of Klopot (each tunable in .env):
+#   KLOPOT_PUBLIC_RATE_PER_MIN  (default 60)    requests a minute per client address
+#   KLOPOT_PUBLIC_BURST         (default 20)    short bursts above that rate
+#   KLOPOT_PUBLIC_MAX_INFLIGHT  (default 16)    requests in progress at once, all clients together
+#   KLOPOT_PUBLIC_MAX_BODY      (default 65536) bytes per request body; larger → 413
+# Also set a read timeout on traefik's entrypoint (static configuration, not a
+# label) so a slow upload cannot hold a connection open:
+#   entryPoints.websecure.transport.respondingTimeouts.readTimeout: 15s
+#
+# Behind a CDN (Cloudflare…) traefik sees the CDN's address: set traefik's
+# entrypoint forwardedHeaders.trustedIPs to the CDN's ranges, add them to
+# ALERTD_TRUSTED_PROXY_CIDRS, and see docs/DEPLOY.md for the per-client limit.
+services:
+  alertd:
+    labels:
+      traefik.http.routers.klopot-public.rule: Host(`${KLOPOT_HOSTNAME:?set KLOPOT_HOSTNAME in .env}`) && Method(`POST`) && Path(`/v1/fire`)
+      traefik.http.routers.klopot-public.priority: "100"
+      traefik.http.routers.klopot-public.entrypoints: ${TRAEFIK_ENTRYPOINT:-websecure}
+      traefik.http.routers.klopot-public.tls: "true"
+      traefik.http.routers.klopot-public.tls.certresolver: ${TRAEFIK_CERTRESOLVER:-letsencrypt}
+      traefik.http.routers.klopot-public.service: klopot
+      traefik.http.routers.klopot-public.middlewares: klopot-public-body,klopot-public-inflight,klopot-public-rate,klopot-hsts
+      traefik.http.middlewares.klopot-public-rate.ratelimit.average: ${KLOPOT_PUBLIC_RATE_PER_MIN:-60}
+      traefik.http.middlewares.klopot-public-rate.ratelimit.period: 1m
+      traefik.http.middlewares.klopot-public-rate.ratelimit.burst: ${KLOPOT_PUBLIC_BURST:-20}
+      # One budget for the whole hostname, not one per client.
+      traefik.http.middlewares.klopot-public-inflight.inflightreq.amount: ${KLOPOT_PUBLIC_MAX_INFLIGHT:-16}
+      traefik.http.middlewares.klopot-public-inflight.inflightreq.sourcecriterion.requesthost: "true"
+      traefik.http.middlewares.klopot-public-body.buffering.maxrequestbodybytes: ${KLOPOT_PUBLIC_MAX_BODY:-65536}
+      traefik.http.middlewares.klopot-public-body.buffering.memrequestbodybytes: ${KLOPOT_PUBLIC_MAX_BODY:-65536}

@@ -85,8 +85,13 @@ def test_ipv6_addresses_share_their_64():
 
 
 def test_all_trusted_hops_fall_back_to_the_peer():
-    trusted = ["0.0.0.0/0"]
+    # Every hop inside the trusted networks: the leftmost entry is the
+    # client's own claim, so none is believed — the peer is used.
+    trusted = ["10.0.0.0/8", "6.0.0.0/8"]
     assert real_client_ip("10.0.0.2", "6.6.6.6, 10.0.0.1", trusted) == "10.0.0.2"
+    # A catch-all list, the case K15 first met, is now refused outright.
+    with pytest.raises(ValueError, match="trusts every address"):
+        real_client_ip("10.0.0.2", "6.6.6.6", ["0.0.0.0/0"])
 
 
 async def test_the_websocket_counts_the_real_client(db_engine, monkeypatch):

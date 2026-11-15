@@ -1,22 +1,38 @@
-# Klopot behind an existing traefik (TLS termination) — overlay.
+# Klopot behind an existing traefik v3 (TLS termination) — overlay.
 #
 #   docker compose -f docker-compose.yml -f compose.traefik.yml up -d
 #
+# PRIVATE BY DEFAULT. The hostname answers only clients on the networks in
+# KLOPOT_PRIVATE_CIDRS (default: loopback and the private ranges — a LAN or a
+# VPN). That covers the whole service: the admin UI, login, the API, the live
+# streams, /docs and /v1/metrics. To accept alerts from the internet, add
+# compose.public.yml, which opens exactly `POST /v1/fire` with limits
+# (docs/DEPLOY.md, "Exposing /v1/fire to the internet").
+#
 # Required in .env:
-#   KLOPOT_HOSTNAME=alerts.example.com   public hostname routed to Klopot
+#   KLOPOT_HOSTNAME=alerts.example.com   hostname routed to Klopot
 #   TRAEFIK_NETWORK=traefik               the Docker network traefik runs on
 #                                         (external; created by your traefik stack)
-#   ALERTD_TRUSTED_PROXY_CIDRS=…          that network's subnet, so per-IP login
-#                                         lockout keys on the real client
-#                                         (`docker network inspect $TRAEFIK_NETWORK`)
+#   ALERTD_TRUSTED_PROXY_CIDRS=…          traefik's address as Klopot sees it —
+#                                         that network's subnet
+#                                         (`docker network inspect $TRAEFIK_NETWORK`).
+#                                         Without it every client shares traefik's
+#                                         address: one client's failed logins or
+#                                         wrong keys lock out everyone.
 # Optional:
+#   KLOPOT_PRIVATE_CIDRS                  who may reach the private service
+#                                         (comma-separated; default below)
 #   TRAEFIK_ENTRYPOINT (default websecure), TRAEFIK_CERTRESOLVER (default letsencrypt)
 #
-# Two ways traefik can discover the route — both work with this overlay:
+# Route discovery — both work with this overlay:
 #   • docker provider: the labels below are picked up automatically.
 #   • file provider:   copy deploy/traefik/klopot.example.yml into traefik's
 #                      dynamic-config directory and set the hostname there.
 #                      It targets http://klopot:5090 — the alias set below.
+#
+# KLOPOT_PRIVATE_CIDRS is matched against the address traefik sees. With a CDN
+# or another proxy in front of traefik that is the CDN's address, not the
+# visitor's — see docs/DEPLOY.md before widening it.
 #
 # If your MQTT broker runs on the same Docker network as traefik, point
 # ALERTD_MQTT_HOST at its container name; no extra wiring is needed.
@@ -25,6 +41,7 @@ services:
     environment:
       # Secure cookies + auto-hardened /docs and /v1/metrics behind TLS.
       ALERTD_COOKIE_SECURE: "true"
+      ALERTD_TRUSTED_PROXY_CIDRS: ${ALERTD_TRUSTED_PROXY_CIDRS:?set ALERTD_TRUSTED_PROXY_CIDRS in .env to traefik's network (docker network inspect)}
     networks:
       internal: {}
       traefik:
@@ -33,11 +50,15 @@ services:
     labels:
       traefik.enable: "true"
       traefik.docker.network: ${TRAEFIK_NETWORK:?set TRAEFIK_NETWORK in .env}
+      # The private router: everything on the hostname, for the private networks.
       traefik.http.routers.klopot.rule: Host(`${KLOPOT_HOSTNAME:?set KLOPOT_HOSTNAME in .env}`)
+      traefik.http.routers.klopot.priority: "10"
       traefik.http.routers.klopot.entrypoints: ${TRAEFIK_ENTRYPOINT:-websecure}
       traefik.http.routers.klopot.tls: "true"
       traefik.http.routers.klopot.tls.certresolver: ${TRAEFIK_CERTRESOLVER:-letsencrypt}
-      traefik.http.routers.klopot.middlewares: klopot-hsts
+      traefik.http.routers.klopot.service: klopot
+      traefik.http.routers.klopot.middlewares: klopot-private,klopot-hsts
+      traefik.http.middlewares.klopot-private.ipallowlist.sourcerange: ${KLOPOT_PRIVATE_CIDRS:-127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,::1/128,fc00::/7}
       traefik.http.middlewares.klopot-hsts.headers.forceSTSHeader: "true"
       traefik.http.middlewares.klopot-hsts.headers.stsSeconds: "31536000"
       traefik.http.services.klopot.loadbalancer.server.port: "5090"
