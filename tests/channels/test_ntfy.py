@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
+from app.channels import _http
 from app.channels import ntfy as ntfy_mod
 from app.channels.base import Notification
 from app.channels.ntfy import NtfyChannel, build_message
@@ -59,7 +60,7 @@ def calls(monkeypatch):
         seen.append({"method": method, "url": url, **kw})
         return seen.response[0]
 
-    monkeypatch.setattr(ntfy_mod, "safe_request", fake)
+    monkeypatch.setattr(_http, "safe_request", fake)
     return seen
 
 
@@ -79,7 +80,7 @@ async def test_send_failures(calls, monkeypatch):
 
     async def boom(*a, **k):
         raise httpx.ConnectTimeout("slow")
-    monkeypatch.setattr(ntfy_mod, "safe_request", boom)
+    monkeypatch.setattr(_http, "safe_request", boom)
     res = await NtfyChannel().send(_notif(), {"topic": "t"})
     assert not res.ok and res.error == "ntfy timeout"
 

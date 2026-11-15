@@ -69,3 +69,12 @@ test("picker: open, search, pick, and Escape closes only the palette", async () 
     assert.equal(document.getElementById("out").textContent, "🔋");
   } finally { unmount(); }
 });
+
+test("the editor accepts exactly the icons the server accepts", async () => {
+  // Copilot hygiene #6: "‼" passed the editor and the API answered 422.
+  // Verdicts come from app/utils/icons.py (tests/api/test_template_icon_category.py checks them).
+  const { readFileSync } = await import("node:fs");
+  const cases = JSON.parse(readFileSync(new URL("./support/icon_parity.json", import.meta.url), "utf8"));
+  const wrong = cases.filter((c) => isValidIcon(c.icon) !== c.valid).map((c) => `${c.icon} → server says ${c.valid}`);
+  assert.deepEqual(wrong, []);
+});

@@ -158,3 +158,18 @@ def test_rendered_output_is_length_capped():
     # Even a pathological template can't push output past the safety cap.
     out = render("%n|fixed(12)%" * 20000, {"n": "1"})
     assert len(out) <= 100000
+
+
+def test_render_parity_fixture_is_what_the_server_renders():
+    """tests/js/support/render_parity.json holds cases the admin-UI preview must
+    render like the server (tests/js/render_parity.test.mjs). Copilot hygiene #4:
+    the preview rounded half up, did not clamp digits and printed full floats.
+    Add a case by appending it there with the server's output as "expected"."""
+    import json
+    from pathlib import Path
+
+    fixture = Path(__file__).resolve().parents[1] / "js" / "support" / "render_parity.json"
+    cases = json.loads(fixture.read_text())
+    assert len(cases) >= 40
+    wrong = [c for c in cases if render(c["template"], c["context"]) != c["expected"]]
+    assert not wrong

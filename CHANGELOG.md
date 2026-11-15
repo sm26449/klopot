@@ -51,6 +51,9 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- ntfy, Gotify, Pushover and webhook share one request / health-check path
+  (`app/channels/_http.py`) instead of four copies of the same error
+  handling. A webhook transport error now reads `webhook HTTP error: …`.
 - Admin UI on a phone: list tables (alerts log, incidents, rules, variables,
   API keys, audit, push devices…) become one card per row below 640 px, each
   value under its column name, instead of a table scrolling sideways with
@@ -59,6 +62,15 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Template editor preview: numbers now look exactly as sent. The preview
+  rounded half up (`2.5` → `3`, the server sends `2`), did not clamp digit
+  counts (`fixed(101)` showed an error), printed full floats where the server
+  prints six significant digits (`0.333333`) and treated `div(0)` or
+  non-numeric text as numbers. 43 shared cases
+  (`tests/js/support/render_parity.json`) keep the two in step.
+- Template icon: the editor accepts exactly what the API accepts (`‼` passed
+  the editor and was refused with 422; `✓` and `°` were refused by the editor
+  only); shared cases in `tests/js/support/icon_parity.json`.
 - Webhook: `timeout_sec`, offered in the channel form, was ignored (always
   10 s). MQTT publish used a fixed 256 KiB limit instead of
   `ALERTD_MQTT_MAX_PAYLOAD_BYTES`, the limit inbound MQTT already used.

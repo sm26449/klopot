@@ -23,13 +23,12 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import httpx
-
 from ..config import get_settings
 from ..utils.redact import transport_error_text
-from ..utils.safe_http import EgressBlocked, ResponseTooLarge, safe_request
+from ..utils.safe_http import safe_request
+from . import _http
 from ._secrets import resolve_secret, scrub
-from .base import HEALTHCHECK_TIMEOUT_SEC, BaseChannel, Notification, SendResult, admin_link
+from .base import BaseChannel, Notification, SendResult, admin_link
 
 logger = logging.getLogger(__name__)
 
@@ -95,19 +94,12 @@ class PushoverChannel(BaseChannel):
         if not token or not user:
             return SendResult(ok=False, error="pushover missing app_token or user_key")
         try:
-            r = await safe_request(
-                "POST", f"{_api(config)}/messages.json", data=build_form(notif, config, token, user),
-                timeout=_timeout(config),
-                block_private=get_settings().block_private_egress,
+            r = await _http.request(
+                "pushover", "POST", f"{_api(config)}/messages.json", data=build_form(notif, config, token, user),
+                timeout=_timeout(config), clean=lambda text: scrub(text, token, user),
             )
-        except EgressBlocked as e:
-            return SendResult(ok=False, error=e.reason)
-        except ResponseTooLarge as e:
-            return SendResult(ok=False, error=e.reason)
-        except httpx.TimeoutException:
-            return SendResult(ok=False, error="pushover timeout")
-        except httpx.HTTPError as e:
-            return SendResult(ok=False, error=scrub(f"pushover HTTP error: {transport_error_text(e)}", token, user)[:200])
+        except _http.Failed as f:
+            return f.result
         try:
             data = r.json()
         except ValueError:
@@ -127,13 +119,12 @@ class PushoverChannel(BaseChannel):
         token, user = _credentials(config)
         if not token or not user:
             return {"reachable": False, "error": "missing app_token or user_key"}
-        try:
-            r = await safe_request("POST", f"{_api(config)}/users/validate.json", data={"token": token, "user": user},
-                                   timeout=HEALTHCHECK_TIMEOUT_SEC, block_private=get_settings().block_private_egress)
+        def read(r: Any) -> dict[str, Any]:
             data = r.json() if r.status_code < 500 else {}
             return {"reachable": r.status_code < 500, "valid": bool(data.get("status") == 1)}
-        except Exception as e:
-            return {"reachable": False, "error": scrub(transport_error_text(e), token, user)[:200]}
+
+        return await _http.probe("POST", f"{_api(config)}/users/validate.json", read,
+                                 clean=lambda text: scrub(text, token, user), data={"token": token, "user": user})
 
 
 # ── Receipt operations (used by app/core/provider_lifecycle.py) ─────

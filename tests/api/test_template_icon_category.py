@@ -69,3 +69,24 @@ async def test_import_rejects_mojibake_icon(db_client, admin_key):
     body = r.json()
     errors = body.get("errors") or body.get("detail", {}).get("errors") or [str(body)]
     assert any("emoji" in str(e) for e in errors), body
+
+
+def test_icon_parity_fixture_is_the_server_rule():
+    """tests/js/support/icon_parity.json: the admin UI's isValidIcon must give
+    these verdicts (tests/js/icon_picker.test.mjs); they are the server's."""
+    import json
+    from pathlib import Path
+
+    from app.utils.icons import validate_icon
+
+    def ok(icon):
+        try:
+            validate_icon(icon)
+        except ValueError:
+            return False
+        return True
+
+    fixture = Path(__file__).resolve().parents[1] / "js" / "support" / "icon_parity.json"
+    cases = json.loads(fixture.read_text())
+    assert {c["icon"]: c["valid"] for c in cases} == {c["icon"]: ok(c["icon"]) for c in cases}
+    assert any(c["valid"] for c in cases) and any(not c["valid"] for c in cases)

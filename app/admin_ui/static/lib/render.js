@@ -30,20 +30,119 @@ function lookup(name, ctx) {
   return obj;
 }
 
+// ── Numbers exactly as the server formats them (app/core/rendering.py) ──
+// Python rounds half to even on the exact binary value (round(2.5) == 2,
+// f"{0.25:.1f}" == "0.2"), clamps digit counts to ±12, prints a float with
+// "{:g}" (6 significant digits) and an integral one as a whole number. The
+// shared cases in tests/js/support/render_parity.json keep the two equal.
+const MAX_FILTER_DIGITS = 12;
+const clampDigits = (n) => Math.max(-MAX_FILTER_DIGITS, Math.min(MAX_FILTER_DIGITS, n));
+const PY_FLOAT = /^[+-]?(?:(?:\d(?:_?\d)*)(?:\.(?:\d(?:_?\d)*)?)?|\.\d(?:_?\d)*)(?:[eE][+-]?\d(?:_?\d)*)?$/;
+const PY_SPECIAL = /^[+-]?(?:inf|infinity|nan)$/i;
+
+/** Python's float(value): a number, a bool, or numeric text — else an error. */
+function toFloat(value) {
+  if (typeof value === "number") return value;
+  if (typeof value === "boolean") return value ? 1 : 0;
+  if (typeof value !== "string") throw new Error("not a number");
+  const s = value.trim();
+  if (PY_SPECIAL.test(s)) return s.toLowerCase().includes("nan") ? NaN : (s.startsWith("-") ? -Infinity : Infinity);
+  if (!PY_FLOAT.test(s)) throw new Error("not a number");
+  return Number(s.replace(/_/g, ""));
+}
+
+/** Digits of |x| rounded half to even at `d` decimals (d ≥ 0, |x| < 1e21):
+ *  [integer part, fraction]. toFixed(100) is the exact expansion. */
+function halfEven(x, d) {
+  const [ip, fp] = Math.abs(x).toFixed(100).split(".");
+  const rest = fp.slice(d);
+  const last = Number((ip + fp.slice(0, d)).slice(-1));
+  const up = rest[0] > "5" || (rest[0] === "5" && (/[1-9]/.test(rest.slice(1)) || last % 2 === 1));
+  let digits = BigInt(ip + fp.slice(0, d)) + (up ? 1n : 0n);
+  const str = digits.toString().padStart(d + 1, "0");
+  return [str.slice(0, str.length - d), str.slice(str.length - d)];
+}
+
+function signOf(x) { return x < 0 || Object.is(x, -0) ? "-" : ""; }
+
+/** Python f"{x:.{d}f}". */
+function pyFixed(x, d) {
+  if (Number.isNaN(x)) return "nan";
+  if (!Number.isFinite(x)) return x > 0 ? "inf" : "-inf";
+  if (Math.abs(x) >= 1e21) return BigInt(x).toString() + (d ? "." + "0".repeat(d) : "");
+  const [ip, fp] = halfEven(x, d);
+  return signOf(x) + ip + (d ? "." + fp : "");
+}
+
+/** Python round(x, d) for a float. */
+function pyRound(x, d) {
+  if (!Number.isFinite(x)) return x;
+  if (d >= 0) return Math.abs(x) >= 1e21 ? x : Number(pyFixed(x, d));
+  const m = 10 ** -d;
+  const q = x / m;
+  let n = Math.floor(q);
+  const diff = q - n;
+  if (diff > 0.5 || (diff === 0.5 && ((n + 0.5) * m !== x || n % 2 !== 0))) n += 1;
+  return n * m || (x < 0 ? -0 : 0);
+}
+
+/** Python f"{x:g}" for a non-integral float. */
+function pyG(x) {
+  if (Number.isNaN(x)) return "nan";
+  if (!Number.isFinite(x)) return x > 0 ? "inf" : "-inf";
+  const exp = Number(x.toExponential(5).split("e")[1]);
+  if (exp < -4 || exp >= 6) {
+    const [mant, e] = x.toExponential(5).split("e");
+    const m = mant.includes(".") ? mant.replace(/0+$/, "").replace(/\.$/, "") : mant;
+    const n = Number(e);
+    return `${m}e${n < 0 ? "-" : "+"}${String(Math.abs(n)).padStart(2, "0")}`;
+  }
+  const out = pyFixed(x, 5 - exp);
+  return out.includes(".") ? out.replace(/0+$/, "").replace(/\.$/, "") : out;
+}
+
+/** How the server prints a value once the filters ran. */
+function pyStr(value) {
+  if (typeof value === "boolean") return value ? "True" : "False";
+  if (typeof value !== "number") return String(value);
+  if (Number.isFinite(value) && Number.isInteger(value)) return BigInt(value).toString();
+  return pyG(value);
+}
+
+/** Python str(value) for the text filters (lower / upper / jsonstr). A JS
+ *  number cannot tell 7 from 7.0, so numbers keep their shortest form. */
+function pyText(value) {
+  if (typeof value === "boolean") return value ? "True" : "False";
+  return String(value);
+}
+
 function applyFilter(value, expr) {
   const m = expr.match(/^([a-zA-Z_]\w*)(?:\((.*)\))?$/);
   if (!m) throw new Error("bad filter");
   const f = m[1], arg = m[2];
-  const num = Number(value);
+  const digits = (fallback) => {
+    if (!arg) return fallback;
+    if (!/^\s*[+-]?\d+\s*$/.test(arg)) throw new Error("bad digits");
+    return clampDigits(parseInt(arg, 10));
+  };
   switch (f) {
-    case "round": return Number(num.toFixed(arg ? parseInt(arg, 10) : 0));
-    case "fixed": return num.toFixed(arg ? parseInt(arg, 10) : 1);
-    case "pct": return String(Math.round(num));
-    case "div": return num / Number(arg);
-    case "lower": return String(value).toLowerCase();
-    case "upper": return String(value).toUpperCase();
+    case "round": return pyRound(toFloat(value), digits(0));
+    case "fixed": return pyFixed(toFloat(value), Math.max(0, digits(1)));
+    case "pct": {
+      const r = pyRound(toFloat(value), 0);
+      if (!Number.isFinite(r)) throw new Error("not finite");
+      return BigInt(r).toString();
+    }
+    case "div": {
+      if (!arg) throw new Error("div requires an argument");
+      const by = toFloat(arg);
+      if (by === 0) throw new Error("division by zero");
+      return toFloat(value) / by;
+    }
+    case "lower": return pyText(value).toLowerCase();
+    case "upper": return pyText(value).toUpperCase();
     case "json": return JSON.stringify(value);
-    case "jsonstr": return JSON.stringify(String(value)).slice(1, -1);
+    case "jsonstr": return JSON.stringify(pyText(value)).slice(1, -1);
     default: throw new Error("unknown filter " + f);
   }
 }
@@ -56,8 +155,7 @@ function resolve(spec, ctx, missing) {
   for (const f of parts.slice(1)) {
     try { value = applyFilter(value, f); } catch { return `[?${name}|${f}]`; }
   }
-  if (typeof value === "number" && Number.isInteger(value)) return String(value);
-  return String(value);
+  return pyStr(value);
 }
 
 /** The placeholder names a template uses ({disk.used_pct | fixed(1)} → "disk.used_pct"). */

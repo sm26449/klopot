@@ -1,0 +1,142 @@
+[
+ {
+  "icon": "",
+  "valid": true
+ },
+ {
+  "icon": "  ",
+  "valid": true
+ },
+ {
+  "icon": "🚀",
+  "valid": true
+ },
+ {
+  "icon": "⚠️",
+  "valid": true
+ },
+ {
+  "icon": "🌡️",
+  "valid": true
+ },
+ {
+  "icon": "🧑‍🔧",
+  "valid": true
+ },
+ {
+  "icon": "🇷🇴",
+  "valid": true
+ },
+ {
+  "icon": "★",
+  "valid": true
+ },
+ {
+  "icon": "‼",
+  "valid": false
+ },
+ {
+  "icon": "‼️",
+  "valid": false
+ },
+ {
+  "icon": "©",
+  "valid": true
+ },
+ {
+  "icon": "©️",
+  "valid": true
+ },
+ {
+  "icon": "™",
+  "valid": true
+ },
+ {
+  "icon": "ℹ️",
+  "valid": false
+ },
+ {
+  "icon": "âš¡",
+  "valid": false
+ },
+ {
+  "icon": "ðŸš¨",
+  "valid": false
+ },
+ {
+  "icon": "??",
+  "valid": false
+ },
+ {
+  "icon": "x",
+  "valid": false
+ },
+ {
+  "icon": "1",
+  "valid": false
+ },
+ {
+  "icon": "⚡x",
+  "valid": false
+ },
+ {
+  "icon": "1️⃣",
+  "valid": false
+ },
+ {
+  "icon": "#️⃣",
+  "valid": false
+ },
+ {
+  "icon": "→",
+  "valid": false
+ },
+ {
+  "icon": "☺",
+  "valid": true
+ },
+ {
+  "icon": "♥",
+  "valid": true
+ },
+ {
+  "icon": "⌛",
+  "valid": true
+ },
+ {
+  "icon": "🅰️",
+  "valid": true
+ },
+ {
+  "icon": "✓",
+  "valid": true
+ },
+ {
+  "icon": "•",
+  "valid": false
+ },
+ {
+  "icon": "°",
+  "valid": true
+ },
+ {
+  "icon": "€",
+  "valid": false
+ },
+ {
+  "icon": "  🚀  ",
+  "valid": true
+ },
+ {
+  "icon": "🚀🚀",
+  "valid": true
+ },
+ {
+  "icon": "✔️",
+  "valid": true
+ },
+ {
+  "icon": "⭐",
+  "valid": true
+ }
+]

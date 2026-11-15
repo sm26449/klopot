@@ -123,7 +123,7 @@ async def test_channel_test_is_an_attempt_with_its_exchange(db_client, admin_key
                       response_body=b'{"ok": true}', response_headers=resp.headers)
         return resp
 
-    with patch("app.channels.webhook.safe_request", AsyncMock(side_effect=fake_send)):
+    with patch("app.channels._http.safe_request", AsyncMock(side_effect=fake_send)):
         assert (await db_client.post(f"/v1/channels/{ch['id']}/test", headers=h)).json()["ok"] is True
     await _flush()
     items = (await db_client.get("/v1/activity/attempts", headers=h, params={"channel": "hook"})).json()["items"]

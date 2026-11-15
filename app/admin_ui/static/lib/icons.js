@@ -114,14 +114,17 @@ export const ICON_GROUPS = [
   ]},
 ];
 
-const PICTOGRAPHIC = /\p{Extended_Pictographic}|\p{Regional_Indicator}/u;
+// The server's rule (app/utils/icons.py), character class for character class:
+// no letter, digit, "?" or "�" (mojibake, a lost emoji), and at least one
+// "other symbol" (So). tests/js/support/icon_parity.json keeps the two equal.
 const TEXT = /[\p{L}\p{N}?�]/u;
+const SYMBOL = /\p{So}/u;
 
 // "" → valid (no icon); otherwise an emoji, never text or mojibake.
 export function isValidIcon(value) {
   const v = (value || "").trim();
   if (!v) return true;
-  return PICTOGRAPHIC.test(v) && !TEXT.test(v);
+  return SYMBOL.test(v) && !TEXT.test(v);
 }
 
 // Flat list filtered by a free-text query over both keyword languages.

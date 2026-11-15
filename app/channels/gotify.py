@@ -13,13 +13,10 @@ from __future__ import annotations
 
 from typing import Any
 
-import httpx
-
-from ..config import get_settings
-from ..utils.redact import redact_url, transport_error_text
-from ..utils.safe_http import EgressBlocked, ResponseTooLarge, safe_request
+from ..utils.redact import redact_url
+from . import _http
 from ._secrets import resolve_secret, scrub
-from .base import HEALTHCHECK_TIMEOUT_SEC, BaseChannel, Notification, SendResult, admin_link
+from .base import BaseChannel, Notification, SendResult, admin_link
 
 DEFAULT_PRIORITY = {"info": 2, "warning": 5, "critical": 8}
 
@@ -62,20 +59,13 @@ class GotifyChannel(BaseChannel):
         if not token:
             return SendResult(ok=False, error="gotify missing app_token")
         try:
-            r = await safe_request(
-                "POST", f"{server}/message", json=build_message(notif, config),
+            r = await _http.request(
+                "gotify", "POST", f"{server}/message", json=build_message(notif, config),
                 headers={"X-Gotify-Key": token, "Content-Type": "application/json"},
-                timeout=float(config.get("timeout_sec") or 10),
-                block_private=get_settings().block_private_egress,
+                timeout=float(config.get("timeout_sec") or 10), clean=lambda text: scrub(text, token),
             )
-        except EgressBlocked as e:
-            return SendResult(ok=False, error=e.reason)
-        except ResponseTooLarge as e:
-            return SendResult(ok=False, error=e.reason)
-        except httpx.TimeoutException:
-            return SendResult(ok=False, error="gotify timeout")
-        except httpx.HTTPError as e:
-            return SendResult(ok=False, error=scrub(f"gotify HTTP error: {transport_error_text(e)}", token)[:200])
+        except _http.Failed as f:
+            return f.result
         if r.status_code // 100 != 2:
             return SendResult(ok=False, error=scrub(redact_url(f"gotify HTTP {r.status_code}: {r.text[:200]}"), token),
                               response={"status": r.status_code})
@@ -92,11 +82,4 @@ class GotifyChannel(BaseChannel):
         server = (config.get("server_url") or "").rstrip("/")
         if not server:
             return {"reachable": False, "error": "no server_url configured"}
-        try:
-            r = await safe_request("GET", f"{server}/health", timeout=HEALTHCHECK_TIMEOUT_SEC,
-                                   block_private=get_settings().block_private_egress)
-            return {"reachable": r.status_code < 500, "status": r.status_code}
-        except EgressBlocked as e:
-            return {"reachable": False, "error": e.reason}
-        except Exception as e:
-            return {"reachable": False, "error": transport_error_text(e)[:200]}
+        return await _http.probe("GET", f"{server}/health")

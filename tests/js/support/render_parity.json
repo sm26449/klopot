@@ -1,0 +1,303 @@
+[
+ {
+  "template": "{x|round}",
+  "context": {
+   "x": 2.5
+  },
+  "expected": "2"
+ },
+ {
+  "template": "{x|round}",
+  "context": {
+   "x": 3.5
+  },
+  "expected": "4"
+ },
+ {
+  "template": "{x|round}",
+  "context": {
+   "x": -2.5
+  },
+  "expected": "-2"
+ },
+ {
+  "template": "{x|round(1)}",
+  "context": {
+   "x": 1.25
+  },
+  "expected": "1.2"
+ },
+ {
+  "template": "{x|round(1)}",
+  "context": {
+   "x": 1.35
+  },
+  "expected": "1.4"
+ },
+ {
+  "template": "{x|round(2)}",
+  "context": {
+   "x": 2.675
+  },
+  "expected": "2.67"
+ },
+ {
+  "template": "{x|round(-1)}",
+  "context": {
+   "x": 15
+  },
+  "expected": "20"
+ },
+ {
+  "template": "{x|round(-1)}",
+  "context": {
+   "x": 25
+  },
+  "expected": "20"
+ },
+ {
+  "template": "{x|round(13)}",
+  "context": {
+   "x": 0.1
+  },
+  "expected": "0.1"
+ },
+ {
+  "template": "{x|round(9999999)}",
+  "context": {
+   "x": 3.14159
+  },
+  "expected": "3.14159"
+ },
+ {
+  "template": "{x|round}",
+  "context": {
+   "x": 1e+300
+  },
+  "expected": "1000000000000000052504760255204420248704468581108159154915854115511802457988908195786371375080447864043704443832883878176942523235360430575644792184786706982848387200926575803737830233794788090059368953234970799945081119038967640880074652742780142494579258788820056842838115669472196386865459400540160"
+ },
+ {
+  "template": "{x|round(2)}",
+  "context": {
+   "x": 1.0
+  },
+  "expected": "1"
+ },
+ {
+  "template": "{x|round}",
+  "context": {
+   "x": 7
+  },
+  "expected": "7"
+ },
+ {
+  "template": "{x|pct}",
+  "context": {
+   "x": 2.5
+  },
+  "expected": "2"
+ },
+ {
+  "template": "{x|pct}",
+  "context": {
+   "x": 3.5
+  },
+  "expected": "4"
+ },
+ {
+  "template": "{x|pct}",
+  "context": {
+   "x": 84.6
+  },
+  "expected": "85"
+ },
+ {
+  "template": "{x|pct}",
+  "context": {
+   "x": "inf"
+  },
+  "expected": "[?x|pct]"
+ },
+ {
+  "template": "{x|fixed}",
+  "context": {
+   "x": 0.25
+  },
+  "expected": "0.2"
+ },
+ {
+  "template": "{x|fixed}",
+  "context": {
+   "x": 0.35
+  },
+  "expected": "0.3"
+ },
+ {
+  "template": "{x|fixed(2)}",
+  "context": {
+   "x": -0.005
+  },
+  "expected": "-0.01"
+ },
+ {
+  "template": "{x|fixed(20)}",
+  "context": {
+   "x": 1.2
+  },
+  "expected": "1.200000000000"
+ },
+ {
+  "template": "{x|fixed(101)}",
+  "context": {
+   "x": 1
+  },
+  "expected": "1.000000000000"
+ },
+ {
+  "template": "{x|fixed(-2)}",
+  "context": {
+   "x": 3.14159
+  },
+  "expected": "3"
+ },
+ {
+  "template": "{x|fixed(0)}",
+  "context": {
+   "x": 2.5
+  },
+  "expected": "2"
+ },
+ {
+  "template": "{x|fixed(1)}",
+  "context": {
+   "x": "3.25"
+  },
+  "expected": "3.2"
+ },
+ {
+  "template": "{x|fixed(1)}",
+  "context": {
+   "x": "abc"
+  },
+  "expected": "[?x|fixed(1)]"
+ },
+ {
+  "template": "{x|fixed(1)}",
+  "context": {
+   "x": ""
+  },
+  "expected": "[?x|fixed(1)]"
+ },
+ {
+  "template": "{x|fixed(1.5)}",
+  "context": {
+   "x": 2
+  },
+  "expected": "[?x|fixed(1.5)]"
+ },
+ {
+  "template": "{x|div(3)}",
+  "context": {
+   "x": 1
+  },
+  "expected": "0.333333"
+ },
+ {
+  "template": "{x|div(0)}",
+  "context": {
+   "x": 1
+  },
+  "expected": "[?x|div(0)]"
+ },
+ {
+  "template": "{x|div(1000)|fixed(1)} kW",
+  "context": {
+   "x": 12340
+  },
+  "expected": "12.3 kW"
+ },
+ {
+  "template": "{x|div}",
+  "context": {
+   "x": 1
+  },
+  "expected": "[?x|div]"
+ },
+ {
+  "template": "{x}",
+  "context": {
+   "x": 3.14159265
+  },
+  "expected": "3.14159"
+ },
+ {
+  "template": "{x}",
+  "context": {
+   "x": 0.1
+  },
+  "expected": "0.1"
+ },
+ {
+  "template": "{x}",
+  "context": {
+   "x": 1234567.5
+  },
+  "expected": "1.23457e+06"
+ },
+ {
+  "template": "{x}",
+  "context": {
+   "x": 1.234e-05
+  },
+  "expected": "1.234e-05"
+ },
+ {
+  "template": "{x}",
+  "context": {
+   "x": true
+  },
+  "expected": "True"
+ },
+ {
+  "template": "{x|upper}",
+  "context": {
+   "x": true
+  },
+  "expected": "TRUE"
+ },
+ {
+  "template": "{x|lower}",
+  "context": {
+   "x": "MiXeD"
+  },
+  "expected": "mixed"
+ },
+ {
+  "template": "{x|jsonstr}",
+  "context": {
+   "x": "a \"q\"\n"
+  },
+  "expected": "a \\\"q\\\"\\n"
+ },
+ {
+  "template": "{x|round(1)|div(10)}",
+  "context": {
+   "x": 25.4
+  },
+  "expected": "2.54"
+ },
+ {
+  "template": "{x|fixed(1)}",
+  "context": {
+   "x": "1_000.25"
+  },
+  "expected": "1000.2"
+ },
+ {
+  "template": "{x|round}",
+  "context": {
+   "x": "nan"
+  },
+  "expected": "nan"
+ }
+]

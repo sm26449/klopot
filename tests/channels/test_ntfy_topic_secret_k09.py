@@ -53,7 +53,7 @@ async def test_topic_from_an_env_ref_is_published_to(monkeypatch):
 
     notif = Notification(id="ntf_k09", type="t", severity="warning", icon=None, title="t", message="m",
                          fired_at=datetime(2026, 11, 15, 12, 0, 0))
-    with patch("app.channels.ntfy.safe_request", new=fake_request):
+    with patch("app.channels._http.safe_request", new=fake_request):
         result = await NtfyChannel().send(notif, {"topic_ref": "KLOPOT_SECRET_NTFY_TOPIC"})
     assert result.ok, result.error
     assert sent["topic"] == TOPIC

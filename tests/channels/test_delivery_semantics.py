@@ -108,11 +108,11 @@ def test_success_statuses_validated_and_legacy_configs_unchanged():
 
 async def test_webhook_body_gets_the_key_and_429_defers():
     ok = AsyncMock(return_value=_resp(200))
-    with patch("app.channels.webhook.safe_request", ok):
+    with patch("app.channels._http.safe_request", ok):
         await WebhookChannel().send(_notif(), {"url": "http://hook", "body_template": '{"key": "{idempotency_key | jsonstr}"}'},
                                     idempotency_key="ntf_1:hook")
     assert json.loads(ok.call_args.kwargs["content"]) == {"key": "ntf_1:hook"}
-    with patch("app.channels.webhook.safe_request", AsyncMock(return_value=_resp(429, headers={"Retry-After": "30"}))):
+    with patch("app.channels._http.safe_request", AsyncMock(return_value=_resp(429, headers={"Retry-After": "30"}))):
         r = await WebhookChannel().send(_notif(), {"url": "http://hook"})
     assert r.retry_after == 30.0
 

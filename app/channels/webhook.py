@@ -37,15 +37,12 @@ import json
 import logging
 from typing import Any, cast
 
-import httpx
-
-from ..config import get_settings
 from ..core import rendering
 from ..utils.http_retry import BACKPRESSURE_STATUSES, retry_after_or_default
-from ..utils.redact import redact_url, safe_url_display, transport_error_text
-from ..utils.safe_http import EgressBlocked, ResponseTooLarge, safe_request
+from ..utils.redact import redact_url, safe_url_display
+from . import _http
 from ._secrets import resolve_secret
-from .base import HEALTHCHECK_TIMEOUT_SEC, BaseChannel, Notification, SendResult
+from .base import BaseChannel, Notification, SendResult
 
 logger = logging.getLogger(__name__)
 
@@ -140,34 +137,29 @@ class WebhookChannel(BaseChannel):
         # metadata/link-local (or, when configured, private) target in between
         # the policy check and the connection.
         try:
-            r = await safe_request(
-                method, url, content=body_str, headers=headers,
-                timeout=float(config.get("timeout_sec") or 10), block_private=get_settings().block_private_egress,
+            r = await _http.request(
+                "webhook", method, url, content=body_str, headers=headers,
+                timeout=float(config.get("timeout_sec") or 10),
+                # httpx error text echoes the request URL, which may carry a
+                # token in userinfo/query or the path itself (Slack/Discord) —
+                # neutralize it before returning/storing it (R07 + audit A-06).
+                clean=lambda text: _safe_err(url, text),
             )
-            if r.status_code in ok_statuses:
+        except _http.Failed as f:
+            return f.result
+        if r.status_code in ok_statuses:
                 return SendResult(ok=True, response={"status": r.status_code})
-            return SendResult(
-                ok=False,
-                # Redact the upstream body — stored on the delivery row, readable
-                # with scope `read`, and could echo a credential (audit S-10).
-                error=redact_url(f"HTTP {r.status_code}: {r.text[:200]}"),
-                response={"status": r.status_code},
-                # 429 / 503: the receiver asked us to wait — defer, don't count
-                # it against the channel (Retry-After, default 60 s).
-                retry_after=retry_after_or_default(r.headers.get("Retry-After"))
-                if r.status_code in BACKPRESSURE_STATUSES else None,
-            )
-        except EgressBlocked as e:
-            return SendResult(ok=False, error=e.reason)
-        except ResponseTooLarge as e:
-            return SendResult(ok=False, error=e.reason)
-        except httpx.TimeoutException:
-            return SendResult(ok=False, error="webhook timeout")
-        except httpx.HTTPError as e:
-            # httpx error text echoes the request URL, which may carry a token
-            # in userinfo/query or the path itself (Slack/Discord) — neutralize
-            # it before returning/storing it (R07 + audit A-06).
-            return SendResult(ok=False, error=_safe_err(url, f"HTTP error: {transport_error_text(e)}"))
+        return SendResult(
+            ok=False,
+            # Redact the upstream body — stored on the delivery row, readable
+            # with scope `read`, and could echo a credential (audit S-10).
+            error=redact_url(f"HTTP {r.status_code}: {r.text[:200]}"),
+            response={"status": r.status_code},
+            # 429 / 503: the receiver asked us to wait — defer, don't count
+            # it against the channel (Retry-After, default 60 s).
+            retry_after=retry_after_or_default(r.headers.get("Retry-After"))
+            if r.status_code in BACKPRESSURE_STATUSES else None,
+        )
 
     async def healthcheck(self, config: dict[str, Any]) -> dict[str, Any]:
         url = config.get("url")
@@ -175,16 +167,7 @@ class WebhookChannel(BaseChannel):
             return {"reachable": False, "error": "no url configured"}
         # Best-effort HEAD probe, SSRF-safe (A-04): the connection is pinned to
         # a screened IP. Many webhook URLs reject HEAD, so 405 is still "up".
-        try:
-            r = await safe_request(
-                "HEAD", url, timeout=HEALTHCHECK_TIMEOUT_SEC,
-                block_private=get_settings().block_private_egress,
-            )
-            return {"reachable": r.status_code < 500, "status": r.status_code}
-        except EgressBlocked as e:
-            return {"reachable": False, "error": e.reason}
-        except Exception as e:
-            return {"reachable": False, "error": _safe_err(url, transport_error_text(e))[:200]}
+        return await _http.probe("HEAD", url, clean=lambda text: _safe_err(url, text))
 
 
 def _safe_err(url: Any, msg: str) -> str:

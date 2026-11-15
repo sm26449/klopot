@@ -51,8 +51,10 @@ async def _raise(*_a, **_kw):
     (SMSChannel(), {"provider": "http", "url": "https://sms.example.com/send", "phone": "+40700000000"}),
 ])
 async def test_adapters_store_only_the_error_kind(adapter, config):
+    # Webhook sends through the shared helper (app/channels/_http.py).
     module = type(adapter).__module__
-    with patch(f"{module}.safe_request", new=_raise):
+    target = "app.channels._http" if module == "app.channels.webhook" else module
+    with patch(f"{target}.safe_request", new=_raise):
         result = await adapter.send(_notif(), config)
     assert result.ok is False
     assert SECRET not in (result.error or "")

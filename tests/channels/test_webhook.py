@@ -38,7 +38,7 @@ def _patch_request(*, status: int = 200, text: str = "ok"):
     safe_req = AsyncMock(return_value=response)
     holder = MagicMock()
     holder.request = safe_req
-    return patch("app.channels.webhook.safe_request", safe_req), holder
+    return patch("app.channels._http.safe_request", safe_req), holder
 
 
 # ── Config validation ─────────────────────────────────────────────
@@ -211,7 +211,7 @@ async def test_explicit_expected_status_list():
 
 async def test_timeout_returns_error():
     with patch(
-        "app.channels.webhook.safe_request",
+        "app.channels._http.safe_request",
         AsyncMock(side_effect=httpx.TimeoutException("late")),
     ):
         r = await WebhookChannel().send(_notif(), {"url": "https://hook"})

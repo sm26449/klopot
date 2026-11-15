@@ -59,8 +59,13 @@ class FakeHTTP:
 
     @classmethod
     def install(cls, monkeypatch: Any, module: ModuleType) -> FakeHTTP:
+        """Replace ``safe_request`` in the adapter module and in the shared
+        helper (app/channels/_http.py) most adapters send through."""
+        from app.channels import _http
+
         fake = cls()
-        monkeypatch.setattr(module, "safe_request", fake)
+        monkeypatch.setattr(module, "safe_request", fake, raising=False)
+        monkeypatch.setattr(_http, "safe_request", fake)
         return fake
 
     def will(self, *responses: Any) -> FakeHTTP:
