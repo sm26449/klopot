@@ -2261,7 +2261,7 @@ export interface components {
             status: "ok" | "degraded" | "down";
             /**
              * Version
-             * @default 1.1.1
+             * @default 1.2.0
              */
             version: string;
         };
@@ -3921,7 +3921,7 @@ export interface components {
             service: string;
             /**
              * Version
-             * @default 1.1.1
+             * @default 1.2.0
              */
             version: string;
         };

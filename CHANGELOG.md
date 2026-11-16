@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-11-16
+
+Ready to face the internet: the proxy is private by default, every way in is
+budgeted (API keys, inbound tokens, logins, live streams), keys and inputs can
+be limited to addresses and rates, and anonymous callers learn less. Several
+defaults are stricter — read the upgrade notes before upgrading.
+
 ### Upgrade notes
 
 - **`compose.traefik.yml` is private by default.** Only clients in
@@ -840,6 +847,7 @@ iterations; that history is not carried over.
 - **Examples.** Importable config packs in `examples/` (uptime monitoring and
   an IoT threshold alert).
 
-[Unreleased]: https://github.com/sm26449/klopot/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/sm26449/klopot/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/sm26449/klopot/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/sm26449/klopot/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/sm26449/klopot/releases/tag/v1.1.0

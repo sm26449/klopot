@@ -1,10 +1,11 @@
-# Project status — 2026-11-15
+# Project status — 2026-11-16
 
-**1.1.1** (2026-11-15) is the current release; `pyproject.toml` and
-`GET /v1/version` say `1.1.1`. The [changelog](../CHANGELOG.md) has its
-upgrade notes (no default passwords; escalation needs a named channel), and
-builds of later commits are grouped there under **Unreleased** (they still
-report `1.1.1` until the next release). See
+**1.2.0** (2026-11-16) is the current release; `pyproject.toml` and
+`GET /v1/version` say `1.2.0`. The [changelog](../CHANGELOG.md) has its
+upgrade notes (private-by-default proxy, inbound tokens required and at least
+32 characters, anonymous health reduced to the status), and builds of later
+commits are grouped there under **Unreleased** (they still report `1.2.0`
+until the next release). See
 [INTEGRATIONS_ROADMAP.md](INTEGRATIONS_ROADMAP.md) for the remaining
 integrations.
 
@@ -48,18 +49,43 @@ preserves existing configuration.
 | Pre-release audit fixes | Concurrent fires of one type no longer deadlock on MySQL; provider credentials and destination paths kept out of the activity log; wrong API keys bounded and keys found by an indexed digest; Web Push devices not paused by a local outage; non-finite numbers stored as `null`; suppressed external episodes announced by a later firing; backup script fails on a failed dump; delivery lookup indexed | `0034`, `0035` | [Changelog](../CHANGELOG.md) |
 | Second pre-release review | Episode keys case-sensitive on MySQL; long messages and lone surrogates no longer lose an alert; render, preview and expression CPU bounds; acknowledgement / worker deadlock; breaker probe released on cancellation; sign-in returns its DB connection before hashing; delivery errors scrubbed of channel secrets; inbound webhook checks the token first; push pause reason recorded; Pushover receipts polled through an index; rollup repair; SMTP pinned, MQTT brokers screened; tag-based image publishing | `0036`–`0039` | [Changelog](../CHANGELOG.md#upgrade-notes) |
 
+## 1.1.1 and 1.2.0 — hardening for public exposure
+
+1.1.1 (2026-11-15) removed every publicly known default credential. 1.2.0
+(2026-11-16, schema `0043`) follows the two public-exposure reviews; every
+migration keeps the existing behaviour of keys and inputs.
+
+| Area | What it changes | Migration | Reference |
+|------|-----------------|-----------|-----------|
+| Proxy | `compose.traefik.yml` private by default (`KLOPOT_PRIVATE_CIDRS`); `compose.public.yml` opens only `POST /v1/fire`, rate- and size-limited; trusted proxies fail closed | — | [Deploy](DEPLOY.md) |
+| API keys | Per-key source allowlist and rate limit | `0042`, `0043` | [Auth model](AUTH_MODEL.md) |
+| Fire | `test: true` is a tag, its own throttle pool; bounded `context` | `0040` | [API](API.md) |
+| Inbound inputs | Token required by default, at least 32 characters; one uniform `401` budgeted per address; per-input rate limit; Alertmanager episode budgets and `label_types` | `0041` | [API](API.md) |
+| Admin plane | `ALERTD_ADMIN_ALLOW_CIDRS`; anonymous health reduced to the status; login lockout per address with a per-user ceiling; live streams capped | — | [Auth model](AUTH_MODEL.md), [Deploy](DEPLOY.md) |
+| Activity log, errors | Refused anonymous requests kept 1 day; 500 reuses the request's trace and headers; 409 explains; `Permissions-Policy` | — | [Activity log](ACTIVITY_LOG.md) |
+
 ## Verifying a deployment
 
 This document makes no claim about what any particular installation runs.
 To see what a deployment actually serves, check all three:
 
-- `GET /v1/version` — the application version (stays `1.1.0` for builds of
+- `GET /v1/version` — the application version (stays `1.2.0` for builds of
   later commits until the next release is cut);
 - `docker inspect <container>` — the image and its tag or digest;
 - `SELECT version_num FROM alembic_version` — the applied schema revision
   (compare with the highest file in `alembic/versions/`).
 
 ## Validation
+
+**1.2.0 release gate (2026-11-16).** All of the following passed:
+
+- Ruff; no new mypy violations against the existing baseline.
+- pytest on in-memory SQLite: 1707 tests.
+- Node admin-UI tests: 407.
+- OpenAPI drift and SDK drift checks; gitleaks.
+- pytest MySQL gate on a disposable MySQL 8: 1720 tests.
+- Browser end-to-end suite against a throwaway fresh install (schema 0001 →
+  0043): 91 tests.
 
 **1.1.0 release gate (2026-11-15, after the second pre-release review).**
 All of the following passed:

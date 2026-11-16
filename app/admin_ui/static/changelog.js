@@ -3,6 +3,16 @@
 // root. English only (release notes are not translated per-line).
 export const CHANGELOG = [
   {
+    version: "1.2.0",
+    items: [
+      "Ready for the internet: the traefik overlay is private by default, and compose.public.yml opens only POST /v1/fire — read the upgrade notes.",
+      "API keys: limit a key to addresses (\"Add my address\") and to a number of requests per minute.",
+      "Inbound inputs need a token of at least 32 characters by default; the Inputs page marks a missing or short one. Each input can limit its own requests.",
+      "Wrong keys, wrong input tokens and failed sign-ins are budgeted per address; a remote guesser can no longer lock you out of the admin.",
+      "Anonymous health checks get the status only; ALERTD_ADMIN_ALLOW_CIDRS keeps the admin to your networks.",
+    ],
+  },
+  {
     version: "1.1.1",
     items: [
       "No default passwords: the database URL and MySQL passwords must be set, and escalation is off until you name a channel — read the upgrade notes.",
