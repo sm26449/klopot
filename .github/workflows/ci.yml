@@ -326,7 +326,9 @@ jobs:
     name: pytest (mysql)
     if: ${{ !github.event.repository.private || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # ~10 min on a usual runner; a slow one took 18 min to reach 82 % on
+    # 2026-11-16 and was cancelled at 20. Room for that, still bounded.
+    timeout-minutes: 30
     services:
       mysql:
         image: mysql:8.0
