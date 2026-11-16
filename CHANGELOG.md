@@ -77,6 +77,10 @@ adheres to [Semantic Versioning](https://semver.org/).
 - Search (Ctrl+K): when the results arrived after you started typing, the
   list re-sorted and Enter opened whatever had moved under the highlight;
   the highlight now stays on the item you saw.
+- Focus: a page change no longer takes focus from an open dialog. Search
+  (Ctrl+K) opened right after closing a drawer lost its input to the page,
+  so Enter went nowhere; a drawer opened from a link (`#/rules/12`) now
+  keeps focus on its first field.
 - Tests: the concurrent-login pool check (K07) on MySQL is deterministic.
 
 ## [1.1.1] — 2026-11-15

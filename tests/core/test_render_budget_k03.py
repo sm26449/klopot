@@ -44,4 +44,7 @@ async def test_preview_with_a_hostile_value_is_fast(db_client, db_session, admin
     elapsed = time.perf_counter() - started
     assert r.status_code == 200, r.text[:200]
     assert r.json()["missing_vars"] == ["absent"]
-    assert elapsed < 1.0, f"preview took {elapsed:.1f} s"
+    # The quadratic regex took ~30 s here; a linear preview takes ~0.3 s, and
+    # several times that on a loaded machine (1.8 s seen with the host busy).
+    # The bound tells the two apart without measuring the machine.
+    assert elapsed < 5.0, f"preview took {elapsed:.1f} s"

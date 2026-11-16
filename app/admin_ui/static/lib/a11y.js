@@ -10,6 +10,8 @@
 // The accessible NAME stays the visible content (WCAG 2.5.3 Label in Name: a
 // voice-control user says what they see); `label` is the action context and
 // goes to aria-description, which screen readers announce after the name.
+import { dialogOpen } from "./dialog.js";
+
 export function clickable(onActivate, label) {
   return {
     onClick: onActivate,
@@ -37,4 +39,19 @@ export function skipToMain(e) {
   main.focus();
   if (typeof main.scrollIntoView === "function") main.scrollIntoView();
   return true;
+}
+
+// A new page (route change): start at the top and move focus to <main>, so
+// keyboard and screen-reader users land on the new content (A36) — without
+// the browser scrolling <main> into view, which on a phone pushed the menu
+// button off-screen. Unless a dialog is open: it owns focus. A drawer opened
+// by its URL focuses its first field before this runs (child effects first),
+// and the search palette opened while the previous route change is still
+// pending focuses its input — taking focus to <main> then sent the next
+// keystroke (Enter) to the page instead of the dialog.
+export function focusNewPage() {
+  if (typeof document === "undefined") return;
+  window.scrollTo(0, 0);
+  if (dialogOpen()) return;
+  document.getElementById("main-content")?.focus({ preventScroll: true });
 }

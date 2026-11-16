@@ -29,6 +29,12 @@ function _bindGlobalEscape() {
   }, true);
 }
 
+/** Whether a dialog (drawer, modal, the search palette) is open. It owns
+ *  focus: nothing outside it — a route change — may take focus away. */
+export function dialogOpen() {
+  return _stack.length > 0;
+}
+
 let _seq = 0;
 export function dialogTitleId(prefix = "dlg") {
   // Stable enough per render; only needs to be unique among mounted dialogs.

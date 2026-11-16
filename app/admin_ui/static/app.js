@@ -14,7 +14,7 @@ import { Toasts, toast } from "./lib/toast.js";
 import { t, getLang, setLang, LANGS } from "./lib/i18n.js";
 import { Wordmark, BrandIcon } from "./lib/brand.js";
 import { Modal, ErrorState } from "./lib/ui.js";
-import { skipToMain } from "./lib/a11y.js";
+import { skipToMain, focusNewPage } from "./lib/a11y.js";
 import { stackTables } from "./lib/stack_tables.js";
 import { CHANGELOG } from "./changelog.js";
 import { LoginView } from "./views/login.js";
@@ -154,18 +154,14 @@ function Shell({ user, health, version, onLogout, refreshMe, lang, onLangChange 
   const match = resolve(ROUTES, route.path === "/" ? "/dashboard" : route.path);
   const props = { user, health, version, onLogout, refreshMe, params: match?.params || {}, query: route.query };
 
-  // On route change update the page title and move focus to the main
-  // region so keyboard/screen-reader users land on the new content (A36).
+  // On route change update the page title and move focus to the new page
+  // (focusNewPage: not while a dialog owns focus).
   const current = route.path === "/" ? "/dashboard" : route.path;
   useEffect(() => {
     const top = "/" + current.split("/")[1];
     const key = LABEL_KEY_BY_PATH[current] || LABEL_KEY_BY_PATH[top];
     document.title = key ? `${t(key)} · Klopot` : t("shell.appTitle");
-    // New page: start at the top and move focus to it for screen readers —
-    // without the browser scrolling `main` into view, which on a phone pushed
-    // the menu button off-screen.
-    const main = document.getElementById("main-content");
-    if (main) { main.focus({ preventScroll: true }); window.scrollTo(0, 0); }
+    focusNewPage();
   }, [current, lang]);
 
   const isActive = (p) => route.path === p || route.path.startsWith(p + "/");
