@@ -15,7 +15,7 @@ from ...config import get_settings
 from ...db import get_session
 from ...db.models import Channel, Template, TemplateChannel
 from ...schemas.channel import ChannelCreate, ChannelRead, ChannelUpdate
-from ...schemas.common import ChannelKind, Page
+from ...schemas.common import ChannelKind, Page, Severity
 from ...schemas.routing import ChannelUsage, ChannelUsageTemplate
 from ...secrets_registry import mask_config, merge_secret_update, secret_status
 from ...utils.time import utc_now
@@ -33,7 +33,7 @@ async def _usage(session: AsyncSession, channel_id: int) -> list[ChannelUsageTem
     ).all()
     return [
         ChannelUsageTemplate(
-            type=t.type, severity_min=tc.severity_min, enabled=tc.enabled,
+            type=t.type, severity_min=Severity(tc.severity_min.value), enabled=tc.enabled,
         )
         for t, tc in rows
     ]

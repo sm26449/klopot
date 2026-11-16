@@ -7,7 +7,9 @@ injection (``get_session``), which manages commit/rollback semantics.
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+from typing import Any, cast
 
+from sqlalchemy.engine import CursorResult, Result
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -17,6 +19,13 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from ..config import get_settings
+
+
+def affected_rows(result: Result[Any]) -> int:
+    """Rows an UPDATE or DELETE matched. ``AsyncSession.execute`` returns a
+    ``CursorResult`` for these at run time but is typed as a plain ``Result``."""
+    return cast(CursorResult[Any], result).rowcount or 0
+
 
 # Module-level engine and session factory — created at startup.
 _engine: AsyncEngine | None = None

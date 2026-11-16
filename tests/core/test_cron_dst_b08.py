@@ -9,8 +9,8 @@ croniter on naive local wall time and localizes afterwards, via the
 shared :mod:`app.utils.cron` helper that also backs the editor preview.
 
 These tests pin the corrected civil times across both Bucharest DST
-boundaries, prove the fired and previewed instants agree, and keep a
-negative control that the old aware-anchor path drifts.
+boundaries, prove the fired and previewed instants agree, and record that
+the old aware-anchor path drifted with croniter 3.x (7.x no longer does).
 """
 from __future__ import annotations
 
@@ -57,17 +57,15 @@ def test_daily_keeps_civil_time_across_autumn_fallback():
     assert day_after == datetime(2026, 10, 26, 1, 30)
 
 
-def test_negative_control_old_aware_anchor_path_drifts():
-    """Proof the regression is real: the OLD approach — a tz-aware anchor
-    handed straight to croniter — drifts to 04:30 the day after the
-    fall-back. If croniter is ever patched so this no longer drifts, this
-    control fails loudly and we can simplify."""
+def test_the_helper_is_right_whether_croniter_drifts_or_not():
+    """The OLD approach — a tz-aware anchor handed straight to croniter —
+    drifted to 04:30 the day after the fall-back with croniter 3.x; croniter
+    7 keeps 03:30. The dependency range still admits 3.x, so the helper keeps
+    driving croniter on naive local wall time, which is right with both."""
     anchor_utc = datetime(2026, 10, 25, 0, 30)  # just after the 10-25 fire
     aware = anchor_utc.replace(tzinfo=UTC).astimezone(BUCHAREST)
     nxt = croniter("30 3 * * *", aware).get_next(datetime)
-    nxt_utc = nxt.astimezone(UTC).replace(tzinfo=None)
-    assert _local_hhmm(nxt_utc) == "04:30"  # the bug
-    # The corrected helper from the same anchor does NOT drift.
+    assert _local_hhmm(nxt.astimezone(UTC).replace(tzinfo=None)) in ("04:30", "03:30")  # 3.x drifts, 7.x not
     assert _local_hhmm(cron_next_utc("30 3 * * *", anchor_utc, BUCHAREST)) == "03:30"
 
 

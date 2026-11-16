@@ -23,7 +23,7 @@ from typing import Any
 
 from sqlalchemy import select
 
-from app.auth import hash_key, key_digest
+from app.auth import BCRYPT_MAX_BYTES, hash_key, key_digest
 from app.config import get_settings
 from app.core.passwords import hash_password
 from app.db import dispose_engine, init_engine
@@ -77,6 +77,14 @@ async def seed_bootstrap_admin_key(session) -> int:
     if not plaintext.startswith("alertd_"):
         logger.warning(
             "ALERTD_BOOTSTRAP_ADMIN_KEY does not start with 'alertd_' — ignored"
+        )
+        return 0
+
+    if len(plaintext.encode("utf-8")) > BCRYPT_MAX_BYTES:
+        logger.error(
+            "ALERTD_BOOTSTRAP_ADMIN_KEY is longer than %d bytes, which bcrypt cannot hash — ignored. "
+            "Generate one with: python -c \"import secrets; print('alertd_'+secrets.token_urlsafe(32))\"",
+            BCRYPT_MAX_BYTES,
         )
         return 0
 

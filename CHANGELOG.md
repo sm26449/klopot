@@ -6,6 +6,31 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Upgrade notes
+
+- **`ALERTD_BOOTSTRAP_ADMIN_KEY` longer than 72 bytes is ignored** (logged as
+  an error). bcrypt reads at most 72 bytes: older releases silently cut a
+  longer key, bcrypt 5 refuses it. The generated key (`alertd_` +
+  `token_urlsafe(32)`, 50 characters) is unaffected; an API key longer than
+  72 bytes is refused as a wrong key without being hashed.
+- The image runs gunicorn with `uvicorn_worker.UvicornWorker` (the
+  `uvicorn-worker` package): `uvicorn.workers` is deprecated. A custom command
+  that names the old worker class still works, with a deprecation warning.
+
+### Changed
+
+- Dependencies: SQLAlchemy 2.1 (installed as `sqlalchemy[asyncio]` — 2.1 no
+  longer brings `greenlet`, which the async engine needs), uvicorn 0.54,
+  gunicorn 27, bcrypt 5, argon2-cffi 25, croniter 7, structlog 26,
+  prometheus-client 0.26. Dev: ruff 0.17, mypy 2, black 26, pytest-cov 7;
+  openapi-typescript 7.13. Held back, with the reason in Dependabot's
+  config: `openapi-python-client` 0.29.1, aiosqlite 0.21, pytest 8 with
+  pytest-asyncio 0.24, jsdom 26.
+- `affected_rows()` (`app.db`) reads the row count of an UPDATE / DELETE in
+  one typed place instead of five; the failed-operations list reads only the
+  columns it shows. The mypy baseline lost eight entries.
+- CI: `actions/setup-python` 7; the MySQL job may take 30 minutes.
+
 ## [1.2.0] — 2026-11-16
 
 Ready to face the internet: the proxy is private by default, every way in is

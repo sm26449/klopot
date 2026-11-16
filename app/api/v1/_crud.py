@@ -11,7 +11,7 @@ counting + slicing.
 from __future__ import annotations
 
 import logging
-from typing import Any, TypeVar
+from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
@@ -23,10 +23,9 @@ from ...schemas.common import Page
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar("T", bound=DeclarativeBase)
 
 
-async def crud_list(
+async def crud_list[T: DeclarativeBase](
     session: AsyncSession,
     model: type[T],
     *,
@@ -63,7 +62,7 @@ def page_response(items: list[Any], total: int, skip: int, limit: int) -> dict[s
     return {"items": items, "total": total, "limit": limit, "offset": skip}
 
 
-async def crud_get_or_404(session: AsyncSession, model: type[T], id_value: Any) -> T:
+async def crud_get_or_404[T: DeclarativeBase](session: AsyncSession, model: type[T], id_value: Any) -> T:
     """Fetch by primary key or raise 404."""
     obj = await session.get(model, id_value)
     if obj is None:
@@ -74,7 +73,7 @@ async def crud_get_or_404(session: AsyncSession, model: type[T], id_value: Any) 
     return obj
 
 
-async def enforce_create_cap(
+async def enforce_create_cap[T: DeclarativeBase](
     session: AsyncSession, model: type[T], cap: int, *, entity: str, n_new: int = 1,
 ) -> None:
     """Refuse a create that would push ``model``'s total row count past ``cap``
@@ -146,11 +145,11 @@ async def flush_or_409(session: AsyncSession, action: str = "operation") -> None
 
 
 __all__ = [
-    "crud_list",
-    "crud_get_or_404",
+    "Page",
     "commit_or_409",
+    "crud_get_or_404",
+    "crud_list",
     "enforce_create_cap",
     "flush_or_409",
     "page_response",
-    "Page",
 ]

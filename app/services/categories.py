@@ -28,5 +28,5 @@ async def canonical_category(
     query = select(Template.category).where(Template.category.is_not(None))
     if exclude_type is not None:
         query = query.where(Template.type != exclude_type)
-    counts = Counter(c for (c,) in (await session.execute(query)).all() if c.lower() == value.lower())
+    counts = Counter(c for (c,) in (await session.execute(query)).all() if c is not None and c.lower() == value.lower())
     return counts.most_common(1)[0][0] if counts else value

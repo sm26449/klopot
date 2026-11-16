@@ -27,7 +27,7 @@ from datetime import timedelta
 from sqlalchemy import delete, or_, select
 
 from ..config import get_settings
-from ..db import get_session_factory
+from ..db import affected_rows, get_session_factory
 from ..db.models import (
     AdminSession,
     ApiRequest,
@@ -215,13 +215,13 @@ class RetentionService:
             RETENTION_LAST_RUN_TS.set(time.time())
             raise
 
-        log_deleted = r1.rowcount or 0
-        audit_deleted = r2.rowcount or 0
+        log_deleted = affected_rows(r1)
+        audit_deleted = affected_rows(r2)
         RETENTION_RUNS_TOTAL.labels(result="success").inc()
         RETENTION_ROWS_DELETED_TOTAL.labels(table="notifications_log").inc(log_deleted)
         RETENTION_ROWS_DELETED_TOTAL.labels(table="audit_log").inc(audit_deleted)
         for table, res in (("api_requests", r_req), ("delivery_attempts", r_att), ("system_events", r_evt)):
-            RETENTION_ROWS_DELETED_TOTAL.labels(table=table).inc(getattr(res, "rowcount", 0) or 0)
+            RETENTION_ROWS_DELETED_TOTAL.labels(table=table).inc(affected_rows(res))
         RETENTION_LAST_RUN_TS.set(time.time())
 
         logger.info(

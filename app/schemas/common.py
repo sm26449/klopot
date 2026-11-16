@@ -11,7 +11,6 @@ unknown values reach clients).
 from __future__ import annotations
 
 import enum
-from typing import Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict
 
@@ -74,10 +73,9 @@ class SnoozeScope(str, enum.Enum):
 
 # ── Pagination envelope ────────────────────────────────────────────
 
-T = TypeVar("T")
 
 
-class Page(BaseModel, Generic[T]):
+class Page[T](BaseModel):
     """Standard paginated list response.
 
     Used by every ``GET /v1/<resource>`` endpoint that returns a

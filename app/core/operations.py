@@ -47,10 +47,11 @@ async def snapshot(session: AsyncSession) -> OperationsRead:
 
     queues = []
     failures = []
+    model: type[Delivery] | type[ChannelActionCommand] | type[ChannelProviderCommand]
     for model, name in ((Delivery, "deliveries"), (ChannelActionCommand, "actions"),
                         (ChannelProviderCommand, "provider")):
         queues.append(await queue_summary(session, model, name))
-        query = select(model, Delivery.notification_id, Delivery.channel)
+        query = select(model.attempts, model.last_error, model.created_at, Delivery.notification_id, Delivery.channel)
         if model is ChannelProviderCommand:
             query = query.join(ChannelProviderMessage, model.reference_id == ChannelProviderMessage.id).join(
                 Delivery, ChannelProviderMessage.delivery_id == Delivery.id,
@@ -58,10 +59,10 @@ async def snapshot(session: AsyncSession) -> OperationsRead:
         elif model is ChannelActionCommand:
             query = query.join(Delivery, model.delivery_id == Delivery.id)
         query = query.where(model.state == "failed").order_by(model.created_at.desc()).limit(10)
-        for row, notification_id, channel in (await session.execute(query)).all():
+        for attempts, last_error, created_at, notification_id, channel in (await session.execute(query)).all():
             failures.append(FailedOperation(queue=name, notification_id=notification_id, channel=channel,
-                                            attempts=row.attempts, error=redact_url(row.last_error)[:500] if row.last_error else None,
-                                            created_at=row.created_at))
+                                            attempts=attempts, error=redact_url(last_error)[:500] if last_error else None,
+                                            created_at=created_at))
     channels = (await session.execute(select(Channel).where(Channel.enabled.is_(True)))).scalars().all()
     service = get_telegram_service()
     telegram = [{"channel": c.name, **service.health(c.config or {})} for c in channels

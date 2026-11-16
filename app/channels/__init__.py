@@ -14,4 +14,4 @@ from __future__ import annotations
 from .base import BaseChannel, Notification, SendResult
 from .registry import REGISTRY
 
-__all__ = ["BaseChannel", "Notification", "SendResult", "REGISTRY"]
+__all__ = ["REGISTRY", "BaseChannel", "Notification", "SendResult"]

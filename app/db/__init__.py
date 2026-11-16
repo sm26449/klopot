@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from .base import Base
 from .session import (
+    affected_rows,
     dispose_engine,
     get_session,
     get_session_factory,
@@ -19,6 +20,10 @@ from .session import (
 )
 
 __all__ = [
-    "Base", "init_engine", "dispose_engine", "get_session",
+    "Base",
+    "affected_rows",
+    "dispose_engine",
+    "get_session",
     "get_session_factory",
+    "init_engine",
 ]

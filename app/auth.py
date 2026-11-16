@@ -351,7 +351,9 @@ async def _authenticate_key(
     _KEY_BUDGET.note(client_ip)
     wrong = False
     try:
-        rows = (
+        # bcrypt reads at most BCRYPT_MAX_BYTES (bcrypt 5 refuses more, older
+        # releases cut it off): a longer key matches no stored hash.
+        rows = [] if len(raw.encode("utf-8")) > BCRYPT_MAX_BYTES else (
             await session.execute(
                 select(ApiKey).where(
                     ApiKey.key_prefix == raw[:8], ApiKey.enabled == true(), ApiKey.key_digest.is_(None))
@@ -755,6 +757,9 @@ def require_scope(scope: str):
 
 
 # ── Bcrypt helpers (also used by api_keys CRUD + bootstrap) ────────
+
+# The longest secret bcrypt reads; bcrypt 5 raises ValueError beyond it.
+BCRYPT_MAX_BYTES = 72
 
 
 def hash_key(plaintext: str) -> str:

@@ -163,7 +163,7 @@ async def log_stats(
     )).all()
     by_delivery: dict[str, int] = {}
     for d, c in delivery_rows:
-        key = d.value if hasattr(d, "value") else ("unknown" if d is None else str(d))
+        key = "unknown" if d is None else str(getattr(d, "value", d))
         by_delivery[key] = by_delivery.get(key, 0) + c
     sent = by_delivery.get("sent", 0)
     partial = by_delivery.get("partial", 0)
@@ -176,7 +176,7 @@ async def log_stats(
         .group_by(NotificationLog.suppressed_reason)
     )).all()
     suppressed_by_reason = {
-        (r.value if hasattr(r, "value") else str(r)): c for r, c in suppressed_rows
+        str(getattr(r, "value", r)): c for r, c in suppressed_rows
     }
 
     severity_rows = (await session.execute(

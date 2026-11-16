@@ -15,7 +15,7 @@ from datetime import timedelta
 from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..db import get_session, get_session_factory
+from ..db import affected_rows, get_session, get_session_factory
 from ..db.models import (
     Delivery,
     DeliveryState,
@@ -242,7 +242,7 @@ class DeliveryWorker:
             )
             .values(lease_until=now + timedelta(seconds=self._LEASE_SEC))
         )
-        if claim.rowcount != 1:
+        if affected_rows(claim) != 1:
             return False
 
         d = await session.get(Delivery, delivery_id)

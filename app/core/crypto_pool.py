@@ -11,11 +11,8 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
-from typing import TypeVar
 
 from ..config import get_settings
-
-_T = TypeVar("_T")
 
 # Lazily created so the bound honours settings and the semaphore binds to
 # the running loop on first use (not at import time).
@@ -37,7 +34,7 @@ class CryptoPoolBusy(Exception):
     """More callers are waiting for a hashing slot than the caller allows."""
 
 
-async def run_in_pool(fn: Callable[..., _T], *args: object, queue_max: int | None = None) -> _T:
+async def run_in_pool[T](fn: Callable[..., T], *args: object, queue_max: int | None = None) -> T:
     """Run a blocking crypto function in a worker thread, bounded by the
     hashing concurrency semaphore.
 

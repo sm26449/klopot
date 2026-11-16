@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, TypeVar
+from typing import Any
 
 from pydantic import (
     BaseModel,
@@ -40,10 +40,9 @@ _LEGACY_PV = Field(
 )
 
 
-_M = TypeVar("_M", "TemplateBase", "TemplateUpdate")
 
 
-def _apply_legacy_gate(model: _M) -> _M:
+def _apply_legacy_gate[M: ("TemplateBase", "TemplateUpdate")](model: M) -> M:
     """Map a written ``require_pv_kw`` onto the generic gate fields."""
     if model.require_pv_kw is None or "require_pv_kw" not in model.model_fields_set:
         return model

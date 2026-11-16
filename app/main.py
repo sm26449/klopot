@@ -13,10 +13,10 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+from alembic.config import Config as AlembicConfig
 from fastapi import FastAPI, Request
 
 from alembic import command
-from alembic.config import Config as AlembicConfig
 
 from . import __version__
 from .api.v1 import router as v1_router

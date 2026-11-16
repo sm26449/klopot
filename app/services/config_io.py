@@ -859,8 +859,8 @@ async def _import_routes(session: AsyncSession, items: list[dict[str, Any]], pla
             continue
         tt = item.get("template")
         cn = item.get("channel")
-        tid = tmpl_map.get(tt)
-        cid = ch_map.get(cn)
+        tid = tmpl_map.get(tt) if isinstance(tt, str) else None
+        cid = ch_map.get(cn) if isinstance(cn, str) else None
         if tid is None or cid is None:
             # With the dependency flushes above, a declared template/channel
             # resolves here; a miss means a route references something that

@@ -27,6 +27,12 @@ REGISTRY: dict[str, type[BaseInput]] = {
 
 
 __all__ = [
-    "BaseInput", "ValueCallback", "MQTTSubscriber", "HTTPPollInput",
-    "WebhookInput", "SMSInboxInput", "AlertmanagerInput", "REGISTRY",
+    "REGISTRY",
+    "AlertmanagerInput",
+    "BaseInput",
+    "HTTPPollInput",
+    "MQTTSubscriber",
+    "SMSInboxInput",
+    "ValueCallback",
+    "WebhookInput",
 ]

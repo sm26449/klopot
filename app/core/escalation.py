@@ -32,7 +32,7 @@ from sqlalchemy import false, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
-from ..db import get_session_factory
+from ..db import affected_rows, get_session_factory
 from ..db.models import Channel, NotificationLog, Severity
 from ..metrics import ESCALATIONS_TOTAL
 from ..utils.time import utc_now
@@ -158,7 +158,7 @@ class EscalationService:
             )
             .values(escalated_at=now)
         )
-        if getattr(claim, "rowcount", 0) != 1:
+        if affected_rows(claim) != 1:
             return False
         name = settings.escalation_channel
         channel = (

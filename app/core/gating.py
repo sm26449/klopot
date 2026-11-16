@@ -44,6 +44,7 @@ from sqlalchemy import (
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
+from ..db import affected_rows
 from ..db.models import (
     Channel,
     NotificationLog,
@@ -406,7 +407,7 @@ async def account_first_success(
 
     Returns True iff this call won the race and performed the accounting.
     """
-    won = (
+    won = affected_rows(
         await session.execute(
             update(NotificationLog)
             .where(
@@ -415,7 +416,7 @@ async def account_first_success(
             )
             .values(success_counted=True)
         )
-    ).rowcount == 1
+    ) == 1
     if not won:
         return False
     log.success_counted = True
@@ -522,7 +523,7 @@ def _parse_hhmm(raw: str) -> time:
     return time(int(raw))
 
 
-def _in_quiet_window(now: time, window: str | None) -> bool:
+def _in_quiet_window(now: time, window: object) -> bool:
     """Window like ``"22-07"`` or ``"22:30-07:00"`` (crosses midnight)."""
     if not window:
         return False

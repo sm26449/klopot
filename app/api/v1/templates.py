@@ -12,7 +12,7 @@ from ...auth import Actor, require_scope
 from ...core import rendering
 from ...db import get_session
 from ...db.models import Channel, Template, TemplateChannel
-from ...schemas.common import Page, Severity
+from ...schemas.common import ChannelKind, Page, Severity
 from ...schemas.routing import RouteRead, RouteWrite
 from ...schemas.template import TemplateCreate, TemplateRead, TemplateUpdate
 from ...services.categories import canonical_category
@@ -185,8 +185,8 @@ async def _routes_for(session: AsyncSession, template_id: int) -> list[RouteRead
         RouteRead(
             channel_id=ch.id,
             channel_name=ch.name,
-            kind=ch.kind,
-            severity_min=tc.severity_min,
+            kind=ChannelKind(ch.kind.value),
+            severity_min=Severity(tc.severity_min.value),
             enabled=tc.enabled,
             # Route overrides are a partial channel config and can carry
             # secrets (e.g. a per-route auth_value). Redact them for the
