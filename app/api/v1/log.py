@@ -13,7 +13,6 @@ from ...core.outbox import MAX_ATTEMPTS
 from ...db import get_session
 from ...db.models import Delivery, DeliveryStatus, NotificationLog, Severity
 from ...schemas.common import Page
-from ...schemas.common import Severity as SchemaSeverity
 from ...schemas.log import DeliveryRead, LogEntryDetail, LogEntryRead
 from ...utils.like import like_escape
 from ...utils.redact import redact_url
@@ -57,7 +56,7 @@ async def list_log(
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=500),
     type: str | None = None,
-    severity: SchemaSeverity | None = None,
+    severity: Severity | None = None,
     suppressed: bool | None = Query(
         default=None,
         description="true → only suppressed; false → only dispatched; omit → all",
@@ -85,7 +84,7 @@ async def list_log(
     if type is not None:
         filters.append(NotificationLog.type == type)
     if severity is not None:
-        filters.append(NotificationLog.severity == Severity(severity.value))
+        filters.append(NotificationLog.severity == severity)
     if suppressed is True:
         filters.append(NotificationLog.suppressed_reason.is_not(None))
     elif suppressed is False:

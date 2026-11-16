@@ -35,6 +35,11 @@ adheres to [Semantic Versioning](https://semver.org/).
   one typed place instead of five; the failed-operations list reads only the
   columns it shows. The mypy baseline lost eight entries.
 - CI: `actions/setup-python` 7; the MySQL job may take 30 minutes.
+- The enums shared by the database and the API (`Severity`, `ChannelKind`,
+  `InputKind`, …) are defined once, in `app/enums.py`, instead of twice kept
+  in step by hand, and are `StrEnum`s: `str()` and f-strings give the value
+  (`critical`), not `Severity.critical`. The API and the stored values are
+  unchanged (`openapi/v1.json` identical).
 - Development needs Node 22+ (`.nvmrc`: 24): jsdom 31 and Playwright 1.65;
   the test scripts pin the TAP reporter, which Node 23+ no longer uses by
   default.

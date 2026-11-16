@@ -16,7 +16,6 @@ All models use:
 """
 from __future__ import annotations
 
-import enum
 from datetime import datetime
 from typing import Any
 
@@ -41,101 +40,19 @@ from sqlalchemy import (
 from sqlalchemy.dialects import mysql
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+# The enums live in app.enums (shared with the API schemas); explicit re-exports
+# so callers can keep importing them from here.
+from ..enums import ActorKind as ActorKind
+from ..enums import ChannelKind as ChannelKind
+from ..enums import DeliveryState as DeliveryState
+from ..enums import DeliveryStatus as DeliveryStatus
+from ..enums import InputKind as InputKind
+from ..enums import Severity as Severity
+from ..enums import SnoozeScope as SnoozeScope
+from ..enums import SuppressedReason as SuppressedReason
+from ..enums import VariableSource as VariableSource
 from ..utils.time import utc_now
 from .base import Base
-
-# ── Enums ──────────────────────────────────────────────────────────
-
-
-class Severity(str, enum.Enum):
-    info = "info"
-    warning = "warning"
-    critical = "critical"
-
-
-class InputKind(str, enum.Enum):
-    mqtt = "mqtt"
-    http_poll = "http_poll"
-    webhook = "webhook"
-    schedule = "schedule"
-    sms_inbox = "sms_inbox"
-    email_imap = "email_imap"
-    alertmanager = "alertmanager"
-
-
-class VariableSource(str, enum.Enum):
-    mqtt = "mqtt"
-    aggregate = "aggregate"
-    computed = "computed"
-    constant = "constant"
-    schedule = "schedule"
-
-
-class ChannelKind(str, enum.Enum):
-    mqtt = "mqtt"
-    ntfy = "ntfy"
-    gotify = "gotify"
-    pushover = "pushover"
-    ui = "ui"
-    banner = "banner"
-    telegram = "telegram"
-    sms = "sms"
-    email = "email"
-    push = "push"
-    webhook = "webhook"
-
-
-class SuppressedReason(str, enum.Enum):
-    disabled = "disabled"
-    snoozed = "snoozed"
-    throttled = "throttled"
-    persist = "persist"
-    gated = "gated"
-    duplicate = "duplicate"
-    unknown_type = "unknown_type"
-    inhibited = "inhibited"  # a declared inhibitor rule is active (0006)
-    below_gate = "below_gate"  # template gate: gate_variable below gate_min (0010 as pv_power, renamed 0030)
-
-
-class DeliveryStatus(str, enum.Enum):
-    """Settled outcome of a fire (migration 0009, audit A03).
-
-    Persisted alongside ``suppressed_reason`` so the log, dashboard,
-    stats, and dedup replay report the TRUTH instead of inferring
-    "delivered" from the mere absence of a suppression reason (a row
-    with ``suppressed_reason IS NULL`` but every channel failed is a
-    FAILED delivery, not a success).
-    """
-
-    sent = "sent"              # ≥1 channel succeeded, none failed
-    partial = "partial"        # ≥1 channel succeeded AND ≥1 failed
-    failed = "failed"          # dispatch attempted, zero channels succeeded
-    suppressed = "suppressed"  # gated before dispatch (see suppressed_reason)
-    pending = "pending"        # ≥1 delivery still queued/retrying (0011, A01)
-    cancelled = "cancelled"    # recovered incident, no delivery still needed
-
-
-class DeliveryState(str, enum.Enum):
-    """Per-channel delivery state in the transactional outbox (A01)."""
-
-    pending = "pending"   # queued or awaiting the next retry
-    sent = "sent"         # delivered to this channel
-    failed = "failed"     # permanently failed (max attempts or non-retryable)
-    cancelled = "cancelled"  # acknowledged escalation or recovered incident
-
-
-class SnoozeScope(str, enum.Enum):
-    type = "type"
-    rule = "rule"
-    channel = "channel"
-
-
-class ActorKind(str, enum.Enum):
-    api_key = "api_key"
-    jwt = "jwt"
-    system = "system"
-    user = "user"  # browser session of an admin_users row (migration 0008)
-
 
 # ── Configuration tables ───────────────────────────────────────────
 
