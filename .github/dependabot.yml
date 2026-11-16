@@ -40,6 +40,10 @@ updates:
       # Lift this once that host moves to Node 20+ (CI already runs Node 24).
       - dependency-name: "playwright"
         versions: [">=1.62.0"]
+      # 27+ needs Node 20, 30+ Node 22 — the same host runs the admin-UI
+      # tests (scripts/check.sh). Lift together with the Playwright hold.
+      - dependency-name: "jsdom"
+        versions: [">=27.0.0"]
     commit-message:
       prefix: "build"
       include: "scope"
