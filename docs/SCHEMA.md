@@ -719,7 +719,7 @@ CREATE TABLE login_attempts (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     ts DATETIME NOT NULL,
     username VARCHAR(64) NULL,
-    ip VARCHAR(45) NULL,
+    ip VARCHAR(45) NULL,                    -- the address's unit: IPv4 as is, IPv6 its /64 (1.2)
     success BOOLEAN NOT NULL,
     INDEX ix_attempts_user_ts (username, ts),
     INDEX ix_attempts_ip_ts (ip, ts),

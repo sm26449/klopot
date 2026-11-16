@@ -321,13 +321,24 @@ passwords.
 
 ### Lockout (`app/core/login_guard.py`)
 
-Sliding window over `login_attempts`: a username is locked after
-`ALERTD_LOGIN_MAX_FAILURES` (5) failures in the last
-`ALERTD_LOGIN_LOCKOUT_MIN` (15) minutes *since its last success*; a
-source IP after `ALERTD_LOGIN_MAX_FAILURES_PER_IP` (20) failures in the
-same window. The lock lifts when the N-th most recent failure ages out
-(`retry_after_sec` tells the client when). No separate lock state →
-a restart cannot clear it; the CLI can (`unlock`).
+Sliding window over `login_attempts`, the last `ALERTD_LOGIN_LOCKOUT_MIN`
+(15) minutes — for a username, *since its last success*:
+
+- `ALERTD_LOGIN_MAX_FAILURES` (5) failures for a username **from one
+  address** lock that username from that address only;
+- `ALERTD_LOGIN_MAX_FAILURES_PER_USER` (50) failures for a username from
+  **any** address lock it everywhere — the ceiling for a guesser spread
+  over many addresses, high enough that one remote address cannot lock the
+  admin out of the LAN (until 1.2 the first limit was global);
+- `ALERTD_LOGIN_MAX_FAILURES_PER_IP` (20) failures from one address lock it
+  for every username.
+
+An address counts by its unit: IPv4 as is, IPv6 by its /64. The lock lifts
+when the N-th most recent failure ages out (`retry_after_sec` tells the
+client when). No separate lock state → a restart cannot clear it; the CLI
+can (`unlock`). A lock is audited once per window (`auth.login_blocked`),
+not once per refused attempt. Keep the login page on the private router in
+any case ([DEPLOY](DEPLOY.md)).
 
 Every outcome is audited: `auth.login_ok`, `auth.login_failed`,
 `auth.login_blocked`, `auth.logout`, `auth.password_changed`,

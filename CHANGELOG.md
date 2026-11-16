@@ -81,6 +81,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+- Login lockout could be used to lock the admin out: five failed tries from
+  anywhere locked the username everywhere, and an IPv6 client got a fresh
+  per-address budget for each /128. A username is now locked from the
+  address the failures came from (`ALERTD_LOGIN_MAX_FAILURES`, 5), and
+  everywhere only past a much higher ceiling (`ALERTD_LOGIN_MAX_FAILURES_PER_USER`,
+  50, new); IPv6 counts by /64. A lock writes one `auth.login_blocked`
+  audit row per window instead of one per refused attempt.
 - Errors say less: the 500 response reuses the request's trace id (a sent
   `X-Trace-Id` only when it is a safe token — it was echoed unvalidated)
   and carries the security headers it lacked; a `409` explains the conflict

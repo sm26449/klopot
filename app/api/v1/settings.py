@@ -48,6 +48,7 @@ _EXPOSED: tuple[str, ...] = (
     "session_max_days",
     "cookie_secure",
     "login_max_failures",
+    "login_max_failures_per_user",
     "login_max_failures_per_ip",
     "login_lockout_min",
     "auth_history_days",

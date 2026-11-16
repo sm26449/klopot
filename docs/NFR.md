@@ -110,9 +110,11 @@ Health probe wait: 20 s start_period in Dockerfile, 30 s interval.
 - API keys: bcrypt hashed (cost=12); a generated key is also found by an
   indexed SHA-256 digest, so verifying it needs no bcrypt (AUTH_MODEL.md).
   Admin passwords: argon2id.
-- Rate limiting: no per-key HTTP request limit. Wrong API keys are bounded
-  per client address (5 a minute, then `429`). Logins are throttled per
-  username and per source IP (`ALERTD_LOGIN_MAX_FAILURES*`); outbound sends
+- Rate limiting: an API key or an inbound input may have its own request
+  limit (`rate_limit_per_min`). Wrong API keys and refused input tokens are
+  bounded per client address (5 a minute each, then `429`). Logins are
+  throttled per (username, address), per username and per address
+  (`ALERTD_LOGIN_MAX_FAILURES*`, IPv6 by /64); outbound sends
   are rate-limited per channel (`rate_limit_per_min`); request bodies are
   capped (`ALERTD_MAX_REQUEST_BYTES`).
 - Audit retention 365 days minimum.

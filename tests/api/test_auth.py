@@ -103,6 +103,27 @@ async def test_lockout_after_max_failures(db_client, admin_user):
     assert r.json()["detail"]["retry_after_sec"] >= 1
 
 
+async def test_a_remote_guesser_does_not_lock_the_admin_out_of_the_lan(db_client, db_session, admin_user, monkeypatch):
+    """Review F8: five tries from anywhere locked the username everywhere.
+    Now they lock it where they came from; a lock is audited once, not once
+    per refused attempt (review F5)."""
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "trusted_proxy_cidrs", "127.0.0.0/8")
+
+    async def login(ip: str, password: str):
+        return await db_client.post("/v1/auth/login", json={"username": "admin", "password": password},
+                                    headers={"X-Forwarded-For": ip})
+
+    for _ in range(5):
+        assert (await login("198.51.100.7", "wrong-password-here")).status_code == 401
+    assert [(await login("198.51.100.7", "wrong-password-here")).status_code for _ in range(3)] == [423] * 3
+    assert (await login("192.168.1.20", PASSWORD)).status_code == 200
+    blocked = (await db_session.execute(
+        select(AuditLog).where(AuditLog.action == "auth.login_blocked"))).scalars().all()
+    assert len(blocked) == 1
+
+
 # ── Session use: scope, CSRF, must-change ─────────────────────────
 
 

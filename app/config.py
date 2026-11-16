@@ -206,10 +206,14 @@ class Settings(BaseSettings):
     # ``Secure`` flag on the session cookies. True in production (TLS
     # via traefik); false only for plain-HTTP development.
     cookie_secure: bool = True
-    # Login lockout: N failed attempts for a username, or M for a source
-    # IP, within the last ``login_lockout_min`` minutes → 423 until the
-    # oldest counted failure ages out of the window.
+    # Login lockout (core/login_guard.py), within the last
+    # ``login_lockout_min`` minutes → 423 until the oldest counted failure
+    # ages out of the window: N failures for a username from one address
+    # lock it there, U from any address lock it everywhere (a ceiling well
+    # above N, so one remote address cannot lock the admin out), M from one
+    # address lock that address for every username.
     login_max_failures: int = Field(default=5, ge=1, le=100)
+    login_max_failures_per_user: int = Field(default=50, ge=1, le=10_000)
     login_max_failures_per_ip: int = Field(default=20, ge=1, le=1000)
     login_lockout_min: int = Field(default=15, ge=1, le=1440)
     # Retention for login_attempts + expired/revoked sessions.

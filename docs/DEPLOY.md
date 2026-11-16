@@ -168,7 +168,7 @@ Other knobs, all documented in `app/config.py`:
 
 - Set them in `.env`: the session /
   login-lockout settings (`ALERTD_SESSION_IDLE_HOURS`, `ALERTD_SESSION_MAX_DAYS`,
-  `ALERTD_LOGIN_MAX_FAILURES`, `ALERTD_LOGIN_MAX_FAILURES_PER_IP`,
+  `ALERTD_LOGIN_MAX_FAILURES`, `ALERTD_LOGIN_MAX_FAILURES_PER_USER`, `ALERTD_LOGIN_MAX_FAILURES_PER_IP`,
   `ALERTD_LOGIN_LOCKOUT_MIN`), `ALERTD_TRUSTED_PROXY_CIDRS`,
   `ALERTD_FIRE_CONTEXT_MAX_BYTES` (16384 — the largest `context` `/v1/fire`
   accepts, as compact JSON; nesting is capped at 16 levels),

@@ -315,11 +315,13 @@ def _fresh_key_failure_budget():
     same one: without this a test's 401s would turn a later test's into 429s
     (API keys and input tokens alike). Rate allowances are by key / input id,
     and ids repeat in every test database."""
+    from app.api.v1.auth import reset_login_block_audits
     from app.api.v1.inputs import reset_input_token_failures
     from app.auth import reset_key_failures, reset_key_rates
     from app.services.alertmanager import reset_episode_budgets
 
-    resets = (reset_key_failures, reset_key_rates, reset_input_token_failures, reset_episode_budgets)
+    resets = (reset_key_failures, reset_key_rates, reset_input_token_failures, reset_episode_budgets,
+              reset_login_block_audits)
     for reset in resets:
         reset()
     yield

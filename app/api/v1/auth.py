@@ -14,6 +14,8 @@ from __future__ import annotations
 import hashlib
 import logging
 import secrets
+import time
+from collections import OrderedDict
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
@@ -45,6 +47,7 @@ from ...schemas.auth import (
     SessionsRevoked,
     UserRead,
 )
+from ...utils.failure_budget import address_unit
 from ...utils.time import utc_now
 
 logger = logging.getLogger(__name__)
@@ -58,6 +61,32 @@ def _audited_username(typed: str, account_exists: bool) -> str:
     if account_exists:
         return typed
     return "unknown:" + hashlib.sha256(typed.encode("utf-8")).hexdigest()[:12]
+
+
+# Locks already audited: (username, address unit, reason) → when. Bounded;
+# the oldest entry makes room.
+_BLOCKS_AUDITED: OrderedDict[tuple[str, str, str | None], float] = OrderedDict()
+_BLOCKS_AUDITED_MAX = 10_000
+
+
+def _first_block(username: str, ip: str | None, reason: str | None, window_min: int) -> bool:
+    """Whether this lock of ``username`` from ``ip`` is not audited yet in
+    the current window (and note that it now is)."""
+    key = (username, address_unit(ip) if ip else "", reason)
+    now = time.monotonic()
+    last = _BLOCKS_AUDITED.get(key)
+    if last is not None and now - last < window_min * 60:
+        return False
+    _BLOCKS_AUDITED[key] = now
+    _BLOCKS_AUDITED.move_to_end(key)
+    while len(_BLOCKS_AUDITED) > _BLOCKS_AUDITED_MAX:
+        _BLOCKS_AUDITED.popitem(last=False)
+    return True
+
+
+def reset_login_block_audits() -> None:
+    """Forget which locks were audited (tests)."""
+    _BLOCKS_AUDITED.clear()
 
 
 # Sign-ins allowed to wait for a hashing slot on top of those running
@@ -130,22 +159,25 @@ async def login(
     username = body.username.strip()
 
     lock = await login_guard.check(
-        session,
-        username=username,
-        ip=ip,
-        window_min=s.login_lockout_min,
-        max_user=s.login_max_failures,
-        max_ip=s.login_max_failures_per_ip,
+        session, username=username, ip=ip,
+        limits=login_guard.Limits(
+            window_min=s.login_lockout_min, per_user_and_ip=s.login_max_failures,
+            per_user=s.login_max_failures_per_user, per_ip=s.login_max_failures_per_ip,
+        ),
     )
     if lock.locked:
-        known = (await session.execute(
-            select(AdminUser.id).where(AdminUser.username == username))).scalar_one_or_none() is not None
-        await record_change(
-            session, _SYSTEM, "auth.login_blocked",
-            resource_kind="admin_user", resource_id=_audited_username(username, known),
-            after={"ip": ip, "reason": lock.reason, "retry_after_sec": lock.retry_after_sec},
-        )
-        await session.commit()
+        # One audit row per lock, not per refused attempt: a caller
+        # hammering a locked username would otherwise write a row a request
+        # into a log kept for a year (review F5).
+        if _first_block(username, ip, lock.reason, s.login_lockout_min):
+            known = (await session.execute(
+                select(AdminUser.id).where(AdminUser.username == username))).scalar_one_or_none() is not None
+            await record_change(
+                session, _SYSTEM, "auth.login_blocked",
+                resource_kind="admin_user", resource_id=_audited_username(username, known),
+                after={"ip": ip, "reason": lock.reason, "retry_after_sec": lock.retry_after_sec},
+            )
+            await session.commit()
         raise HTTPException(
             status.HTTP_423_LOCKED,
             detail={
