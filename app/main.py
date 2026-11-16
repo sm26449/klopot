@@ -298,6 +298,13 @@ def create_app() -> FastAPI:
 
     app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.max_request_bytes)
 
+    # Admin-plane allowlist (ALERTD_ADMIN_ALLOW_CIDRS; empty = off): outside
+    # the body cap, so a refused caller cannot make Klopot buffer a body, and
+    # inside the activity log, so the refusal is recorded.
+    from .admin_allow import AdminAllowMiddleware
+
+    app.add_middleware(AdminAllowMiddleware, networks=settings.admin_allow_networks)
+
     # Activity log (docs/ACTIVITY_LOG.md): outside the body cap so a 413 is
     # recorded too, inside the trace middleware so rows carry its trace id.
     from .activity_middleware import ActivityLogMiddleware

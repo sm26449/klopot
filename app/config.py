@@ -14,6 +14,14 @@ from typing import Literal
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from .utils.client_ip import Network, parse_networks
+
+
+def _admin_allow(spec: str) -> tuple[Network, ...]:
+    """The networks of ALERTD_ADMIN_ALLOW_CIDRS (cached by parse_networks)."""
+    return parse_networks(tuple(spec.split(",")), label="admin allow entry",
+                          catch_all="allows every address; leave ALERTD_ADMIN_ALLOW_CIDRS empty for that")
+
 # Secrets a `*_ref` is allowed to resolve by default — the names documented in
 # .env.example (channel + input secrets, and the MQTT credentials reused by the
 # MQTT input). Anything else must be opted in via ALERTD_SECRET_REF_ALLOW, so a
@@ -226,6 +234,10 @@ class Settings(BaseSettings):
     # proxy and use the direct peer address. An invalid entry, or a /0, stops
     # the service at startup.
     trusted_proxy_cidrs: str = ""
+    # Admin-plane allowlist (app/admin_allow.py): comma-separated networks
+    # allowed everything but POST /v1/fire and the input webhooks. Empty =
+    # off. An invalid entry, or a /0, stops the service at startup.
+    admin_allow_cidrs: str = ""
     # Largest `context` POST /v1/fire accepts, as compact JSON in bytes
     # (utils/context_budget.py; nesting is capped at 16 levels too).
     fire_context_max_bytes: int = Field(default=16384, ge=1024, le=1_048_576)
@@ -293,6 +305,16 @@ class Settings(BaseSettings):
         from .utils.client_ip import parse_trusted_proxies
 
         parse_trusted_proxies(v)
+        return v
+
+    @property
+    def admin_allow_networks(self) -> tuple[Network, ...]:
+        return _admin_allow(self.admin_allow_cidrs)
+
+    @field_validator("admin_allow_cidrs")
+    @classmethod
+    def _admin_allow_parse(cls, v: str) -> str:
+        _admin_allow(v)         # fail closed at startup, like the trusted proxies
         return v
 
     @field_validator("docs_enabled", "metrics_require_auth", mode="before")

@@ -390,6 +390,18 @@ logins or wrong API keys lock everyone out. An entry that is not an address or
 network, or a `/0` (which would let any client choose its own address), stops
 Klopot at startup with the entry named.
 
+**A second layer inside Klopot: `ALERTD_ADMIN_ALLOW_CIDRS`** (comma-separated
+networks; empty = off). When set, Klopot itself refuses everything but
+`POST /v1/fire` and `POST /v1/inputs/{id}/webhook` to clients outside these
+networks — `403` over HTTP, the WebSocket closed before it is accepted —
+whatever the proxy lets through (a published port, a misrouted hostname).
+It judges the real client address (behind `ALERTD_TRUSTED_PROXY_CIDRS`, the
+one traefik forwarded), so list your admins' networks **and** the Docker
+network of the services that call Klopot directly (on pv-stack:
+pv-stack-ui on `pv-stack-network`, e.g.
+`ALERTD_ADMIN_ALLOW_CIDRS=192.168.1.0/24,172.20.0.0/16,127.0.0.1`). An
+invalid entry or a `/0` stops Klopot at startup.
+
 ### Exposing /v1/fire to the internet
 
 Scripts and services elsewhere can send alerts without a VPN: add

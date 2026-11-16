@@ -71,6 +71,11 @@ adheres to [Semantic Versioning](https://semver.org/).
   `alertmanager_truncated` notice) and Alertmanager re-sends it; `max_alerts`
   is capped at 1000. Each new fingerprint used to open an episode and a
   notification without limit.
+- **`ALERTD_ADMIN_ALLOW_CIDRS`**: an admin-plane allowlist inside Klopot,
+  behind the proxy's private router. When set, only these networks reach
+  anything but `POST /v1/fire` and the input webhooks — over HTTP (`403`)
+  and WebSocket (closed before accept) — judged on the real client address,
+  before any body is read. Empty = off.
 - **Per-input rate limit** for webhook, SMS inbox and Alertmanager inputs:
   `rate_limit_per_min` in the input's config (Inputs → the input). Counted
   like an API key's, after the token; over it, `429` with `Retry-After`.

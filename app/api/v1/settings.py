@@ -53,6 +53,7 @@ _EXPOSED: tuple[str, ...] = (
     "login_lockout_min",
     "auth_history_days",
     "trusted_proxy_cidrs",
+    "admin_allow_cidrs",
 )
 
 def _mask_db_url(url: str) -> str:
