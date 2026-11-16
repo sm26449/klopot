@@ -3,7 +3,7 @@ import { api } from "../lib/api.js";
 import { fmtSeconds } from "../lib/format.js";
 import { t } from "../lib/i18n.js";
 
-export function LoginView({ onLoggedIn, version }) {
+export function LoginView({ onLoggedIn }) {
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -42,8 +42,7 @@ export function LoginView({ onLoggedIn, version }) {
 
   return html`<main class="auth-wrap">
     <form class="card auth-card" onSubmit=${submit} autocomplete="on">
-      <div class="brand"><img src="./favicon.svg" alt="" /><h1>${t("login.brandTitle")}</h1>
-        ${version ? html`<span class="ver muted small">v${version}</span>` : null}</div>
+      <div class="brand"><img src="./favicon.svg" alt="" /><h1>${t("login.brandTitle")}</h1></div>
       <div class="field">
         <label for="u">${t("login.usernameLabel")}</label>
         <input id="u" name="username" autocomplete="username" value=${username}

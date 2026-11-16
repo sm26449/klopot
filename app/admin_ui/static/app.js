@@ -278,16 +278,23 @@ function App() {
 
   useEffect(() => { refreshMe(); }, [refreshMe]);
 
-  // Health + version: /v1/health is public; poll every 30 s while signed in.
+  // Health + version, every 30 s while signed in. /v1/health tells only a
+  // signed-in reader the version and components (an anonymous caller gets the
+  // status alone), so the first read is at sign-in, not at page load — or the
+  // dashboard showed no version or components for up to 30 s — and polling
+  // stops at sign-out.
+  const signedIn = state === "ready";
   useEffect(() => {
+    if (!signedIn) { setHealth(null); setVersion(null); return undefined; }
     let timer;
+    let alive = true;
     const tick = async () => {
-      try { const h = await api.health(); setHealth(h); setVersion(h.version); } catch { setHealth(null); }
-      timer = setTimeout(tick, 30000);
+      try { const h = await api.health(); if (alive) { setHealth(h); setVersion(h.version); } } catch { if (alive) setHealth(null); }
+      if (alive) timer = setTimeout(tick, 30000);
     };
     tick();
-    return () => clearTimeout(timer);
-  }, []);
+    return () => { alive = false; clearTimeout(timer); };
+  }, [signedIn]);
 
   // First screen after signing in: while the setup is incomplete (and not
   // hidden), an admin landing on the dashboard is taken to the setup guide —
@@ -321,7 +328,7 @@ function App() {
   let screen;
   if (state === "booting") screen = html`<div class="auth-wrap"><p class="muted">${t("common.loading")}</p></div>`;
   else if (state === "boot-error") screen = html`<div class="auth-wrap"><${ErrorState} error=${bootError} label=${t("shell.bootError")} onRetry=${() => { setState("booting"); refreshMe(); }} /></div>`;
-  else if (state === "anon") screen = html`<${LoginView} version=${version} onLoggedIn=${(u) => { setUser(u); setState(u.must_change_password ? "must-change" : "ready"); }} />`;
+  else if (state === "anon") screen = html`<${LoginView} onLoggedIn=${(u) => { setUser(u); setState(u.must_change_password ? "must-change" : "ready"); }} />`;
   else if (state === "must-change") screen = html`<${ChangePasswordView} user=${user} onChanged=${refreshMe} onLogout=${logout} />`;
   else screen = html`<${Shell} user=${user} health=${health} version=${version} onLogout=${logout} refreshMe=${refreshMe} lang=${lang} onLangChange=${changeLang} />`;
 

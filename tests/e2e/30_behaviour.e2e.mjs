@@ -21,6 +21,25 @@ test("dashboard: unacknowledged criticals fit their card and offer Ack", async (
   assert.ok(box.x + box.width <= 1440, "Ack is inside the viewport");
 });
 
+test("dashboard: the version and components show right after sign-in", async () => {
+  // /v1/health tells only a signed-in reader the version and components. The
+  // UI used to read it once at page load (before sign-in, so anonymously) and
+  // again only 30 s later — the Service card stayed empty that long.
+  const fresh = await session(browser, { lang: "en" });
+  try {
+    await go(fresh, "dashboard");
+    const service = fresh.locator("main .card").filter({ has: fresh.getByRole("heading", { name: "Service" }) });
+    const version = await until(async () => {
+      const text = (await service.locator("dd.mono").first().textContent().catch(() => "")) || "";
+      return /^\d+\.\d+\.\d+/.test(text.trim()) ? text.trim() : "";
+    });
+    assert.ok(version, "the Service card shows the version within 5 s of sign-in");
+    assert.ok(await service.locator("dt").count() > 3, "and the components, not the status alone");
+  } finally {
+    await fresh.context().close();
+  }
+});
+
 test("a toast does not follow you to the next page", async () => {
   await go(page, "dashboard");
   await page.evaluate(() => import("./lib/toast.js").then((m) => m.toast.ok("e2e toast")));

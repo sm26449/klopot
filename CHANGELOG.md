@@ -36,6 +36,16 @@ adheres to [Semantic Versioning](https://semver.org/).
   columns it shows. The mypy baseline lost eight entries.
 - CI: `actions/setup-python` 7; the MySQL job may take 30 minutes.
 
+### Fixed
+
+- Admin UI: right after signing in, the dashboard's Service card showed the
+  status alone — no version, no components — for up to 30 s, and the version
+  next to the logo was missing. The UI read `/v1/health` when the page
+  loaded, before sign-in, and since 1.2.0 an anonymous caller gets only the
+  status; it now reads it at sign-in and stops polling at sign-out. The login
+  page no longer has a version to show (1.2.0 keeps it from anonymous
+  callers).
+
 ## [1.2.0] — 2026-11-16
 
 Ready to face the internet: the proxy is private by default, every way in is
