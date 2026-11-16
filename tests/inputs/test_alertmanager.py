@@ -56,7 +56,11 @@ def test_parse_group_bounds_and_errors():
 def test_choose_type_order():
     a = parse_group(FIRING).alerts[0]
     cfg = {"default_type": "am_default", "type_by_severity": {"critical": "am_critical", "default": "am_info"}}
-    assert choose_type(a, cfg, {"DiskFull", "am_critical"}) == "DiskFull"
+    # The label picks a template only among those label_types allows.
+    assert choose_type(a, cfg, {"DiskFull", "am_critical"}) == "am_critical"
+    assert choose_type(a, {**cfg, "label_types": ["DiskFull"]}, {"DiskFull", "am_critical"}) == "DiskFull"
+    assert choose_type(a, {**cfg, "label_types": ["Disk*"]}, {"DiskFull", "am_critical"}) == "DiskFull"
+    assert choose_type(a, {**cfg, "label_types": ["Net*"]}, {"DiskFull", "am_critical"}) == "am_critical"
     assert choose_type(a, cfg, {"am_critical"}) == "am_critical"
     assert choose_type(a, cfg, {"am_info"}) == "am_info"
     assert choose_type(a, cfg, set()) == "am_default"
@@ -149,3 +153,71 @@ async def test_bad_bodies(db_client, db_session, am_input):
     assert (await _post(db_client, {"nope": 1}, **auth)).status_code == 400
     await fresh(db_session)
     assert (await db_session.execute(select(func.count()).select_from(Incident))).scalar_one() == 0
+
+
+# ── Budgets: what one input may open (public-exposure review, Codex #3) ──
+
+
+def _alerts(*fingerprints: str, status: str = "firing") -> dict:
+    return {"version": "4", "status": status, "receiver": "klopot", "alerts": [
+        {"status": status, "labels": {"alertname": f"A{fp}", "severity": "critical"},
+         "annotations": {}, "fingerprint": fp} for fp in fingerprints]}
+
+
+async def _configure(db_session, row, **config) -> None:
+    row.config = {**row.config, **config}
+    await db_session.commit()
+
+
+async def _active(db_session) -> int:
+    await fresh(db_session)
+    return (await db_session.execute(
+        select(func.count()).select_from(Incident).where(Incident.active_source_key.is_not(None)))).scalar_one()
+
+
+async def test_new_episodes_a_minute_are_budgeted_and_reported_once(db_client, db_session, am_input):
+    await _configure(db_session, am_input, max_new_episodes_per_min=2)
+    auth = {"Authorization": "Bearer s3cret"}
+    r = (await _post(db_client, _alerts("n1", "n2", "n3", "n4", "n5"), **auth)).json()
+    assert (r["opened"], r["over_budget"]) == (2, 3)
+    assert await _active(db_session) == 2
+    notices = [log for log in await _logs(db_session) if log.type == "alertmanager_truncated"]
+    assert len(notices) == 1, "one notice for the request, not one per alert"
+    # Repeats of what is open are not budgeted.
+    r = (await _post(db_client, _alerts("n1", "n2"), **auth)).json()
+    assert (r["repeat"], r["over_budget"]) == (2, 0)
+
+
+async def test_active_episodes_are_capped_and_resolving_makes_room(db_client, db_session, am_input):
+    await _configure(db_session, am_input, max_active_episodes=2)
+    auth = {"Authorization": "Bearer s3cret"}
+    r = (await _post(db_client, _alerts("c1", "c2", "c3"), **auth)).json()
+    assert (r["opened"], r["over_budget"]) == (2, 1)
+    assert (await _post(db_client, _alerts("c1", status="resolved"), **auth)).json()["resolved"] == 1
+    r = (await _post(db_client, _alerts("c3"), **auth)).json()        # Alertmanager re-sends it
+    assert (r["opened"], r["over_budget"]) == (1, 0)
+    assert await _active(db_session) == 2
+
+
+async def test_an_out_of_range_stored_budget_is_clamped(db_client, db_session, am_input):
+    from app.inputs import alertmanager as am
+
+    assert am.limit({"max_alerts": 5000}, "max_alerts") == 1000
+    assert am.limit({"max_alerts": "lots"}, "max_alerts") == 200
+    assert am.limit({}, "max_active_episodes") == 500
+
+
+@pytest.mark.parametrize(("config", "message"), [
+    ({"max_alerts": 0}, "max_alerts must be a whole number from 1 to 1000"),
+    ({"max_alerts": 1001}, "max_alerts must be a whole number from 1 to 1000"),
+    ({"max_new_episodes_per_min": True}, "max_new_episodes_per_min must be a whole number"),
+    ({"max_active_episodes": "9"}, "max_active_episodes must be a whole number"),
+    ({"label_types": "am_*"}, "label_types must be a list"),
+    ({"label_types": ["am_*", ""]}, "label_types must be a list"),
+])
+async def test_budgets_and_label_types_are_validated_on_save(db_client, admin_key, config, message):
+    r = await db_client.post("/v1/inputs", headers={"X-API-Key": admin_key}, json={
+        "name": "am_bad", "kind": "alertmanager",
+        "config": {"default_type": "am_default", "auth_token": "a" * 40, **config}})
+    assert r.status_code == 422
+    assert message in r.text

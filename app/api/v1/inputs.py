@@ -22,10 +22,8 @@ from ...db.models import Input, Variable
 from ...inputs.webhook import (
     INBOUND_KINDS,
     WebhookInput,
-    auth_changed,
     rate_limit,
     short_token,
-    validate_inbound,
     webhook_auth_ok,
 )
 from ...schemas.common import InputKind, Page
@@ -56,18 +54,19 @@ def _require_supported_kind(kind: Any) -> None:
         )
 
 
-def _require_valid_auth(kind: Any, config: dict[str, Any] | None,
-                        before: dict[str, Any] | None = None) -> None:
-    """An inbound input's config must be valid (inputs/webhook.py
-    ``validate_inbound``: authentication, rate limit): 422 otherwise. Its
-    token's length is judged when the authentication is new or changes
-    against ``before`` (the stored config of an input that already was
-    inbound)."""
-    if getattr(kind, "value", kind) not in INBOUND_KINDS:
+def _require_valid_config(kind: Any, config: dict[str, Any] | None,
+                          before: dict[str, Any] | None = None) -> None:
+    """The input's config must be one its kind can run as intended (the
+    adapter's ``validate_config``: for inbound kinds authentication and rate
+    limit, for Alertmanager also its budgets): 422 otherwise. ``before``: the
+    stored config of an input that already was of this kind."""
+    from ...inputs import REGISTRY
+
+    adapter = REGISTRY.get(getattr(kind, "value", kind))
+    if adapter is None:
         return
-    config = config or {}
     try:
-        validate_inbound(config, judge_token=auth_changed(before, config))
+        adapter.validate_config(config or {}, before=before)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e)) from None
 
@@ -120,7 +119,7 @@ async def create_input(
     actor: Actor = Depends(require_scope("admin")),
 ) -> InputRead:
     _require_supported_kind(body.kind)
-    _require_valid_auth(body.kind, body.config)
+    _require_valid_config(body.kind, body.config)
     await enforce_create_cap(session, Input, get_settings().max_inputs, entity="Input")
     obj = Input(**body.model_dump())
     session.add(obj)
@@ -164,11 +163,11 @@ async def update_input(
         # value; "" clears; anything else replaces (secrets_registry).
         kind = patch.get("kind") or obj.kind
         patch["config"] = merge_secret_update("input", kind, obj.config, patch["config"])
-    # Judge the result (merged secrets, the kind it ends up with); the token
-    # only if the authentication changes or the input becomes inbound.
-    _require_valid_auth(patch.get("kind") or obj.kind,
-                        patch["config"] if patch.get("config") is not None else obj.config,
-                        before=(obj.config or {}) if obj.kind.value in INBOUND_KINDS else None)
+    # Judge the result (merged secrets, the kind it ends up with), against the
+    # stored config when the kind stays the same.
+    kind = patch.get("kind") or obj.kind
+    _require_valid_config(kind, patch["config"] if patch.get("config") is not None else obj.config,
+                          before=(obj.config or {}) if getattr(kind, "value", kind) == obj.kind.value else None)
     for k, v in patch.items():
         setattr(obj, k, v)
     await flush_or_409(session, "Input update")

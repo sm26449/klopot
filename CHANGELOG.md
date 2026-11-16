@@ -37,6 +37,12 @@ adheres to [Semantic Versioning](https://semver.org/).
   it is; the Inputs page marks it "short token" until you set a new one
   (`openssl rand -base64 32`) and give it to the sender. The refusals of the
   inbound endpoint are now one `401`, budgeted per address (see Security).
+- **Alertmanager: the type label chooses only among `label_types`.** A
+  template named like the alert's `alertname` used to be chosen whatever it
+  was, so a token holder could pick any template (one that pages by SMS).
+  Now the label picks a template only if `label_types` lists it (names or
+  patterns like `am_*`); empty = severity and `default_type` decide, as the
+  shipped pack already does. List the templates if you relied on the label.
 
 ### Added
 
@@ -54,6 +60,12 @@ adheres to [Semantic Versioning](https://semver.org/).
   WebSocket, and not as a wrong key; an edit or the resolve cache never
   refills it; rotation keeps it. Empty = no limit, as for every existing key
   (migration `0043`). Metric `alertd_api_key_rate_limited_total{key}`.
+- **Alertmanager budgets**: `max_new_episodes_per_min` (default 60) and
+  `max_active_episodes` (default 500) per input — a firing alert past either
+  is not opened now (`over_budget` in the response and the
+  `alertmanager_truncated` notice) and Alertmanager re-sends it; `max_alerts`
+  is capped at 1000. Each new fingerprint used to open an episode and a
+  notification without limit.
 - **Per-input rate limit** for webhook, SMS inbox and Alertmanager inputs:
   `rate_limit_per_min` in the input's config (Inputs → the input). Counted
   like an API key's, after the token; over it, `429` with `Retry-After`.

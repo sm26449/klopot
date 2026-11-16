@@ -567,19 +567,29 @@ Alertmanager's re-sends notify nothing, `resolved` closes it (and sends
 episode as `superseded`; a resolution for an older `startsAt` is ignored.
 
 Template choice per alert: a template named like `labels.<type_label>`
-(default `alertname`) → else `type_by_severity[labels.severity]` (or its
+(default `alertname`) if `label_types` allows it (exact names or patterns,
+e.g. `["am_*"]`; empty = the label chooses none, so a token holder cannot
+pick any template) → else `type_by_severity[labels.severity]` (or its
 `default`) → else `default_type` (default `alertmanager_alert`). Unknown
 names are never dropped. Templates read `{labels.instance}`,
 `{annotations.summary}`, `{status}`, `{alert.generator_url}` …
 
-At most `max_alerts` (default 200) are processed per request; the rest, plus
-Alertmanager's own `truncatedAlerts`, fire one `alertmanager_truncated`
-notice. Bodies over `ALERTD_MAX_ALERTMANAGER_BYTES` (1 MiB) get 413, non-JSON
-or a body without `alerts` 400. Response:
+At most `max_alerts` (default 200, at most 1000) are processed per request.
+Each new fingerprint opens an episode and sends a notice, so an input also
+has budgets for what it opens: `max_new_episodes_per_min` (default 60,
+counted like a rate limit — a quiet input may open that many at once) and
+`max_active_episodes` (default 500 open at once). A firing alert past either
+is not opened (`over_budget`); Alertmanager sends it again while it fires,
+and it opens once there is room. Repeats and resolutions are never budgeted.
+The truncated alerts, Alertmanager's own `truncatedAlerts` and the ones over
+budget fire one `alertmanager_truncated` notice per request (context
+`input`, `truncated`, `over_budget`). Bodies over
+`ALERTD_MAX_ALERTMANAGER_BYTES` (1 MiB) get 413, non-JSON or a body without
+`alerts` 400. Response:
 
 ```json
 { "status": "accepted", "input": "prom", "alerts": 3, "opened": 1, "repeat": 1,
-  "resolved": 1, "ignored": 0, "truncated": 0, "errors": [] }
+  "resolved": 1, "ignored": 0, "over_budget": 0, "truncated": 0, "errors": [] }
 ```
 
 ## Rules and variables: status, usage, bulk actions

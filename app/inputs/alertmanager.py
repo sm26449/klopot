@@ -14,13 +14,22 @@ Config:
 
 - ``default_type`` (required): template for an alert no rule below matches —
   unknown alert names are never dropped.
-- ``type_label`` (default ``alertname``): if a template with that label's
-  value exists, it is used.
+- ``type_label`` (default ``alertname``) and ``label_types``: the template
+  named by that label's value, if it exists and ``label_types`` allows it
+  (exact names or patterns like ``am_*``). Empty ``label_types`` = the label
+  picks nothing — whoever holds the token cannot choose any template, say
+  one that pages by SMS (public-exposure review).
 - ``type_by_severity``: ``{"critical": "am_critical", "default": "am_info"}``
   — template by ``labels.severity`` when ``type_label`` gave no template.
 - ``resolved_type``: template for the resolution notice (optional).
-- ``max_alerts`` (default 200): alerts processed per request; the rest are
-  counted as truncated, like Alertmanager's own ``truncatedAlerts``.
+- ``max_alerts`` (default 200, at most 1000): alerts processed per request;
+  the rest are counted as truncated, like Alertmanager's own
+  ``truncatedAlerts``.
+- ``max_new_episodes_per_min`` (default 60) and ``max_active_episodes``
+  (default 500): what one input may open. A firing alert past either is not
+  opened (``over_budget``); Alertmanager sends it again while it fires. Each
+  new fingerprint is an episode and a notification, so without these one
+  request could enqueue hundreds of them.
 - ``auth_token`` / ``auth_token_ref`` + ``auth_required``: as for webhook
   inputs; the token may arrive as ``X-Input-Token`` or
   ``Authorization: Bearer <token>`` (Alertmanager's ``http_config``).
@@ -31,20 +40,63 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from fnmatch import fnmatchcase
+from typing import Any, TypeGuard
 
 from ..utils.keys import bounded_key
 from .webhook import WebhookInput
 
-DEFAULT_MAX_ALERTS = 200
 TRUNCATED_TYPE = "alertmanager_truncated"
 DEFAULT_TYPE = "alertmanager_alert"
+MAX_LABEL_TYPES = 100
+
+# name → (default, smallest, largest): the budgets an input may set.
+LIMITS: dict[str, tuple[int, int, int]] = {
+    "max_alerts": (200, 1, 1000),
+    "max_new_episodes_per_min": (60, 1, 10_000),
+    "max_active_episodes": (500, 1, 100_000),
+}
+DEFAULT_MAX_ALERTS = LIMITS["max_alerts"][0]
+
+
+def _whole(value: Any) -> TypeGuard[int]:
+    """A whole number — not a bool, which Python counts as one."""
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def limit(config: dict[str, Any], name: str) -> int:
+    """The input's ``name`` budget: its configured value within the bounds,
+    else the default (a stored config is validated on save; this is the
+    guarantee for one that was not)."""
+    default, low, high = LIMITS[name]
+    value = config.get(name)
+    return min(max(value, low), high) if _whole(value) else default
+
+
+def validate_config(config: dict[str, Any]) -> None:
+    """Refuse budgets outside their bounds and a malformed ``label_types``
+    (``ValueError`` with the fix)."""
+    for name, (_default, low, high) in LIMITS.items():
+        value = config.get(name)
+        if value is not None and not (_whole(value) and low <= value <= high):
+            raise ValueError(f"{name} must be a whole number from {low} to {high}, or empty for {_default}")
+    types = config.get("label_types")
+    if types is not None and not (
+        isinstance(types, list) and len(types) <= MAX_LABEL_TYPES
+        and all(isinstance(t, str) and t.strip() for t in types)
+    ):
+        raise ValueError(f"label_types must be a list of template names or patterns (am_*), at most {MAX_LABEL_TYPES}")
 
 
 class AlertmanagerInput(WebhookInput):
     """Passive receiver: auth and health come from the webhook input."""
 
     kind = "alertmanager"
+
+    @classmethod
+    def validate_config(cls, config: dict[str, Any], *, before: dict[str, Any] | None = None) -> None:
+        super().validate_config(config, before=before)
+        validate_config(config)
 
     def health(self) -> dict[str, Any]:
         out = super().health()
@@ -133,10 +185,13 @@ def parse_group(payload: Any, *, max_alerts: int = DEFAULT_MAX_ALERTS) -> Group:
 
 
 def choose_type(alert: Alert, config: dict[str, Any], templates: set[str]) -> str:
-    """Template for an alert: its type label if such a template exists, else
-    by severity, else ``default_type`` (never dropped)."""
+    """Template for an alert: its type label if such a template exists and
+    ``label_types`` allows it, else by severity, else ``default_type`` (never
+    dropped). The sender's labels choose only among the templates the
+    operator listed."""
     by_label = alert.labels.get(config.get("type_label") or "alertname")
-    if by_label and by_label in templates:
+    allowed = config.get("label_types") or []
+    if by_label and by_label in templates and any(fnmatchcase(by_label, p) for p in allowed if isinstance(p, str)):
         return by_label
     by_sev = config.get("type_by_severity") or {}
     if isinstance(by_sev, dict):
@@ -167,9 +222,15 @@ def alert_context(alert: Alert, common: dict[str, Any]) -> dict[str, Any]:
     return ctx
 
 
+def episode_prefix(input_id: int) -> str:
+    """The start of every episode key of an input — kept whole by
+    ``bounded_key``, so an input's active episodes are one index range."""
+    return f"am:{input_id}:"
+
+
 def episode_key(input_id: int, alert: Alert) -> str:
     # The fingerprint comes from the sender and has no length limit of its own.
-    return bounded_key(f"am:{input_id}:{alert.fingerprint}")
+    return bounded_key(episode_prefix(input_id) + alert.fingerprint)
 
 
 def episode_name(alert: Alert) -> str:

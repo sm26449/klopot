@@ -283,14 +283,24 @@ _INPUTS: dict[str, list[dict[str, Any]]] = {
                 "never dropped). It can use {labels.alertname}, {labels.instance}, "
                 "{annotations.summary}…"),
         _f("type_label", "string", default="alertname",
-           help="If a template is named like this label's value, that template is used."),
+           help="If a template is named like this label's value and label_types allows it, "
+                "that template is used."),
+        _f("label_types", "json",
+           help='Templates the type label may choose: exact names or patterns, e.g. ["am_*", "DiskFull"]. '
+                "Empty = the label chooses none, so whoever holds the token cannot pick any template "
+                "(say one that pages by SMS)."),
         _f("type_by_severity", "json",
            help='Template by labels.severity when type_label gave none, e.g. '
                 '{"critical": "am_critical", "warning": "am_warning", "default": "am_info"}.'),
         _f("resolved_type", "string",
            help="Template sent when an alert resolves (optional)."),
         _f("max_alerts", "int", default=200,
-           help="Alerts processed per request; the rest count as truncated."),
+           help="Alerts processed per request (at most 1000); the rest count as truncated."),
+        _f("max_new_episodes_per_min", "int", default=60,
+           help="New episodes this input may open a minute (each is a notification). A firing alert "
+                "past it is not opened now; Alertmanager sends it again while it fires."),
+        _f("max_active_episodes", "int", default=500,
+           help="Episodes of this input open at once; past it, new alerts wait for one to resolve."),
         _f("auth_required", "bool", default=True,
            help="Require the token as X-Input-Token or Authorization: Bearer. " + _OPEN_INPUT_HELP),
         _f("auth_token", "string",

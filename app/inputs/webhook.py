@@ -77,6 +77,12 @@ class WebhookInput(BaseInput):
         # Webhook doesn't filter — variables map to its single virtual topic
         return None
 
+    @classmethod
+    def validate_config(cls, config: dict[str, Any], *, before: dict[str, Any] | None = None) -> None:
+        # The token's length is judged when the authentication is new or
+        # changes, so an input saved before the floor stays editable.
+        validate_inbound(config, judge_token=auth_changed(before, config))
+
     # ── Auth + delivery ─────────────────────────────────────────
 
     def check_auth(self, header_token: str | None) -> bool:

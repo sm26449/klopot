@@ -1099,7 +1099,15 @@
           "required": false,
           "secret": false,
           "default": "alertname",
-          "help": "If a template is named like this label's value, that template is used."
+          "help": "If a template is named like this label's value and label_types allows it, that template is used."
+        },
+        {
+          "name": "label_types",
+          "type": "json",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Templates the type label may choose: exact names or patterns, e.g. [\"am_*\", \"DiskFull\"]. Empty = the label chooses none, so whoever holds the token cannot pick any template (say one that pages by SMS)."
         },
         {
           "name": "type_by_severity",
@@ -1123,7 +1131,23 @@
           "required": false,
           "secret": false,
           "default": 200,
-          "help": "Alerts processed per request; the rest count as truncated."
+          "help": "Alerts processed per request (at most 1000); the rest count as truncated."
+        },
+        {
+          "name": "max_new_episodes_per_min",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 60,
+          "help": "New episodes this input may open a minute (each is a notification). A firing alert past it is not opened now; Alertmanager sends it again while it fires."
+        },
+        {
+          "name": "max_active_episodes",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 500,
+          "help": "Episodes of this input open at once; past it, new alerts wait for one to resolve."
         },
         {
           "name": "auth_required",

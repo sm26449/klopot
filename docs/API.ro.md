@@ -575,21 +575,30 @@ anterior ca `superseded`; o rezolvare pentru un `startsAt` mai vechi e
 ignorată.
 
 Alegerea template-ului per alertă: un template numit ca `labels.<type_label>`
-(implicit `alertname`) → altfel `type_by_severity[labels.severity]` (sau
+(implicit `alertname`), dacă `label_types` îl permite (nume exacte sau
+tipare, de ex. `["am_*"]`; gol = eticheta nu alege niciunul, deci cine are
+tokenul nu poate alege orice template) → altfel `type_by_severity[labels.severity]` (sau
 `default`) → altfel `default_type` (implicit `alertmanager_alert`). Numele
 necunoscute nu se pierd niciodată. Template-urile pot citi
 `{labels.instance}`, `{annotations.summary}`, `{status}`,
 `{alert.generator_url}` …
 
-Se procesează cel mult `max_alerts` (implicit 200) pe cerere; restul, plus
-`truncatedAlerts` raportat de Alertmanager, declanșează o singură notificare
-`alertmanager_truncated`. Corpurile peste `ALERTD_MAX_ALERTMANAGER_BYTES`
-(1 MiB) primesc 413, un corp care nu e JSON sau fără `alerts` primește 400.
-Răspuns:
+Se procesează cel mult `max_alerts` (implicit 200, maximum 1000) pe cerere.
+Fiecare fingerprint nou deschide un episod și trimite o notificare, așa că un
+input are și bugete pentru ce deschide: `max_new_episodes_per_min` (implicit
+60, numărat ca o limită de rată — un input liniștit poate deschide atâtea
+deodată) și `max_active_episodes` (implicit 500 deschise simultan). O alertă
+activă peste oricare dintre ele nu se deschide (`over_budget`); Alertmanager
+o retrimite cât timp e activă și se deschide când e loc. Repetările și
+rezolvările nu se numără niciodată. Alertele tăiate, `truncatedAlerts` de la
+Alertmanager și cele peste buget declanșează o singură notificare
+`alertmanager_truncated` pe cerere (context `input`, `truncated`,
+`over_budget`). Corpurile peste `ALERTD_MAX_ALERTMANAGER_BYTES` (1 MiB)
+primesc 413, un corp care nu e JSON sau fără `alerts` primește 400. Răspuns:
 
 ```json
 { "status": "accepted", "input": "prom", "alerts": 3, "opened": 1, "repeat": 1,
-  "resolved": 1, "ignored": 0, "truncated": 0, "errors": [] }
+  "resolved": 1, "ignored": 0, "over_budget": 0, "truncated": 0, "errors": [] }
 ```
 
 ## Reguli și variabile: stare, utilizare, acțiuni în masă

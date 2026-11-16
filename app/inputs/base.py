@@ -39,6 +39,15 @@ class BaseInput(ABC):
         self.config = config
         self.on_value = on_value
 
+    @classmethod
+    def validate_config(cls, config: dict[str, Any], *, before: dict[str, Any] | None = None) -> None:
+        """Refuse a config this kind cannot run as intended: raise
+        ``ValueError`` with the fix in the message. Called when an input is
+        saved (REST) or imported; ``before`` is its stored config when it
+        already was of this kind (``None`` for a new one). Nothing to check
+        by default."""
+        return None
+
     @property
     def critical(self) -> bool:
         """Whether this input being down should degrade overall service health.

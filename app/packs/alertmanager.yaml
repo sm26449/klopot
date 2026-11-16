@@ -10,8 +10,8 @@ pack:
     - name: token_env
       label: {en: "Env variable holding the receiver token", ro: "Variabila de mediu cu token-ul receiver-ului"}
       description:
-        en: "Put KLOPOT_SECRET_ALERTMANAGER_TOKEN=<a long random value> in secrets.env and restart Klopot; Alertmanager / Grafana sends the same value as a Bearer token."
-        ro: "Pune KLOPOT_SECRET_ALERTMANAGER_TOKEN=<o valoare lungă, aleatoare> în secrets.env și repornește Klopot; Alertmanager / Grafana trimite aceeași valoare ca token Bearer."
+        en: "Put KLOPOT_SECRET_ALERTMANAGER_TOKEN=<a random value of 32+ characters, e.g. openssl rand -base64 32> in secrets.env and restart Klopot; Alertmanager / Grafana sends the same value as a Bearer token."
+        ro: "Pune KLOPOT_SECRET_ALERTMANAGER_TOKEN=<o valoare aleatoare de cel puțin 32 de caractere, de ex. openssl rand -base64 32> în secrets.env și repornește Klopot; Alertmanager / Grafana trimite aceeași valoare ca token Bearer."
       type: env
       default: KLOPOT_SECRET_ALERTMANAGER_TOKEN
     - name: alert_channel
