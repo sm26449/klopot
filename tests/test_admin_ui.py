@@ -6,6 +6,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.admin_ui import SECURITY_HEADERS, STATIC_DIR
 from app.config import get_settings
+from tests._ws import WsClosed, ws_connect
 
 
 async def test_index_served_with_security_headers(client):
@@ -129,30 +130,15 @@ async def _login_cookie(app) -> str:
         return c.cookies.get(SESSION_COOKIE)
 
 
-def _ws_connect(app, path, headers=None):
-    from starlette.testclient import TestClient
-
-    tc = TestClient(app)
-    return tc, tc.websocket_connect(path, headers=headers or {})
-
-
 async def test_ws_rejects_without_credentials(ws_app):
-    from starlette.websockets import WebSocketDisconnect
-
-    tc, cm = _ws_connect(ws_app, "/v1/stream/state")
-    with pytest.raises(WebSocketDisconnect) as ei, cm:
-        pass
+    with pytest.raises(WsClosed) as ei:
+        async with ws_connect(ws_app, "/v1/stream/state"):
+            pass
     assert ei.value.code == 1008
 
 
-# SQLite-only: starlette's TestClient runs the WebSocket handler in a separate
-# thread/event loop; the async MySQL engine's connections are loop-bound, so the
-# auth DB read raises in-harness. Prod uses one loop per worker (V13 CI).
-@pytest.mark.sqlite
 async def test_ws_accepts_session_cookie_and_checks_origin(ws_app):
     import json
-
-    from starlette.websockets import WebSocketDisconnect
 
     from app import auth as auth_module
     from app.auth import SESSION_COOKIE
@@ -161,21 +147,18 @@ async def test_ws_accepts_session_cookie_and_checks_origin(ws_app):
     cookie = await _login_cookie(ws_app)
     hdr = {"cookie": f"{SESSION_COOKIE}={cookie}"}
 
-    tc, cm = _ws_connect(ws_app, "/v1/stream/state", headers=hdr)
-    with cm as ws:
-        hello = json.loads(ws.receive_text())
-        assert hello["type"] == "hello"
+    async with ws_connect(ws_app, "/v1/stream/state", headers=hdr) as ws:
+        assert json.loads(await ws.receive_text())["type"] == "hello"
 
     # Cross-origin handshake with a valid cookie is refused (WS ignores SameSite)
-    tc, cm = _ws_connect(ws_app, "/v1/stream/state", headers={**hdr, "origin": "https://evil.example"})
-    with pytest.raises(WebSocketDisconnect) as ei, cm:
-        pass
+    with pytest.raises(WsClosed) as ei:
+        async with ws_connect(ws_app, "/v1/stream/state", headers={**hdr, "origin": "https://evil.example"}):
+            pass
     assert ei.value.code == 1008
 
     # Same-origin Origin header passes
-    tc, cm = _ws_connect(ws_app, "/v1/stream/notifications", headers={**hdr, "origin": "http://testserver"})
-    with cm as ws:
-        assert json.loads(ws.receive_text())["type"] == "hello"
+    async with ws_connect(ws_app, "/v1/stream/notifications", headers={**hdr, "origin": "http://testserver"}) as ws:
+        assert json.loads(await ws.receive_text())["type"] == "hello"
 
 
 def test_ui_meta_kinds_fixture_matches_the_server() -> None:

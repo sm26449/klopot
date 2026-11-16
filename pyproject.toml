@@ -66,9 +66,7 @@ dev = [
     "pytest-asyncio>=1.5.0,<2",
     "pytest-cov>=6.0.0,<8",
     "httpx>=0.28.0,<0.29",  # also test client
-    # In-memory test DB (S12c). 0.22 hangs the WebSocket tests: the harness
-    # shares one connection between the test's loop and TestClient's.
-    "aiosqlite>=0.20.0,<0.22",
+    "aiosqlite>=0.22.0,<0.23",  # in-memory test DB (S12c)
     # ruff and mypy floors match the lint config and mypy-baseline.txt (its
     # messages are mypy 2's wording).
     "ruff>=0.17.0,<0.18",

@@ -160,7 +160,11 @@ Pitfalls that have cost time before:
   `openapi/v1.json`; regenerate it or the drift check fails.
 
 Test layout follows source: `tests/core/test_engine.py` exercises
-`app/core/engine.py`. Async tests use `pytest-asyncio`. The S12c
+`app/core/engine.py`. Async tests use `pytest-asyncio` in auto mode — no
+marker, and never `pytest.mark.anyio`, which runs a test in a second event
+loop apart from its fixtures (the database engine is bound to the first).
+For a WebSocket, use `tests/_ws.py` (`ws_connect`), not Starlette's
+`TestClient`, which runs the app in a thread with a loop of its own. The S12c
 roadmap calls for ≥80% coverage on `app/core/` + `app/channels/`.
 
 ## Design decisions (ADRs)

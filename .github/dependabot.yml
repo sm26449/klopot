@@ -14,10 +14,6 @@ updates:
       # (sdk/README.md). Lift when the SDK moves.
       - dependency-name: "openapi-python-client"
         versions: [">=0.30.0"]
-      # 0.22 hangs the SQLite harness's WebSocket tests (one connection used
-      # from two event loops). Test-only; lift with a harness that does not.
-      - dependency-name: "aiosqlite"
-        versions: [">=0.22.0"]
     commit-message:
       prefix: "build"
       include: "scope"

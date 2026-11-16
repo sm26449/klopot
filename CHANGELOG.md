@@ -22,10 +22,15 @@ adheres to [Semantic Versioning](https://semver.org/).
 - Dependencies: SQLAlchemy 2.1 (installed as `sqlalchemy[asyncio]` — 2.1 no
   longer brings `greenlet`, which the async engine needs), uvicorn 0.54,
   gunicorn 27, bcrypt 5, argon2-cffi 25, croniter 7, structlog 26,
-  prometheus-client 0.26. Dev: ruff 0.17, mypy 2, black 26, pytest-cov 7;
-  openapi-typescript 7.13. Held back, with the reason in Dependabot's
-  config: `openapi-python-client` 0.29.1, aiosqlite 0.21, pytest 8 with
-  pytest-asyncio 0.24, jsdom 26.
+  prometheus-client 0.26. Dev: ruff 0.17, mypy 2, black 26, pytest 9,
+  pytest-asyncio 1.5, pytest-cov 7, aiosqlite 0.22; openapi-typescript
+  7.13. Held back, with the reason in Dependabot's config:
+  `openapi-python-client` 0.29.1 and jsdom 26.
+- Tests: one async plugin (pytest-asyncio, auto mode) instead of AnyIO's
+  for 84 files and pytest-asyncio for their fixtures, and the WebSocket
+  tests drive the app in the test's own loop (`tests/_ws.py`) instead of
+  Starlette's `TestClient` thread — the cookie / Origin check now runs on
+  the MySQL gate too.
 - `affected_rows()` (`app.db`) reads the row count of an UPDATE / DELETE in
   one typed place instead of five; the failed-operations list reads only the
   columns it shows. The mypy baseline lost eight entries.
