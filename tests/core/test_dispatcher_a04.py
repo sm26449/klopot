@@ -15,8 +15,6 @@ from app.channels.manager import DispatchOutcome
 from app.core.dispatcher import _TITLE_MAX, FireEnvelope, _generate_id, fire
 from app.db.models import ChannelKind, NotificationLog, Severity, TemplateChannel
 
-pytestmark = pytest.mark.anyio
-
 _ID_MAX = 64  # notifications_log.id is String(64)
 
 

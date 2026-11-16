@@ -11,8 +11,6 @@ from app.core.manager import VariableConfigError, dry_compile_variable
 from app.db.models import VariableSource
 from app.services import config_io
 
-pytestmark = pytest.mark.anyio
-
 _BAD = '"a".rjust(5000000)'
 _GOOD = "soc < 20"
 

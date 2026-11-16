@@ -21,8 +21,6 @@ from app.utils.safe_http import (
     screen_and_pick_ip,
 )
 
-pytestmark = pytest.mark.anyio
-
 META_V4 = "169.254.169.254"
 META_MAPPED = "::ffff:169.254.169.254"
 

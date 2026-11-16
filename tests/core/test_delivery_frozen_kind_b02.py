@@ -11,15 +11,11 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-import pytest
-
 from app.channels.base import Notification, SendResult
 from app.channels.manager import get_channel_manager
 from app.core import outbox
 from app.db.models import ChannelKind, Delivery
 from app.utils.time import utc_now
-
-pytestmark = pytest.mark.anyio
 
 
 def _notif() -> Notification:

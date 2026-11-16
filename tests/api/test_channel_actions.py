@@ -1,10 +1,6 @@
 """F3: POST /v1/channels/{id}/breaker/reset."""
 from __future__ import annotations
 
-import pytest
-
-pytestmark = pytest.mark.anyio
-
 
 async def test_breaker_reset(db_client, admin_key):
     h = {"X-API-Key": admin_key}

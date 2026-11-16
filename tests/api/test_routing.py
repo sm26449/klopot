@@ -1,10 +1,6 @@
 """F3: template → channel routing, channel usage, in-use delete guard."""
 from __future__ import annotations
 
-import pytest
-
-pytestmark = pytest.mark.anyio
-
 
 async def _mk_template(client, h, type="batt_low"):
     r = await client.post("/v1/templates", json={

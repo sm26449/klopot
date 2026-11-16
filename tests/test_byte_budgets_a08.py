@@ -14,9 +14,6 @@ from app.body_limit import BodySizeLimitMiddleware
 from app.utils.safe_http import ResponseTooLarge, safe_request
 from app.utils.safe_yaml import BoundedYAMLError, load_bounded
 
-pytestmark = pytest.mark.anyio
-
-
 # ── ASGI body-limit middleware ───────────────────────────────────────
 
 

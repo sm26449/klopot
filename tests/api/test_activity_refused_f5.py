@@ -16,8 +16,6 @@ from app.core.activity import get_activity_writer
 from app.db.models import ApiRequest
 from tests._db import fresh
 
-pytestmark = pytest.mark.anyio
-
 
 async def _kept_days(db_session, path: str) -> float:
     await get_activity_writer().flush()

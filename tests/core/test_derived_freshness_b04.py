@@ -19,12 +19,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-import pytest
-
 from app.core.state_cache import StateCache, VarSnapshot
 from app.core.variable_resolver import VariableResolver, VarMapping
-
-pytestmark = pytest.mark.anyio
 
 
 class _Clock:

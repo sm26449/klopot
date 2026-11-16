@@ -19,7 +19,7 @@ from app.core.notification_actions import acknowledge_notification
 from app.db.models import Delivery, DeliveryState, NotificationLog, Severity
 from app.utils.time import utc_now
 
-pytestmark = [pytest.mark.anyio, pytest.mark.mysql]
+pytestmark = pytest.mark.mysql
 
 
 async def test_ack_while_a_worker_holds_a_sibling_delivery(db_session, make_template):

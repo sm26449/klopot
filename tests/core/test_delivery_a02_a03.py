@@ -29,8 +29,6 @@ from app.db.models import (
     TemplateChannel,
 )
 
-pytestmark = pytest.mark.anyio
-
 
 @pytest.fixture
 async def template_with_channel(db_session, make_template, make_channel):

@@ -4,11 +4,7 @@ from __future__ import annotations
 
 import time
 
-import pytest
-
 from app.db.models import Rule, Severity, Template, Variable, VariableSource
-
-pytestmark = pytest.mark.anyio
 
 
 async def test_template_search(db_client, admin_key, db_session):

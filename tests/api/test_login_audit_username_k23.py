@@ -8,14 +8,11 @@ audit now names an existing account; anything else is recorded as
 """
 from __future__ import annotations
 
-import pytest
 from sqlalchemy import select
 
 from app.core.passwords import hash_password
 from app.db.models import AdminUser, AuditLog
 from tests._db import fresh
-
-pytestmark = pytest.mark.anyio
 
 MISTYPED_NAME = "Correct-Horse-Battery-K23"
 

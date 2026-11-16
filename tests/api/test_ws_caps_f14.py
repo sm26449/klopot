@@ -15,8 +15,6 @@ from app.auth import Actor
 from app.core import ws_registry
 from app.core.ws_registry import MAX_PER_IDENTITY, StreamLimitReached, WSRegistry
 
-pytestmark = pytest.mark.anyio
-
 
 class FakeWS:
     def __init__(self, fail_accept: bool = False) -> None:

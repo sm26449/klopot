@@ -13,14 +13,10 @@ from __future__ import annotations
 from datetime import datetime
 from unittest.mock import patch
 
-import pytest
-
 from app.channels._secrets import channel_secret_strings, scrub_error
 from app.channels.base import Notification, SendResult
 from app.channels.manager import ChannelManager
 from app.db.models import ChannelKind
-
-pytestmark = pytest.mark.anyio
 
 PATH_SECRET = "B0KQ7ZSECRETPATH"
 URL = f"https://hooks.example.com/services/T0/{PATH_SECRET}?sig=QSIGNATURE123"

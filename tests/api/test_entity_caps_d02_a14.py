@@ -21,8 +21,6 @@ from app.config import get_settings
 from app.db.models import Channel, ChannelKind, Input, InputKind, Rule
 from app.services import config_io
 
-pytestmark = pytest.mark.anyio
-
 
 @contextmanager
 def _caps(*, rules=None, inputs=None, channels=None):

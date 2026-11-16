@@ -10,8 +10,6 @@ from pydantic import ValidationError
 from app.core.gating import _in_quiet_window
 from app.schemas.template import TemplateCreate, TemplateUpdate
 
-pytestmark = pytest.mark.anyio
-
 
 def test_quiet_hours_nonstring_value_rejected_on_create():
     with pytest.raises(ValidationError):

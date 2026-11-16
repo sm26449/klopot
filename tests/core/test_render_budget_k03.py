@@ -11,13 +11,9 @@ from __future__ import annotations
 
 import time
 
-import pytest
-
 from app.core import rendering
 from app.core.rendering import render, render_with_missing
 from app.db.models import Severity, Template
-
-pytestmark = pytest.mark.anyio
 
 
 def test_output_is_bounded_while_it_is_built():

@@ -10,11 +10,7 @@ from __future__ import annotations
 
 import time
 
-import pytest
-
 from app.core.eval import evaluate
-
-pytestmark = pytest.mark.anyio
 
 
 def _fast(expr: str, ctx: dict | None = None):

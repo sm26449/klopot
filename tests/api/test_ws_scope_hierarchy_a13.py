@@ -10,13 +10,9 @@ dropped (the F06 guard).
 """
 from __future__ import annotations
 
-import pytest
-
 from app.api.v1.state import _still_valid
 from app.auth import Actor
 from app.db.models import ApiKey
-
-pytestmark = pytest.mark.anyio
 
 
 def _actor(k: ApiKey) -> Actor:

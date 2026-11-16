@@ -11,8 +11,6 @@ import pytest
 from app.core.state_cache import StateCache
 from app.core.variable_resolver import VariableResolver, VarMapping
 
-pytestmark = pytest.mark.anyio
-
 
 class _Clock:
     def __init__(self, t: float = 1000.0) -> None:

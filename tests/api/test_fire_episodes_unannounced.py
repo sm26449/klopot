@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-import pytest
 from sqlalchemy import delete, func, select, update
 
 from app.core import fire_service
@@ -27,8 +26,6 @@ from app.db.models import (
 )
 from app.utils.time import utc_now
 from tests._db import fresh
-
-pytestmark = pytest.mark.anyio
 
 
 async def _setup(db_session, *, min_repeat_min=0):

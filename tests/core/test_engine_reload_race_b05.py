@@ -11,12 +11,8 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
 
-import pytest
-
 from app.core.engine import RuleEngine
 from app.core.state_cache import StateCache
-
-pytestmark = pytest.mark.anyio
 
 
 def _engine(cache: StateCache) -> RuleEngine:

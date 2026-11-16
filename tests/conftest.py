@@ -60,11 +60,6 @@ from app.main import create_app  # noqa: E402
 get_settings.cache_clear()
 
 
-@pytest.fixture
-def anyio_backend() -> str:
-    return "asyncio"
-
-
 # ── Pure-unit (no DB) ─────────────────────────────────────────────
 
 

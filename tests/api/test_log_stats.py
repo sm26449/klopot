@@ -3,8 +3,6 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-import pytest
-
 from app.db.models import (
     DeliveryStatus,
     NotificationLog,
@@ -12,8 +10,6 @@ from app.db.models import (
     SuppressedReason,
 )
 from app.utils.time import utc_now
-
-pytestmark = pytest.mark.anyio
 
 _SENT = DeliveryStatus.sent
 

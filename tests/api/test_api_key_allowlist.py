@@ -15,8 +15,6 @@ from app import auth
 from app.db.models import ApiKey
 from app.schemas.api_key import normalize_allowed_cidrs
 
-pytestmark = pytest.mark.anyio
-
 OFFICE = "203.0.113.0/24"
 INSIDE, OUTSIDE = "203.0.113.7", "198.51.100.9"
 

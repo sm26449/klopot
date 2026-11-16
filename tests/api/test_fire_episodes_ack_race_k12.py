@@ -18,9 +18,13 @@ from sqlalchemy import delete, func, select
 from app.core import fire_service, incidents
 from app.db.models import Incident, NotificationLog, Snooze
 from tests._db import fresh
-from tests.api.test_fire_episodes_unannounced import CTX, _delivered, _firing, _setup, _snooze_everything
-
-pytestmark = pytest.mark.anyio
+from tests.api.test_fire_episodes_unannounced import (
+    CTX,
+    _delivered,
+    _firing,
+    _setup,
+    _snooze_everything,
+)
 
 
 async def test_an_acknowledged_episode_is_not_announced_later(db_engine, db_session):

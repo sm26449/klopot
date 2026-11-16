@@ -25,7 +25,7 @@ from app.core.dispatcher import FireEnvelope, fire
 from app.db.models import ChannelKind, Delivery, NotificationLog, Severity, TemplateChannel
 from app.utils.time import utc_now
 
-pytestmark = [pytest.mark.anyio, pytest.mark.mysql]
+pytestmark = pytest.mark.mysql
 
 
 async def _ok(self, notif, channel_names, session, overrides_by_name=None, effective_by_name=None, **_kw):

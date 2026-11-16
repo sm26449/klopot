@@ -18,8 +18,6 @@ from sqlalchemy.schema import CreateTable
 from app.db.models import ApiKey, Incident, Severity, Template
 from tests._db import fresh
 
-pytestmark = pytest.mark.anyio
-
 
 def test_episode_key_columns_compare_bytes_on_mysql():
     ddl = str(CreateTable(Incident.__table__).compile(dialect=mysql.dialect()))

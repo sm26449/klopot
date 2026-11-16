@@ -1,11 +1,7 @@
 """F3 (M-2): POST /v1/api_keys/{id}/rotate?grace_sec=."""
 from __future__ import annotations
 
-import pytest
-
 from app.db.models import ApiKey
-
-pytestmark = pytest.mark.anyio
 
 
 async def _mk_key(db_client, h, name="svc"):

@@ -8,12 +8,8 @@ can ask for a new token.
 """
 from __future__ import annotations
 
-import pytest
-
 from app.db.models import Input, InputKind
 from app.inputs.webhook import MIN_TOKEN_LENGTH
-
-pytestmark = pytest.mark.anyio
 
 LONG, SHORT = "k" * MIN_TOKEN_LENGTH, "k" * (MIN_TOKEN_LENGTH - 1)
 

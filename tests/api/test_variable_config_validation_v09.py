@@ -2,12 +2,9 @@
 committed, not persisted-then-500'd on the hot reload."""
 from __future__ import annotations
 
-import pytest
 from sqlalchemy import select
 
 from app.db.models import Variable
-
-pytestmark = pytest.mark.anyio
 
 
 async def test_bad_variable_config_committed_before_reload_failure(db_client, admin_key):

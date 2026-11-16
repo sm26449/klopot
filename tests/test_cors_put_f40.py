@@ -2,12 +2,9 @@
 PUT (PUT /v1/templates/{type}/channels)."""
 from __future__ import annotations
 
-import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.config import get_settings
-
-pytestmark = pytest.mark.anyio
 
 
 async def test_cors_preflight_allows_put(monkeypatch):

@@ -21,8 +21,6 @@ from app.core.variable_resolver import _coerce
 from app.db import get_session_factory
 from app.db.models import NotificationLog, Severity, TemplateChannel
 
-pytestmark = pytest.mark.anyio
-
 
 def test_json_safe_replaces_non_finite_numbers():
     got = _json_safe({"a": float("nan"), "b": [1.5, float("inf"), {"c": float("-inf")}], "d": "NaN", "e": 2})

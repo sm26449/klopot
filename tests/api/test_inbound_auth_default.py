@@ -17,8 +17,6 @@ import pytest
 
 from app.inputs.webhook import auth_required, validate_inbound_auth, webhook_auth_ok
 
-pytestmark = pytest.mark.anyio
-
 TOKEN = "a-long-enough-token-0123456789abcdef"
 
 

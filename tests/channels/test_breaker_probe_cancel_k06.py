@@ -18,8 +18,6 @@ from app.channels.base import Notification, SendResult
 from app.channels.manager import ChannelManager, DispatchOutcome
 from app.db.models import ChannelKind
 
-pytestmark = pytest.mark.anyio
-
 
 def _notif(i: int) -> Notification:
     return Notification(id=f"ntf_{i}", type="t", severity="warning", icon=None,

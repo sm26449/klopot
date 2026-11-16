@@ -11,13 +11,10 @@ let in.
 """
 from __future__ import annotations
 
-import pytest
 from sqlalchemy import select
 
 from app.core.activity import get_activity_writer
 from app.db.models import ApiRequest
-
-pytestmark = pytest.mark.anyio
 
 PAYLOAD = {"probe": "Z" * 3000}
 

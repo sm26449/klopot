@@ -106,7 +106,6 @@ def test_parse_cutoff_naive_and_aware():
 # ── Writing created_at must NOT disturb updated_at (onupdate regression) ──
 
 
-@pytest.mark.anyio
 @pytest.mark.filterwarnings(
     # SQLite-only: a raw text() datetime bind hits stdlib sqlite3's deprecated
     # adapter. Irrelevant to the MySQL-targeted tool (aiomysql handles it).

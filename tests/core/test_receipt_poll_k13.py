@@ -8,13 +8,16 @@ escalation still went out. The filters are now part of the query.
 """
 from __future__ import annotations
 
-import pytest
-
 from app.core import provider_lifecycle as pl
-from app.db.models import Delivery, DeliveryState, DeliveryStatus, InboundEvent, NotificationLog, Severity
+from app.db.models import (
+    Delivery,
+    DeliveryState,
+    DeliveryStatus,
+    InboundEvent,
+    NotificationLog,
+    Severity,
+)
 from app.utils.time import utc_now
-
-pytestmark = pytest.mark.anyio
 
 CONFIG = {"user_key": "u_key_1234", "app_token": "a_tok_1234"}
 

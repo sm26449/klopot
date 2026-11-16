@@ -13,12 +13,8 @@ from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, patch
 from zoneinfo import ZoneInfo
 
-import pytest
-
 from app.core.schedule_service import ScheduleService
 from app.db.models import Schedule
-
-pytestmark = pytest.mark.anyio
 
 
 async def test_late_occurrence_while_running_is_fired(db_engine, db_session):

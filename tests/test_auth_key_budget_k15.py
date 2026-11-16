@@ -22,8 +22,6 @@ from fastapi import HTTPException
 from app import auth
 from app.utils.client_ip import real_client_ip
 
-pytestmark = pytest.mark.anyio
-
 
 def _wrong(i: int) -> str:
     return f"alertd_wrong_key_number_{i:04d}_xxxxxxxx"

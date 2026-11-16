@@ -22,8 +22,6 @@ from app.core.activity import capture_exchanges
 from app.utils import safe_http
 from app.utils.redact import transport_error_text
 
-pytestmark = pytest.mark.anyio
-
 SECRET = "FAKE_TOKEN_K08_" + "x" * 12
 _LEAKY = httpx.LocalProtocolError(f"Illegal header value b'Bearer {SECRET} '")
 

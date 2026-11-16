@@ -1,10 +1,6 @@
 """F3: GET /v1/schedules/preview."""
 from __future__ import annotations
 
-import pytest
-
-pytestmark = pytest.mark.anyio
-
 
 async def test_preview_returns_n_times(db_client, admin_key):
     h = {"X-API-Key": admin_key}

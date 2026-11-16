@@ -15,8 +15,6 @@ from sqlalchemy import select
 from app.core.dispatcher import MESSAGE_MAX_BYTES, FireEnvelope, fire, fit_message
 from app.db.models import NotificationLog, Severity, TemplateChannel
 
-pytestmark = pytest.mark.anyio
-
 
 def test_fit_message_cuts_on_a_character_boundary():
     assert fit_message("short") == "short"

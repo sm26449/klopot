@@ -20,8 +20,6 @@ from app.core import crypto_pool, passwords
 from app.core.passwords import hash_password
 from app.db.models import AdminUser
 
-pytestmark = pytest.mark.anyio
-
 PASSWORD = "correct-horse-battery-staple"
 
 

@@ -18,13 +18,6 @@ updates:
       # from two event loops). Test-only; lift with a harness that does not.
       - dependency-name: "aiosqlite"
         versions: [">=0.22.0"]
-      # pytest-asyncio 1.x and the anyio-marked tests run in different event
-      # loops (fails on MySQL); 0.24 needs pytest < 9. Lift both once the
-      # suite uses one async plugin.
-      - dependency-name: "pytest-asyncio"
-        versions: [">=0.25.0"]
-      - dependency-name: "pytest"
-        versions: [">=9.0.0"]
     commit-message:
       prefix: "build"
       include: "scope"

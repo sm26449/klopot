@@ -8,8 +8,6 @@ import pytest
 
 from app.utils.context_budget import MAX_DEPTH, check_context, context_bytes, context_depth
 
-pytestmark = pytest.mark.anyio
-
 
 def _nested(levels: int) -> dict:
     value: dict = {"leaf": 1}

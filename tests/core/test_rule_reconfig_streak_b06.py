@@ -15,7 +15,6 @@ count back afterward.
 """
 from __future__ import annotations
 
-import pytest
 from sqlalchemy import select
 
 from app.core.engine import RuleEngine
@@ -23,8 +22,6 @@ from app.core.rule_state_ops import reset_streak_on_reconfig
 from app.db.models import Rule, RuleState
 from app.services import config_io
 from tests._db import fresh
-
-pytestmark = pytest.mark.anyio
 
 
 async def _seed_with_streak(

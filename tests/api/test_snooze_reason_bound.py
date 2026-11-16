@@ -4,11 +4,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-import pytest
-
 from app.utils.time import utc_now
-
-pytestmark = pytest.mark.anyio
 
 
 async def test_an_over_long_reason_is_refused(db_client, admin_key):

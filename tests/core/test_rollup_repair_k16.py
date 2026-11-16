@@ -11,15 +11,12 @@ repairs such rows on every tick instead.
 """
 from __future__ import annotations
 
-import pytest
 from sqlalchemy import select
 
 from app.core.delivery_worker import DeliveryWorker
 from app.db.models import Delivery, DeliveryState, DeliveryStatus, NotificationLog, Severity
 from app.utils.time import utc_now
 from tests._db import fresh
-
-pytestmark = pytest.mark.anyio
 
 
 async def _log(db_session, id_: str, states: list[DeliveryState]) -> None:

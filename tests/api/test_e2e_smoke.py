@@ -18,8 +18,6 @@ from app.auth import CSRF_HEADER, SESSION_COOKIE
 from app.core.passwords import hash_password
 from app.db.models import AdminUser
 
-pytestmark = pytest.mark.anyio
-
 PASSWORD = "e2e-correct-horse-battery"
 
 

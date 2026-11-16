@@ -10,15 +10,11 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
-
 from app import auth as auth_module
 from app.auth import Actor
 from app.core.ws_registry import WSRegistry, get_ws_registry
 from app.db.models import AdminSession, AdminUser, ApiKey
 from app.utils.time import utc_now
-
-pytestmark = pytest.mark.anyio
 
 
 class FakeWS:

@@ -13,8 +13,6 @@ import pytest
 
 from app.core.eval import evaluate
 
-pytestmark = pytest.mark.anyio
-
 
 @pytest.mark.parametrize("literal", [
     "NOT ready",

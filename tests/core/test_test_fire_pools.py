@@ -24,8 +24,6 @@ from app.core import gating
 from app.core.dispatcher import FireEnvelope, fire
 from app.db.models import ChannelKind, Severity, TemplateChannel
 
-pytestmark = pytest.mark.anyio
-
 
 @pytest.fixture
 async def throttled_template(db_session, make_template, make_channel):

@@ -16,14 +16,10 @@ import ipaddress
 from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
-import pytest
-
 from app.channels import email as email_mod
 from app.channels.base import Notification
 from app.channels.mqtt import MQTTChannel
 from app.utils.egress import screen_ip
-
-pytestmark = pytest.mark.anyio
 
 
 def test_alibaba_metadata_is_always_blocked():

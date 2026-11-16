@@ -2,11 +2,7 @@
 not silently widen a bound variable into an unbound (accept-any) one."""
 from __future__ import annotations
 
-import pytest
-
 from app.db.models import Input, InputKind, Variable, VariableSource
-
-pytestmark = pytest.mark.anyio
 
 
 async def _mk_input(db_session, name="trusted", enabled=False) -> int:

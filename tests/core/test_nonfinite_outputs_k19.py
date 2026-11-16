@@ -19,8 +19,6 @@ from app.channels.base import Notification
 from app.channels.mqtt import MQTTChannel
 from app.core.variable_resolver import _aggregate
 
-pytestmark = pytest.mark.anyio
-
 
 @pytest.mark.parametrize("op", ["sum", "avg"])
 def test_an_overflowing_aggregate_is_none(op):

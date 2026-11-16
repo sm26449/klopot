@@ -15,8 +15,6 @@ from httpx import ASGITransport, AsyncClient
 from app.logging_setup import SECURITY_HEADERS
 from app.main import create_app
 
-pytestmark = pytest.mark.anyio
-
 
 @pytest.fixture
 async def crashing() -> AsyncClient:

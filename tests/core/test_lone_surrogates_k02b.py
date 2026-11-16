@@ -7,15 +7,12 @@ lost again each cycle when it came from a variable.
 """
 from __future__ import annotations
 
-import pytest
 from sqlalchemy import select
 
 from app.core.dispatcher import FireEnvelope, fire
 from app.db.models import Incident, NotificationLog, Severity, Template, TemplateChannel
 from app.utils.text import clean_text
 from tests._db import fresh
-
-pytestmark = pytest.mark.anyio
 
 _LONE = "a\ud800b"
 

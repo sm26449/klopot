@@ -19,8 +19,6 @@ from app.auth import Actor
 from app.db.models import Input, InputKind, Variable, VariableSource
 from tests._db import fresh
 
-pytestmark = pytest.mark.anyio
-
 
 async def _mk_bound(db_session) -> int:
     inp = Input(name="trusted", kind=InputKind.mqtt, config={"host": "x"}, enabled=False)

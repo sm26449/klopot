@@ -14,8 +14,6 @@ from app.admin_allow import AdminAllowMiddleware, is_public
 from app.config import get_settings
 from app.utils.client_ip import parse_networks
 
-pytestmark = pytest.mark.anyio
-
 LAN = parse_networks(("192.168.1.0/24",), label="t", catch_all="t")
 
 

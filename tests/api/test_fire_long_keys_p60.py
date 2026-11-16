@@ -15,8 +15,6 @@ from app.inputs import alertmanager as am
 from app.utils.keys import SOURCE_KEY_MAX, bounded_key
 from tests._db import fresh
 
-pytestmark = pytest.mark.anyio
-
 
 def test_bounded_key_is_stable_distinct_and_fits():
     short = "fire:node-red:disk-sda"

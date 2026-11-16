@@ -1,10 +1,6 @@
 """F3: POST /v1/rules/validate (parse + live-reference check)."""
 from __future__ import annotations
 
-import pytest
-
-pytestmark = pytest.mark.anyio
-
 
 async def test_validate_ok_with_reference(db_client, admin_key):
     from app.core.state_cache import get_state_cache, reset_state_cache_for_tests

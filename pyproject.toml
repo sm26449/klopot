@@ -60,11 +60,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    # pytest-asyncio 1.x runs async fixtures in a loop of its own, apart from
-    # the tests marked anyio: on MySQL the engine's connections then cross
-    # loops. Held until the suite uses one async plugin; 0.24 caps pytest < 9.
-    "pytest>=8.3.0,<9",
-    "pytest-asyncio>=0.24.0,<0.25",
+    "pytest>=9.0.0,<10",
+    # The one async test plugin (asyncio_mode = "auto"): tests and fixtures
+    # share its loop. Do not mark tests anyio — that runs them in another one.
+    "pytest-asyncio>=1.5.0,<2",
     "pytest-cov>=6.0.0,<8",
     "httpx>=0.28.0,<0.29",  # also test client
     # In-memory test DB (S12c). 0.22 hangs the WebSocket tests: the harness

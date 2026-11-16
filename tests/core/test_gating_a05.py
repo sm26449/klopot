@@ -20,8 +20,6 @@ from app.core.gating import (
 from app.db.models import ChannelKind, Snooze, SnoozeScope
 from app.utils.time import utc_now
 
-pytestmark = pytest.mark.anyio
-
 _TZ_NOW = "app.core.gating._tz_now_time"
 
 

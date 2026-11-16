@@ -5,11 +5,7 @@ from __future__ import annotations
 
 import time
 
-import pytest
-
 from app.core.eval import _REGEX_MAX_PATTERN, _REGEX_MAX_SUBJECT, _regex_match
-
-pytestmark = pytest.mark.anyio
 
 
 def test_regex_match_normal_still_works():

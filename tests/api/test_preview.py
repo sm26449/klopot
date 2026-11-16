@@ -1,10 +1,6 @@
 """F3: POST /v1/templates/{type}/preview."""
 from __future__ import annotations
 
-import pytest
-
-pytestmark = pytest.mark.anyio
-
 
 async def _mk_template(client, h):
     r = await client.post("/v1/templates", json={

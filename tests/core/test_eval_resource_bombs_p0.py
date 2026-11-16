@@ -18,8 +18,6 @@ import pytest
 
 from app.core.eval import evaluate
 
-pytestmark = pytest.mark.anyio
-
 _BOMBS = [
     "'%20000000d' % 1",                    # printf width → 20 MB string
     "'%1000000000d' % 1",                  # printf width → 1 GB string

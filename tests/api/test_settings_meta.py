@@ -1,10 +1,6 @@
 """F3: GET /v1/settings (effective, read-only) + GET /v1/meta/kinds."""
 from __future__ import annotations
 
-import pytest
-
-pytestmark = pytest.mark.anyio
-
 
 async def test_settings_effective_readonly(db_client, admin_key):
     h = {"X-API-Key": admin_key}

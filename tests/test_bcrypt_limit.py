@@ -17,8 +17,6 @@ from app.config import get_settings
 from app.db.models import ApiKey
 from scripts.seed import seed_bootstrap_admin_key
 
-pytestmark = pytest.mark.anyio
-
 
 async def test_a_key_longer_than_bcrypt_reads_is_wrong_and_not_hashed(db_session, admin_key, monkeypatch):
     hashed: list[bytes] = []

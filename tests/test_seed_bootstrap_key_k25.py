@@ -12,15 +12,12 @@ from __future__ import annotations
 
 import secrets
 
-import pytest
 from sqlalchemy import select
 
 from app.auth import key_digest
 from app.config import get_settings
 from app.db.models import ApiKey
 from scripts.seed import seed_bootstrap_admin_key
-
-pytestmark = pytest.mark.anyio
 
 
 async def _seed(db_session, monkeypatch, value: str) -> ApiKey | None:

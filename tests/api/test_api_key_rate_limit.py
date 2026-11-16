@@ -13,8 +13,6 @@ from fastapi import HTTPException
 
 from app import auth
 
-pytestmark = pytest.mark.anyio
-
 ADDR = "203.0.113.7"
 
 

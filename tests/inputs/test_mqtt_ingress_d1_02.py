@@ -10,12 +10,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-import pytest
-
 from app.config import get_settings
 from app.inputs.mqtt import MQTTSubscriber
-
-pytestmark = pytest.mark.anyio
 
 
 async def _noop(topic, payload, source_kind):  # pragma: no cover - replaced per test

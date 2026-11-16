@@ -18,8 +18,6 @@ import pytest
 from app.core.state_cache import StateCache
 from app.core.variable_resolver import VariableResolver, VarMapping
 
-pytestmark = pytest.mark.anyio
-
 
 @pytest.fixture
 def cache():

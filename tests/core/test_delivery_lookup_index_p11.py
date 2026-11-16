@@ -18,7 +18,6 @@ def test_the_model_declares_the_index():
     assert by_name[INDEX] == ["idempotency_key"]
 
 
-@pytest.mark.anyio
 @pytest.mark.mysql
 async def test_mysql_can_use_the_index_for_the_lookup(db_session):
     rows = (await db_session.execute(text(

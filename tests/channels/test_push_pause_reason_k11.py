@@ -16,7 +16,6 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
 
-import pytest
 from sqlalchemy import select
 
 from app.channels import push
@@ -25,8 +24,6 @@ from app.db.models import PushSubscription
 from tests._db import fresh
 from tests.api.test_push_api import _sub, browser  # noqa: F401  (fixture)
 from tests.channels.test_push import CONFIG, Device, _notif, _resp
-
-pytestmark = pytest.mark.anyio
 
 
 async def _only(db_session) -> PushSubscription:

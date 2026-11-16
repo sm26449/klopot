@@ -23,8 +23,6 @@ from app.core import gating
 from app.core.dispatcher import FireEnvelope, fire
 from app.db.models import ChannelKind, Severity, TemplateChannel, ThrottleState
 
-pytestmark = pytest.mark.anyio
-
 _DISPATCH = "app.channels.manager.ChannelManager.dispatch"
 
 

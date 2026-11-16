@@ -10,11 +10,7 @@ out the keys used from the same address.
 """
 from __future__ import annotations
 
-import pytest
-
 from app import auth
-
-pytestmark = pytest.mark.anyio
 
 TOKEN = "t" * 40
 

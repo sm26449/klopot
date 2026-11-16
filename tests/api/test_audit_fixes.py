@@ -10,12 +10,9 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.secrets_registry import MASK
-
-pytestmark = pytest.mark.anyio
 
 WEBHOOK_SECRET = "Bearer super-secret-token-xyz"
 

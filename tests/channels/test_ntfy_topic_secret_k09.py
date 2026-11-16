@@ -10,13 +10,9 @@ from __future__ import annotations
 from datetime import datetime
 from unittest.mock import patch
 
-import pytest
-
 from app.channels.base import Notification
 from app.channels.ntfy import NtfyChannel
 from app.secrets_registry import MASK, mask_config
-
-pytestmark = pytest.mark.anyio
 
 TOPIC = "ops-alerts-7f3k9q2x"
 

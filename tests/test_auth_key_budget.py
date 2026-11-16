@@ -13,8 +13,6 @@ from sqlalchemy import select
 from app import auth
 from app.db.models import ApiKey
 
-pytestmark = pytest.mark.anyio
-
 
 def _h(key: str) -> dict[str, str]:
     return {"X-API-Key": key}

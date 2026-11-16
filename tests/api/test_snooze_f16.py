@@ -7,10 +7,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-import pytest
-
-pytestmark = pytest.mark.anyio
-
 
 def _future() -> str:
     return (datetime.now(UTC) + timedelta(hours=1)).isoformat()

@@ -7,13 +7,10 @@ prefix, scanned on every fire. It must compare with ``=``.
 """
 from __future__ import annotations
 
-import pytest
 from sqlalchemy import event
 
 from app.core.dispatcher import FireEnvelope, fire
 from app.db.models import Severity, TemplateChannel
-
-pytestmark = pytest.mark.anyio
 
 
 async def test_the_dedup_lookup_compares_is_test_with_equals(db_engine, db_session, make_template, make_channel):

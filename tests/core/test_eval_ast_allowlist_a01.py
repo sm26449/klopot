@@ -15,9 +15,6 @@ import pytest
 
 from app.core.eval import ExpressionError, evaluate, validate_expression
 
-pytestmark = pytest.mark.anyio
-
-
 # ── The exploit and its siblings are rejected ─────────────────────────
 
 _BLOCKED = [

@@ -12,7 +12,6 @@ from __future__ import annotations
 import time
 from unittest.mock import patch
 
-import pytest
 from sqlalchemy import select
 
 from app.channels.manager import DispatchOutcome
@@ -20,8 +19,6 @@ from app.core.engine import RuleEngine
 from app.core.state_cache import StateCache
 from app.db import get_session_factory
 from app.db.models import NotificationLog, Severity, TemplateChannel
-
-pytestmark = pytest.mark.anyio
 
 
 async def _ok(self, notif, names, session, **_kw):
