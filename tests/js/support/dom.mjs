@@ -74,6 +74,15 @@ export function flush(ms = 400) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+// Preact runs effects on the next frame; under a loaded test run that can take
+// longer than any fixed sleep, so wait for the condition instead (max `ms`).
+// Returns the condition's final value — assert on it.
+export async function until(cond, ms = 2000) {
+  const end = Date.now() + ms;
+  while (!cond() && Date.now() < end) await flush(10);
+  return cond();
+}
+
 // Accessible-name rules: a control a screen reader can't name.
 const NAME_RULES = [
   "label", "select-name", "aria-input-field-name",

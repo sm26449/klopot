@@ -4,7 +4,7 @@
 // the palette) to the page instead of the dialog.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { setupDom, mount, unmount, flush } from "./support/dom.mjs";
+import { setupDom, mount, unmount, until } from "./support/dom.mjs";
 
 const { html } = await setupDom();
 const { useRef } = await import("../../app/admin_ui/static/lib/h.js");
@@ -21,7 +21,7 @@ function Page({ withDialog }) {
 test("a new page takes focus when no dialog is open", async () => {
   window.scrollTo = () => {};
   mount(html`<${Page} withDialog=${false} />`);
-  await flush(20);
+  assert.ok(await until(() => document.getElementById("main-content")), "the page rendered");
   assert.equal(dialogOpen(), false);
   focusNewPage();
   assert.equal(document.activeElement?.id, "main-content");
@@ -31,12 +31,10 @@ test("a new page takes focus when no dialog is open", async () => {
 test("an open dialog keeps focus through a route change", async () => {
   window.scrollTo = () => {};
   mount(html`<${Page} withDialog=${true} />`);
-  await flush(20);
+  assert.ok(await until(() => document.activeElement?.className === "field"), "the dialog focused its field");
   assert.equal(dialogOpen(), true);
-  assert.equal(document.activeElement?.className, "field", "the dialog focused its field");
   focusNewPage();
   assert.equal(document.activeElement?.className, "field", "the route change left it there");
   unmount();
-  await flush(10);
-  assert.equal(dialogOpen(), false, "closing the dialog leaves the stack");
+  assert.ok(await until(() => !dialogOpen()), "closing the dialog leaves the stack");
 });

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { setupDom, mount, unmount, flush, nameViolations } from "./support/dom.mjs";
+import { setupDom, mount, unmount, flush, until, nameViolations } from "./support/dom.mjs";
 
 const { html } = await setupDom();
 const { useState } = await import("../../app/admin_ui/static/lib/h.js");
@@ -25,14 +25,6 @@ test("categories are merged case-insensitively under the most used spelling", ()
   const tpls = [{ category: "Grid" }, { category: "grid" }, { category: "Grid" }, { category: null }, { category: "Battery" }];
   assert.deepEqual(canonicalCategories(tpls), ["Battery", "Grid"]);
 });
-
-// Preact runs effects on the next frame; under a loaded test run that can take
-// longer than a fixed sleep, so wait for the condition instead (max 2 s).
-async function until(cond, ms = 2000) {
-  const end = Date.now() + ms;
-  while (!cond() && Date.now() < end) await flush(10);
-  return cond();
-}
 
 function Harness({ initial }) {
   const [v, setV] = useState(initial);
