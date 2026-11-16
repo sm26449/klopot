@@ -573,7 +573,7 @@ export interface paths {
         };
         /**
          * Service health check
-         * @description Returns the overall service status plus a per-component health map. Always returns HTTP 200 — inspect the body to determine status. For a pass/fail probe that fails on essential-component outages, use ``/v1/health/ready`` (returns 503 when not ready).
+         * @description Returns the overall service status; a caller with `read` (API key or signed-in user) also gets the version and the per-component map. Always returns HTTP 200 — inspect the body to determine status. For a pass/fail probe that fails on essential-component outages, use ``/v1/health/ready`` (returns 503 when not ready).
          */
         get: operations["health_v1_health_get"];
         put?: never;
@@ -593,7 +593,7 @@ export interface paths {
         };
         /**
          * Readiness probe (fails on essential outages)
-         * @description Returns HTTP 200 when every essential component (database, rule engine, delivery worker) is up, and HTTP 503 when one is down — so an orchestrator or the container healthcheck acts on a dead engine or retry worker instead of a body that always says 200 (F32).
+         * @description Returns HTTP 200 when every essential component (database, rule engine, delivery worker) is up, and HTTP 503 when one is down — so an orchestrator or the container healthcheck acts on a dead engine or retry worker instead of a body that always says 200 (F32). The body is shaped like `/v1/health`'s for the same caller.
          */
         get: operations["readiness_v1_health_ready_get"];
         put?: never;
@@ -2233,7 +2233,8 @@ export interface components {
         };
         /**
          * HealthResponse
-         * @description ``GET /v1/health`` response.
+         * @description ``GET /v1/health`` for a ``read`` caller (an API key with ``read``, or
+         *     a signed-in user): the status plus the component map.
          *
          *     HTTP status is always 200 — clients inspect ``status`` field.
          *     Degraded components don't trigger Kubernetes restart loops.
@@ -2263,6 +2264,24 @@ export interface components {
              * @default 1.1.1
              */
             version: string;
+        };
+        /**
+         * HealthStatus
+         * @description ``GET /v1/health`` for a caller without ``read``: the overall status
+         *     only. The components name hosts, inputs and error texts, and the version
+         *     tells an attacker what to try (public-exposure review F7, F13).
+         */
+        HealthStatus: {
+            /**
+             * Service
+             * @default alertd
+             */
+            service: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "degraded" | "down";
         };
         /**
          * IgnoredRow
@@ -5182,7 +5201,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HealthResponse"];
+                    "application/json": components["schemas"]["HealthResponse"] | components["schemas"]["HealthStatus"];
                 };
             };
         };
@@ -5202,7 +5221,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HealthResponse"];
+                    "application/json": components["schemas"]["HealthResponse"] | components["schemas"]["HealthStatus"];
                 };
             };
             /** @description Not ready */
@@ -5211,7 +5230,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HealthResponse"];
+                    "application/json": components["schemas"]["HealthResponse"] | components["schemas"]["HealthStatus"];
                 };
             };
         };

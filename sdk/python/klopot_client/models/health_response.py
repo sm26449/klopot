@@ -25,7 +25,8 @@ T = TypeVar("T", bound="HealthResponse")
 
 @_attrs_define
 class HealthResponse:
-    """ ``GET /v1/health`` response.
+    """ ``GET /v1/health`` for a ``read`` caller (an API key with ``read``, or
+    a signed-in user): the status plus the component map.
 
     HTTP status is always 200 — clients inspect ``status`` field.
     Degraded components don't trigger Kubernetes restart loops.

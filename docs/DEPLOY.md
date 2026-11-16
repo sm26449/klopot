@@ -240,7 +240,8 @@ is marked unhealthy if three consecutive probes fail. Readiness returns HTTP
 503 for a failed essential component (database, engine or delivery worker).
 
 `/v1/health` is the informational endpoint and always returns HTTP 200; inspect
-its body for `ok` / `degraded` / `down`. An unhealthy Docker status does not by
+its body for `ok` / `degraded` / `down` (the component map needs a `read` key).
+An unhealthy Docker status does not by
 itself restart a running process. See [OPERATIONS.md](OPERATIONS.md) for
 monitoring and [PROJECT_STATUS.md](PROJECT_STATUS.md) for release/deployment state.
 

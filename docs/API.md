@@ -109,10 +109,19 @@ curl https://host/v1/version     # version string only, no infra probes
 ```
 
 `/v1/health` (public) always answers 200 with an overall `status` (`ok` /
-`degraded` / `down`), a `components` map and `docs_enabled`.
-`/v1/health/ready` returns the same body but with HTTP 503 on an essential
+`degraded` / `down`). Anyone gets the status; a caller with `read` (an API
+key with `read`, or a signed-in user) also gets the `version`, the
+`components` map and `docs_enabled` — the components name hosts, inputs and
+error texts, so an anonymous caller does not see them. `/v1/health/ready`
+returns the same body for the same caller, with HTTP 503 on an essential
 outage — use it as a readiness probe. Use `/v1/version` for a cheap liveness
 probe that never touches MySQL/MQTT.
+
+```json
+{ "status": "ok", "service": "alertd" }
+```
+
+With `read`:
 
 ```json
 { "status": "ok", "service": "alertd", "version": "1.7.0", "docs_enabled": false,

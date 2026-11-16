@@ -204,7 +204,8 @@ Hierarchical — `admin` implies all others.
 | `ack` | `POST /v1/log/{id}/ack`, `POST /v1/incidents/{id}/ack`, `POST /v1/incidents/{id}/resolve`, `POST /v1/snooze`, `DELETE /v1/snooze/{id}` |
 | `admin` | All endpoints: every create/update/delete, channel/rule/schedule tests (and its `test: true` fires skip throttle, the delivery gate, quiet hours and de-duplication), config export/import, packs inspect/preview/apply, setup dismiss/reopen, plus the reads `GET /v1/api_keys`, `GET /v1/config/export` and `GET /v1/activity/requests/{id}` |
 
-Public (no scope): `/v1/health`, `/v1/health/ready`, `/v1/version`,
+Public (no scope): `/v1/health`, `/v1/health/ready` (the status only; the
+version and component map need `read`), `/v1/version`,
 `POST /v1/auth/login`, `POST /v1/inputs/{id}/webhook` (per-input
 `X-Input-Token`) and `/v1/metrics` unless `ALERTD_METRICS_REQUIRE_AUTH`
 (default: on when `ALERTD_COOKIE_SECURE` is true) requires a `read` key. `/v1/auth/*` besides login

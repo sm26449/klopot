@@ -5,10 +5,11 @@ import logging
 from datetime import timedelta
 from typing import Any, Literal
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, Field
 
 from ... import __version__
+from ...auth import Actor, get_optional_actor
 from ...config import get_settings
 from ...db.session import healthcheck as db_healthcheck
 from ...utils.time import utc_now
@@ -37,15 +38,23 @@ class ComponentHealth(BaseModel):
     params: dict[str, Any] = Field(default_factory=dict)
 
 
-class HealthResponse(BaseModel):
-    """``GET /v1/health`` response.
+class HealthStatus(BaseModel):
+    """``GET /v1/health`` for a caller without ``read``: the overall status
+    only. The components name hosts, inputs and error texts, and the version
+    tells an attacker what to try (public-exposure review F7, F13)."""
+
+    status: Literal["ok", "degraded", "down"]
+    service: str = Field(default="alertd")
+
+
+class HealthResponse(HealthStatus):
+    """``GET /v1/health`` for a ``read`` caller (an API key with ``read``, or
+    a signed-in user): the status plus the component map.
 
     HTTP status is always 200 — clients inspect ``status`` field.
     Degraded components don't trigger Kubernetes restart loops.
     """
 
-    status: Literal["ok", "degraded", "down"]
-    service: str = Field(default="alertd")
     version: str = Field(default=__version__)
     components: dict[str, ComponentHealth]
     # Whether the interactive API docs are served (audit S-12); the admin UI
@@ -183,16 +192,17 @@ async def _mqtt_component() -> ComponentHealth:
 
 @router.get(
     "/health",
-    response_model=HealthResponse,
+    response_model=HealthResponse | HealthStatus,
     summary="Service health check",
     description=(
-        "Returns the overall service status plus a per-component health map. "
+        "Returns the overall service status; a caller with `read` (API key or "
+        "signed-in user) also gets the version and the per-component map. "
         "Always returns HTTP 200 — inspect the body to determine status. "
         "For a pass/fail probe that fails on essential-component outages, use "
         "``/v1/health/ready`` (returns 503 when not ready)."
     ),
 )
-async def health() -> HealthResponse:
+async def health(actor: Actor | None = Depends(get_optional_actor)) -> HealthResponse | HealthStatus:
     """Full health probe: DB, critical inputs, and the essential background
     tasks (rule engine, scheduler, delivery worker) plus outbox backlog.
 
@@ -202,26 +212,36 @@ async def health() -> HealthResponse:
     DOWN" indicator). A dead essential background task reports 'down' here
     AND fails ``/v1/health/ready`` (F32).
     """
-    components = await _collect_components()
-    return HealthResponse(status=_overall(components), components=components, docs_enabled=get_settings().docs_enabled_effective)
+    return _shaped(await _collect_components(), actor)
+
+
+def _shaped(components: dict[str, ComponentHealth], actor: Actor | None) -> HealthResponse | HealthStatus:
+    """The body for this caller: everything for ``read``, the status alone
+    otherwise."""
+    if actor is not None and actor.has_scope("read"):
+        return HealthResponse(status=_overall(components), components=components,
+                              docs_enabled=get_settings().docs_enabled_effective)
+    return HealthStatus(status=_overall(components))
 
 
 @router.get(
     "/health/ready",
-    response_model=HealthResponse,
+    response_model=HealthResponse | HealthStatus,
     summary="Readiness probe (fails on essential outages)",
     description=(
         "Returns HTTP 200 when every essential component (database, rule "
         "engine, delivery worker) is up, and HTTP 503 when one is down — so "
         "an orchestrator or the container healthcheck acts on a dead engine "
-        "or retry worker instead of a body that always says 200 (F32)."
+        "or retry worker instead of a body that always says 200 (F32). The "
+        "body is shaped like `/v1/health`'s for the same caller."
     ),
-    responses={503: {"model": HealthResponse, "description": "Not ready"}},
+    responses={503: {"model": HealthResponse | HealthStatus, "description": "Not ready"}},
 )
-async def readiness(response: Response) -> HealthResponse:
+async def readiness(response: Response,
+                    actor: Actor | None = Depends(get_optional_actor)) -> HealthResponse | HealthStatus:
     components = await _collect_components()
     down = _essential_down(components)
-    body = HealthResponse(status=_overall(components), components=components, docs_enabled=get_settings().docs_enabled_effective)
+    body = _shaped(components, actor)
     if down:
         response.status_code = 503
         logger.warning("Readiness FAIL — essential components down: %s", down)

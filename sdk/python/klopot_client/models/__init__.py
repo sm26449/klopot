@@ -53,6 +53,8 @@ from .get_effective_settings_v1_settings_get_response_get_effective_settings_v1_
 from .health_response import HealthResponse
 from .health_response_components import HealthResponseComponents
 from .health_response_status import HealthResponseStatus
+from .health_status import HealthStatus
+from .health_status_status import HealthStatusStatus
 from .http_validation_error import HTTPValidationError
 from .ignored_row import IgnoredRow
 from .import_apply import ImportApply
@@ -264,6 +266,8 @@ __all__ = (
     "HealthResponse",
     "HealthResponseComponents",
     "HealthResponseStatus",
+    "HealthStatus",
+    "HealthStatusStatus",
     "HTTPValidationError",
     "IgnoredRow",
     "ImportApply",

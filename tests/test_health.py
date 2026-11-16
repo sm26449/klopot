@@ -15,11 +15,32 @@ async def test_health_returns_200(client: AsyncClient) -> None:
     assert response.status_code == 200
 
 
-async def test_health_payload_shape(client: AsyncClient) -> None:
+async def test_an_anonymous_caller_gets_the_status_only(client: AsyncClient) -> None:
+    """Uptime monitors need the status; the components name hosts, inputs
+    and error texts, and the version says what to attack (review F7, F13)."""
+    body = (await client.get("/v1/health")).json()
+    assert set(body) == {"status", "service"}
+    assert body["status"] in ("ok", "degraded", "down")
+
+
+async def test_the_details_need_read(db_client: AsyncClient, admin_key: str) -> None:
+    """The real credential path: a key with ``read`` sees the components, a
+    ``fire``-only key the status, a wrong key 401 (counted, as anywhere)."""
+    async def key(scopes: list[str]) -> str:
+        r = await db_client.post("/v1/api_keys", headers={"X-API-Key": admin_key},
+                                 json={"name": f"k_{'_'.join(scopes)}", "scopes": scopes})
+        return r.json()["key"]
+
+    reader, firer = await key(["read"]), await key(["fire"])
+    assert "components" in (await db_client.get("/v1/health", headers={"X-API-Key": reader})).json()
+    assert set((await db_client.get("/v1/health", headers={"X-API-Key": firer})).json()) == {"status", "service"}
+    assert (await db_client.get("/v1/health", headers={"X-API-Key": "alertd_" + "x" * 43})).status_code == 401
+
+
+async def test_health_payload_shape(read_client: AsyncClient) -> None:
     """Response body must match the documented shape so external
-    callers (Prometheus blackbox exporter, uptime monitors) can rely
-    on it."""
-    response = await client.get("/v1/health")
+    callers with ``read`` (pv-stack-ui, dashboards) can rely on it."""
+    response = await read_client.get("/v1/health")
     body = response.json()
 
     assert body["service"] == "alertd"
@@ -67,10 +88,10 @@ HEALTH_CODES = {
 }
 
 
-async def test_health_components_carry_translatable_codes(client: AsyncClient) -> None:
+async def test_health_components_carry_translatable_codes(read_client: AsyncClient) -> None:
     """Each component names its detail with a stable `code` + `params`, so
     the UI can show it in the operator's language; `detail` stays English."""
-    components = (await client.get("/v1/health")).json()["components"]
+    components = (await read_client.get("/v1/health")).json()["components"]
     for name, comp in components.items():
         assert comp["code"] in HEALTH_CODES, name
         assert isinstance(comp["params"], dict), name

@@ -110,10 +110,19 @@ curl https://host/v1/version     # doar string-ul de versiune, fără probe infr
 ```
 
 `/v1/health` (public) răspunde mereu 200, cu un `status` general (`ok` /
-`degraded` / `down`), o hartă `components` și `docs_enabled`.
-`/v1/health/ready` întoarce același corp, dar cu HTTP 503 la o cădere
+`degraded` / `down`). Oricine primește statusul; cine are `read` (o cheie API
+cu `read` sau un utilizator autentificat) primește în plus `version`, harta
+`components` și `docs_enabled` — componentele numesc hosturi, inputuri și
+texte de eroare, așa că un apelant anonim nu le vede. `/v1/health/ready`
+întoarce același corp pentru același apelant, cu HTTP 503 la o cădere
 esențială — folosește-l ca probe de readiness. Folosește `/v1/version` ca
 probe de liveness ieftin, care nu atinge MySQL/MQTT.
+
+```json
+{ "status": "ok", "service": "alertd" }
+```
+
+Cu `read`:
 
 ```json
 { "status": "ok", "service": "alertd", "version": "1.7.0", "docs_enabled": false,

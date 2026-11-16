@@ -704,6 +704,25 @@ async def get_current_actor(
     )
 
 
+async def get_optional_actor(
+    request: Request,
+    api_key: str | None = Depends(_HEADER),
+) -> Actor | None:
+    """The caller when it presents credentials (an API key or the session
+    cookie), ``None`` when it presents none — for public endpoints that tell
+    an authenticated reader more (``/v1/health``). Wrong credentials are
+    refused as anywhere else (401, counted). No credentials, no database
+    session."""
+    if not api_key and not request.cookies.get(SESSION_COOKIE):
+        return None
+    from .db.session import get_session_factory
+
+    async with get_session_factory()() as session:
+        actor = await get_current_actor(request, api_key, session)
+        await session.commit()          # the key's use stamp
+    return actor
+
+
 async def require_user_session(actor: Actor = Depends(get_current_actor)) -> Actor:
     """Dependency for endpoints that only make sense for a human session
     (logout, password change, session management). An API key — even

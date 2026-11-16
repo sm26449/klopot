@@ -43,6 +43,11 @@ adheres to [Semantic Versioning](https://semver.org/).
   Now the label picks a template only if `label_types` lists it (names or
   patterns like `am_*`); empty = severity and `default_type` decide, as the
   shipped pack already does. List the templates if you relied on the label.
+- **`/v1/health` and `/v1/health/ready` tell an anonymous caller the status
+  only** (`{"status", "service"}`); the version, `components` and
+  `docs_enabled` need a key with `read` or a signed-in user. Status codes are
+  unchanged, so uptime checks and the container healthcheck work as before;
+  a dashboard that reads the components must send its `read` key.
 
 ### Added
 

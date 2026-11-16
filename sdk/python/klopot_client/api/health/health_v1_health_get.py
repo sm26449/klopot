@@ -9,6 +9,7 @@ from ...types import Response, UNSET
 from ... import errors
 
 from ...models.health_response import HealthResponse
+from ...models.health_status import HealthStatus
 from typing import cast
 
 
@@ -32,11 +33,28 @@ def _get_kwargs(
 
 
 
-def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> HealthResponse | None:
+def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> HealthResponse | HealthStatus | None:
     if response.status_code == 200:
-        response_200 = HealthResponse.from_dict(response.json())
+        def _parse_response_200(data: object) -> HealthResponse | HealthStatus:
+            try:
+                if not isinstance(data, dict):
+                    raise TypeError()
+                response_200_type_0 = HealthResponse.from_dict(data)
 
 
+
+                return response_200_type_0
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
+            if not isinstance(data, dict):
+                raise TypeError()
+            response_200_type_1 = HealthStatus.from_dict(data)
+
+
+
+            return response_200_type_1
+
+        response_200 = _parse_response_200(response.json())
 
         return response_200
 
@@ -46,7 +64,7 @@ def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Res
         return None
 
 
-def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Response[HealthResponse]:
+def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Response[HealthResponse | HealthStatus]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -57,21 +75,22 @@ def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Res
 
 def sync_detailed(
     *,
-    client: AuthenticatedClient | Client,
+    client: AuthenticatedClient,
 
-) -> Response[HealthResponse]:
+) -> Response[HealthResponse | HealthStatus]:
     """ Service health check
 
-     Returns the overall service status plus a per-component health map. Always returns HTTP 200 —
-    inspect the body to determine status. For a pass/fail probe that fails on essential-component
-    outages, use ``/v1/health/ready`` (returns 503 when not ready).
+     Returns the overall service status; a caller with `read` (API key or signed-in user) also gets the
+    version and the per-component map. Always returns HTTP 200 — inspect the body to determine status.
+    For a pass/fail probe that fails on essential-component outages, use ``/v1/health/ready`` (returns
+    503 when not ready).
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[HealthResponse]
+        Response[HealthResponse | HealthStatus]
      """
 
 
@@ -87,21 +106,22 @@ def sync_detailed(
 
 def sync(
     *,
-    client: AuthenticatedClient | Client,
+    client: AuthenticatedClient,
 
-) -> HealthResponse | None:
+) -> HealthResponse | HealthStatus | None:
     """ Service health check
 
-     Returns the overall service status plus a per-component health map. Always returns HTTP 200 —
-    inspect the body to determine status. For a pass/fail probe that fails on essential-component
-    outages, use ``/v1/health/ready`` (returns 503 when not ready).
+     Returns the overall service status; a caller with `read` (API key or signed-in user) also gets the
+    version and the per-component map. Always returns HTTP 200 — inspect the body to determine status.
+    For a pass/fail probe that fails on essential-component outages, use ``/v1/health/ready`` (returns
+    503 when not ready).
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        HealthResponse
+        HealthResponse | HealthStatus
      """
 
 
@@ -112,21 +132,22 @@ def sync(
 
 async def asyncio_detailed(
     *,
-    client: AuthenticatedClient | Client,
+    client: AuthenticatedClient,
 
-) -> Response[HealthResponse]:
+) -> Response[HealthResponse | HealthStatus]:
     """ Service health check
 
-     Returns the overall service status plus a per-component health map. Always returns HTTP 200 —
-    inspect the body to determine status. For a pass/fail probe that fails on essential-component
-    outages, use ``/v1/health/ready`` (returns 503 when not ready).
+     Returns the overall service status; a caller with `read` (API key or signed-in user) also gets the
+    version and the per-component map. Always returns HTTP 200 — inspect the body to determine status.
+    For a pass/fail probe that fails on essential-component outages, use ``/v1/health/ready`` (returns
+    503 when not ready).
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[HealthResponse]
+        Response[HealthResponse | HealthStatus]
      """
 
 
@@ -142,21 +163,22 @@ async def asyncio_detailed(
 
 async def asyncio(
     *,
-    client: AuthenticatedClient | Client,
+    client: AuthenticatedClient,
 
-) -> HealthResponse | None:
+) -> HealthResponse | HealthStatus | None:
     """ Service health check
 
-     Returns the overall service status plus a per-component health map. Always returns HTTP 200 —
-    inspect the body to determine status. For a pass/fail probe that fails on essential-component
-    outages, use ``/v1/health/ready`` (returns 503 when not ready).
+     Returns the overall service status; a caller with `read` (API key or signed-in user) also gets the
+    version and the per-component map. Always returns HTTP 200 — inspect the body to determine status.
+    For a pass/fail probe that fails on essential-component outages, use ``/v1/health/ready`` (returns
+    503 when not ready).
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        HealthResponse
+        HealthResponse | HealthStatus
      """
 
 

@@ -36,8 +36,8 @@ def test_essential_down_empty_when_all_essentials_ok():
     assert _essential_down(comps) == []
 
 
-async def test_health_exposes_background_components(client: AsyncClient):
-    body = (await client.get("/v1/health")).json()
+async def test_health_exposes_background_components(read_client: AsyncClient):
+    body = (await read_client.get("/v1/health")).json()
     comps = body["components"]
     for name in ("engine", "scheduler", "delivery", "outbox"):
         assert name in comps, f"missing health component {name}"
@@ -48,12 +48,16 @@ async def test_health_always_200(client: AsyncClient):
     assert (await client.get("/v1/health")).status_code == 200
 
 
-async def test_readiness_503_when_essential_down(client: AsyncClient):
+async def test_readiness_503_when_essential_down(client: AsyncClient, read_client: AsyncClient):
     # In the in-process test app the rule engine / delivery worker are not
-    # started, so readiness must fail hard.
-    r = await client.get("/v1/health/ready")
+    # started, so readiness must fail hard — for every caller; only a reader
+    # learns which component is down.
+    r = await read_client.get("/v1/health/ready")
     assert r.status_code == 503
     assert _essential_down_from_body(r.json())
+    anonymous = await client.get("/v1/health/ready")
+    assert anonymous.status_code == 503
+    assert anonymous.json() == {"status": "down", "service": "alertd"}
 
 
 def _essential_down_from_body(body) -> list[str]:

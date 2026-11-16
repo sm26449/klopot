@@ -9,6 +9,7 @@ from ...types import Response, UNSET
 from ... import errors
 
 from ...models.health_response import HealthResponse
+from ...models.health_status import HealthStatus
 from typing import cast
 
 
@@ -32,18 +33,52 @@ def _get_kwargs(
 
 
 
-def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> HealthResponse | None:
+def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> HealthResponse | HealthStatus | None:
     if response.status_code == 200:
-        response_200 = HealthResponse.from_dict(response.json())
+        def _parse_response_200(data: object) -> HealthResponse | HealthStatus:
+            try:
+                if not isinstance(data, dict):
+                    raise TypeError()
+                response_200_type_0 = HealthResponse.from_dict(data)
 
 
+
+                return response_200_type_0
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
+            if not isinstance(data, dict):
+                raise TypeError()
+            response_200_type_1 = HealthStatus.from_dict(data)
+
+
+
+            return response_200_type_1
+
+        response_200 = _parse_response_200(response.json())
 
         return response_200
 
     if response.status_code == 503:
-        response_503 = HealthResponse.from_dict(response.json())
+        def _parse_response_503(data: object) -> HealthResponse | HealthStatus:
+            try:
+                if not isinstance(data, dict):
+                    raise TypeError()
+                response_503_type_0 = HealthResponse.from_dict(data)
 
 
+
+                return response_503_type_0
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
+            if not isinstance(data, dict):
+                raise TypeError()
+            response_503_type_1 = HealthStatus.from_dict(data)
+
+
+
+            return response_503_type_1
+
+        response_503 = _parse_response_503(response.json())
 
         return response_503
 
@@ -53,7 +88,7 @@ def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Res
         return None
 
 
-def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Response[HealthResponse]:
+def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Response[HealthResponse | HealthStatus]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -64,21 +99,22 @@ def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Res
 
 def sync_detailed(
     *,
-    client: AuthenticatedClient | Client,
+    client: AuthenticatedClient,
 
-) -> Response[HealthResponse]:
+) -> Response[HealthResponse | HealthStatus]:
     """ Readiness probe (fails on essential outages)
 
      Returns HTTP 200 when every essential component (database, rule engine, delivery worker) is up, and
     HTTP 503 when one is down — so an orchestrator or the container healthcheck acts on a dead engine or
-    retry worker instead of a body that always says 200 (F32).
+    retry worker instead of a body that always says 200 (F32). The body is shaped like `/v1/health`'s
+    for the same caller.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[HealthResponse]
+        Response[HealthResponse | HealthStatus]
      """
 
 
@@ -94,21 +130,22 @@ def sync_detailed(
 
 def sync(
     *,
-    client: AuthenticatedClient | Client,
+    client: AuthenticatedClient,
 
-) -> HealthResponse | None:
+) -> HealthResponse | HealthStatus | None:
     """ Readiness probe (fails on essential outages)
 
      Returns HTTP 200 when every essential component (database, rule engine, delivery worker) is up, and
     HTTP 503 when one is down — so an orchestrator or the container healthcheck acts on a dead engine or
-    retry worker instead of a body that always says 200 (F32).
+    retry worker instead of a body that always says 200 (F32). The body is shaped like `/v1/health`'s
+    for the same caller.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        HealthResponse
+        HealthResponse | HealthStatus
      """
 
 
@@ -119,21 +156,22 @@ def sync(
 
 async def asyncio_detailed(
     *,
-    client: AuthenticatedClient | Client,
+    client: AuthenticatedClient,
 
-) -> Response[HealthResponse]:
+) -> Response[HealthResponse | HealthStatus]:
     """ Readiness probe (fails on essential outages)
 
      Returns HTTP 200 when every essential component (database, rule engine, delivery worker) is up, and
     HTTP 503 when one is down — so an orchestrator or the container healthcheck acts on a dead engine or
-    retry worker instead of a body that always says 200 (F32).
+    retry worker instead of a body that always says 200 (F32). The body is shaped like `/v1/health`'s
+    for the same caller.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[HealthResponse]
+        Response[HealthResponse | HealthStatus]
      """
 
 
@@ -149,21 +187,22 @@ async def asyncio_detailed(
 
 async def asyncio(
     *,
-    client: AuthenticatedClient | Client,
+    client: AuthenticatedClient,
 
-) -> HealthResponse | None:
+) -> HealthResponse | HealthStatus | None:
     """ Readiness probe (fails on essential outages)
 
      Returns HTTP 200 when every essential component (database, rule engine, delivery worker) is up, and
     HTTP 503 when one is down — so an orchestrator or the container healthcheck acts on a dead engine or
-    retry worker instead of a body that always says 200 (F32).
+    retry worker instead of a body that always says 200 (F32). The body is shaped like `/v1/health`'s
+    for the same caller.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        HealthResponse
+        HealthResponse | HealthStatus
      """
 
 

@@ -78,6 +78,20 @@ async def client() -> AsyncIterator[AsyncClient]:
         yield c
 
 
+@pytest.fixture
+async def read_client() -> AsyncIterator[AsyncClient]:
+    """``client`` as a caller with ``read`` — for the public endpoints that
+    tell an authenticated reader more (``/v1/health``), still without a
+    database. The real credential path is tested with ``db_client``."""
+    from app.auth import Actor, get_optional_actor
+
+    app = create_app()
+    app.dependency_overrides[get_optional_actor] = lambda: Actor(
+        kind="user", id=0, name="reader", scopes=frozenset({"read"}))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as c:
+        yield c
+
+
 # ── DB-backed ─────────────────────────────────────────────────────
 
 

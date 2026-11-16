@@ -1738,7 +1738,7 @@
         "type": "object"
       },
       "HealthResponse": {
-        "description": "``GET /v1/health`` response.\n\nHTTP status is always 200 \u2014 clients inspect ``status`` field.\nDegraded components don't trigger Kubernetes restart loops.",
+        "description": "``GET /v1/health`` for a ``read`` caller (an API key with ``read``, or\na signed-in user): the status plus the component map.\n\nHTTP status is always 200 \u2014 clients inspect ``status`` field.\nDegraded components don't trigger Kubernetes restart loops.",
         "properties": {
           "components": {
             "additionalProperties": {
@@ -1777,6 +1777,30 @@
           "components"
         ],
         "title": "HealthResponse",
+        "type": "object"
+      },
+      "HealthStatus": {
+        "description": "``GET /v1/health`` for a caller without ``read``: the overall status\nonly. The components name hosts, inputs and error texts, and the version\ntells an attacker what to try (public-exposure review F7, F13).",
+        "properties": {
+          "service": {
+            "default": "alertd",
+            "title": "Service",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "degraded",
+              "down"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "HealthStatus",
         "type": "object"
       },
       "IgnoredRow": {
@@ -9052,20 +9076,33 @@
     },
     "/v1/health": {
       "get": {
-        "description": "Returns the overall service status plus a per-component health map. Always returns HTTP 200 \u2014 inspect the body to determine status. For a pass/fail probe that fails on essential-component outages, use ``/v1/health/ready`` (returns 503 when not ready).",
+        "description": "Returns the overall service status; a caller with `read` (API key or signed-in user) also gets the version and the per-component map. Always returns HTTP 200 \u2014 inspect the body to determine status. For a pass/fail probe that fails on essential-component outages, use ``/v1/health/ready`` (returns 503 when not ready).",
         "operationId": "health_v1_health_get",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HealthResponse"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/HealthResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/HealthStatus"
+                    }
+                  ],
+                  "title": "Response Health V1 Health Get"
                 }
               }
             },
             "description": "Successful Response"
           }
         },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
         "summary": "Service health check",
         "tags": [
           "health"
@@ -9074,14 +9111,22 @@
     },
     "/v1/health/ready": {
       "get": {
-        "description": "Returns HTTP 200 when every essential component (database, rule engine, delivery worker) is up, and HTTP 503 when one is down \u2014 so an orchestrator or the container healthcheck acts on a dead engine or retry worker instead of a body that always says 200 (F32).",
+        "description": "Returns HTTP 200 when every essential component (database, rule engine, delivery worker) is up, and HTTP 503 when one is down \u2014 so an orchestrator or the container healthcheck acts on a dead engine or retry worker instead of a body that always says 200 (F32). The body is shaped like `/v1/health`'s for the same caller.",
         "operationId": "readiness_v1_health_ready_get",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HealthResponse"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/HealthResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/HealthStatus"
+                    }
+                  ],
+                  "title": "Response Readiness V1 Health Ready Get"
                 }
               }
             },
@@ -9091,13 +9136,26 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HealthResponse"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/HealthResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/HealthStatus"
+                    }
+                  ],
+                  "title": "Response 503 Readiness V1 Health Ready Get"
                 }
               }
             },
             "description": "Not ready"
           }
         },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
         "summary": "Readiness probe (fails on essential outages)",
         "tags": [
           "health"
