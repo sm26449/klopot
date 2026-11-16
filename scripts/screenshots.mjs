@@ -237,6 +237,16 @@ async function main() {
       }
       await page.context().close();
     }
+    // The dashboard on a phone (Pixel 7): klopot.dev shows it on narrow
+    // screens, where the desktop shot shrinks past reading.
+    console.log("== phone");
+    for (const theme of ["light", "dark"]) {
+      const page = await session(browser, { theme, phone: true });
+      await go(page, "dashboard");
+      await page.waitForTimeout(800);
+      await shot(page, `dashboard-phone-${theme}`);
+      await page.context().close();
+    }
   } finally {
     await browser.close();
   }
