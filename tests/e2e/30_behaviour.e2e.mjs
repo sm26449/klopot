@@ -2,7 +2,7 @@
 // toast, clipped dashboard cards, drawers with an invalid role.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { launch, session, go, until, axe, api } from "./support.mjs";
+import { BASE, launch, session, go, until, axe, api } from "./support.mjs";
 
 let browser, page;
 before(async () => { browser = await launch(); page = await session(browser, { lang: "en" }); page.on("dialog", (d) => d.accept()); });
@@ -38,6 +38,13 @@ test("dashboard: the version and components show right after sign-in", async () 
   } finally {
     await fresh.context().close();
   }
+});
+
+test("responses do not name the server software (review F13)", async () => {
+  // The image runs app.worker.KlopotWorker, uvicorn's worker with server_header off.
+  const r = await fetch(`${BASE}/v1/health`);
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get("server"), null, `server: ${r.headers.get("server")}`);
 });
 
 test("a toast does not follow you to the next page", async () => {

@@ -49,6 +49,16 @@ adheres to [Semantic Versioning](https://semver.org/).
   set). `tests/packs/test_catalog_rules.py` runs every catalog rule against
   scenarios. The README screenshots show the OpenVigil and MBG packs in use.
 
+### Security
+
+- Behind a TLS proxy a redirect (a trailing slash) sent the client to
+  `http://`: Klopot saw the proxy's plain-HTTP connection. It now takes the
+  scheme from `X-Forwarded-Proto` — only from `ALERTD_TRUSTED_PROXY_CIDRS`,
+  the list that already decides whose `X-Forwarded-For` counts (review F13).
+  The image's worker (`app.worker.KlopotWorker`) no longer sends
+  `server: uvicorn` and leaves proxy headers to Klopot, not to gunicorn's
+  own `forwarded_allow_ips`.
+
 ### Fixed
 
 - Admin UI: right after signing in, the dashboard's Service card showed the

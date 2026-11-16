@@ -335,6 +335,12 @@ def create_app() -> FastAPI:
             allow_headers=["X-API-Key", "Content-Type", "X-Input-Token"],
         )
 
+    # The client's scheme behind a TLS proxy (review F13): outermost, so the
+    # trailing-slash redirect and request.url say https when the client did.
+    from .forwarded import ForwardedProtoMiddleware
+
+    app.add_middleware(ForwardedProtoMiddleware, trusted_cidrs=settings.trusted_proxy_cidr_list)
+
     # Log unhandled exceptions with full traceback, then return 500.
     # Replaces FastAPI's silent "Internal Server Error" body so operators
     # see what crashed.

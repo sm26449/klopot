@@ -69,7 +69,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 # raise --workers or run multiple replicas — that would double-fire rules and
 # double-send notifications. See docs/DEPLOY.md.
 CMD ["gunicorn", "app.main:app", \
-     "--worker-class", "uvicorn_worker.UvicornWorker", \
+     "--worker-class", "app.worker.KlopotWorker", \
      "--workers", "1", \
      "--bind", "0.0.0.0:5090", \
      "--access-logfile", "-", \

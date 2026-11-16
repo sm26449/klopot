@@ -66,6 +66,24 @@ def in_networks(ip: str, nets: tuple[Network, ...]) -> bool:
     return any(addr in n for n in nets)
 
 
+def forwarded_scheme(peer: str | None, proto: str | None, trusted_cidrs: list[str]) -> str | None:
+    """The scheme the client used, from ``X-Forwarded-Proto`` — only when the
+    direct peer is a trusted proxy (the same list as ``real_client_ip``).
+
+    ``"http"`` or ``"https"``; ``None`` to keep the connection's own scheme
+    (no trusted peer, no header, or a value that is neither). With several
+    values the last counts — the one the trusted proxy next to us wrote;
+    earlier ones may be the client's own claim (as with X-Forwarded-For).
+    """
+    if not (peer and proto and trusted_cidrs):
+        return None
+    nets = parse_trusted_proxies(",".join(trusted_cidrs))
+    if not nets or not in_networks(peer, nets):
+        return None
+    last = proto.split(",")[-1].strip().lower()
+    return last if last in ("http", "https") else None
+
+
 def real_client_ip(peer: str | None, xff: str | None, trusted_cidrs: list[str]) -> str | None:
     """The real client IP given the direct peer and the X-Forwarded-For header.
 

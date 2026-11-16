@@ -388,7 +388,11 @@ file refuses to start without it): it is traefik's address as Klopot sees it.
 Without it every request appears to come from traefik, so one client's failed
 logins or wrong API keys lock everyone out. An entry that is not an address or
 network, or a `/0` (which would let any client choose its own address), stops
-Klopot at startup with the entry named.
+Klopot at startup with the entry named. The same list decides whose
+`X-Forwarded-Proto` counts: from these proxies only, it gives the scheme the
+client used, so a redirect (a trailing slash) keeps `https`. Klopot does this
+itself — the image's gunicorn worker (`app.worker.KlopotWorker`) leaves proxy
+headers alone and sends no `Server` header.
 
 **A second layer inside Klopot: `ALERTD_ADMIN_ALLOW_CIDRS`** (comma-separated
 networks; empty = off). When set, Klopot itself refuses everything but
