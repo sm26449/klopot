@@ -200,7 +200,11 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install "ruff>=0.7,<0.8"
+      # The ruff the dev extra pins (pyproject.toml), not a copy of it: the
+      # lint config names rules a different ruff may not know.
+      - run: |
+          spec=$(python -c 'import tomllib; d = tomllib.load(open("pyproject.toml", "rb")); print(next(r for r in d["project"]["optional-dependencies"]["dev"] if r.startswith("ruff")))')
+          pip install "$spec"
       - run: ruff check app scripts
 
   # ── Type check with a frozen baseline ────────────────────────────
