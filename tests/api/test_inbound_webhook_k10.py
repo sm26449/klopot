@@ -42,9 +42,9 @@ async def test_anonymous_callers_learn_nothing_and_leave_no_body(db_client, admi
     poller = await _input(db_client, admin_key, name="secret_poller", kind="http_poll",
                           config={"url": "https://example.com", "interval_sec": 60})
     paused = await _input(db_client, admin_key, name="paused_hook", kind="webhook", enabled=False,
-                          config={"auth_required": True, "auth_token": "right-token-123456"})
+                          config={"auth_required": True, "auth_token": "right-token-0123456789abcdef0123456789"})
     open_hook = await _input(db_client, admin_key, name="live_hook", kind="webhook",
-                             config={"auth_required": True, "auth_token": "right-token-123456"})
+                             config={"auth_required": True, "auth_token": "right-token-0123456789abcdef0123456789"})
 
     non_numeric = await db_client.post("/v1/inputs/abc/webhook", json=PAYLOAD)
     other_kind = await db_client.post(f"/v1/inputs/{poller['id']}/webhook", json=PAYLOAD)
@@ -71,9 +71,9 @@ async def test_anonymous_callers_learn_nothing_and_leave_no_body(db_client, admi
 
 async def test_a_caller_with_the_token_is_still_recorded(db_client, admin_key, db_session):
     hook = await _input(db_client, admin_key, name="open_hook", kind="webhook",
-                        config={"auth_required": True, "auth_token": "right-token-123456"})
+                        config={"auth_required": True, "auth_token": "right-token-0123456789abcdef0123456789"})
     r = await db_client.post(f"/v1/inputs/{hook['id']}/webhook", json=PAYLOAD,
-                             headers={"X-Input-Token": "right-token-123456"})
+                             headers={"X-Input-Token": "right-token-0123456789abcdef0123456789"})
     assert r.status_code == 202, r.text[:200]
     stored = await _bodies(db_session)
     assert "ZZZZ" in (stored[(f"/v1/inputs/{hook['id']}/webhook", 202)] or "")

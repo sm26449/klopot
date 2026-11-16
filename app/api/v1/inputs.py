@@ -18,7 +18,14 @@ from ...config import get_settings
 from ...core.manager import get_manager
 from ...db import get_session
 from ...db.models import Input, Variable
-from ...inputs.webhook import INBOUND_KINDS, WebhookInput, validate_inbound_auth, webhook_auth_ok
+from ...inputs.webhook import (
+    INBOUND_KINDS,
+    WebhookInput,
+    auth_changed,
+    short_token,
+    validate_inbound_auth,
+    webhook_auth_ok,
+)
 from ...schemas.common import InputKind, Page
 from ...schemas.input import InputCreate, InputHealth, InputRead, InputUpdate
 from ...secrets_registry import mask_config, merge_secret_update, secret_status
@@ -46,13 +53,17 @@ def _require_supported_kind(kind: Any) -> None:
         )
 
 
-def _require_valid_auth(kind: Any, config: dict[str, Any] | None) -> None:
+def _require_valid_auth(kind: Any, config: dict[str, Any] | None,
+                        before: dict[str, Any] | None = None) -> None:
     """An inbound input must be able to authenticate as configured
-    (inputs/webhook.py ``validate_inbound_auth``): 422 otherwise."""
+    (inputs/webhook.py ``validate_inbound_auth``): 422 otherwise. Its token's
+    length is judged when the authentication is new or changes against
+    ``before`` (the stored config of an input that already was inbound)."""
     if getattr(kind, "value", kind) not in INBOUND_KINDS:
         return
+    config = config or {}
     try:
-        validate_inbound_auth(config or {})
+        validate_inbound_auth(config, judge_token=auth_changed(before, config))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e)) from None
 
@@ -66,6 +77,8 @@ def _to_read(obj: Input) -> InputRead:
     out = InputRead.model_validate(obj)
     out.config = mask_config("input", obj.kind, obj.config)
     out.secret_fields_set = secret_status("input", obj.kind, obj.config)
+    if obj.kind.value in INBOUND_KINDS:
+        out.token_too_short = short_token(obj.config or {}) is not None
     return out
 
 
@@ -147,9 +160,11 @@ async def update_input(
         # value; "" clears; anything else replaces (secrets_registry).
         kind = patch.get("kind") or obj.kind
         patch["config"] = merge_secret_update("input", kind, obj.config, patch["config"])
-    # Judge the result (merged secrets, the kind it ends up with).
+    # Judge the result (merged secrets, the kind it ends up with); the token
+    # only if the authentication changes or the input becomes inbound.
     _require_valid_auth(patch.get("kind") or obj.kind,
-                        patch["config"] if patch.get("config") is not None else obj.config)
+                        patch["config"] if patch.get("config") is not None else obj.config,
+                        before=(obj.config or {}) if obj.kind.value in INBOUND_KINDS else None)
     for k, v in patch.items():
         setattr(obj, k, v)
     await flush_or_409(session, "Input update")

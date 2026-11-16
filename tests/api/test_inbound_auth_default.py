@@ -19,7 +19,7 @@ from app.inputs.webhook import auth_required, validate_inbound_auth, webhook_aut
 
 pytestmark = pytest.mark.anyio
 
-TOKEN = "a-long-enough-token-0123"
+TOKEN = "a-long-enough-token-0123456789abcdef"
 
 
 def _h(key: str) -> dict[str, str]:

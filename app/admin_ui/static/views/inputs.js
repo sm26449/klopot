@@ -45,6 +45,7 @@ export function InputsView() {
       : html`<div class="cards">${items.map((i) => html`<div key=${i.id} class="ch-card" ...${clickable(() => setEditing(i), t("inputs.editAria", { name: i.name }))}>
           <div class="ch-top"><b>${i.name}</b><span class="spacer"></span>
             ${isOpen(i.kind, i.config) ? html`<span class="badge warning plain" title=${t("inputs.openTitle")}>${t("inputs.badgeOpen")}</span>` : null}
+            ${i.token_too_short ? html`<span class="badge warning plain" title=${t("inputs.shortTokenTitle")}>${t("inputs.badgeShortToken")}</span>` : null}
             <span class="badge ${i.enabled ? "ok" : ""} plain">${i.enabled ? t("inputs.badgeEnabled") : t("inputs.badgeDisabled")}</span></div>
           <div class="small muted"><span class="mono">${i.kind}</span></div>
           ${Object.keys(i.secret_fields_set || {}).length ? html`<div class="small muted">🔒 ${Object.keys(i.secret_fields_set).join(", ")}</div>` : null}
@@ -128,6 +129,7 @@ function InputEditor({ input, meta, onClose, onSaved }) {
         : html`<p class="muted">${t("inputs.pickKindHint")}</p>`}
 
       ${isOpen(kind, config) ? html`<div class="alert warn" role="status">${t("inputs.openWarning")}</div>` : null}
+      ${!isNew && input.token_too_short ? html`<div class="alert warn" role="status">${t("inputs.shortTokenWarning")}</div>` : null}
 
       ${kind ? html`<div class="field"><label class="chk"><input type="checkbox" checked=${enabled} onChange=${(e) => setEnabled(e.target.checked)} /> ${t("inputs.enabledLabel")}</label></div>` : null}
 

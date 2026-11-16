@@ -57,7 +57,7 @@ async def test_create_input_unsupported_kind_is_422(db_client, admin_key):
 async def test_create_input_supported_kind_ok(db_client, admin_key):
     r = await db_client.post(
         "/v1/inputs",
-        json={"name": "wh1", "kind": "webhook", "config": {"auth_token": "a-long-enough-token"}},
+        json={"name": "wh1", "kind": "webhook", "config": {"auth_token": "a-long-enough-token-0123456789abcdef"}},
         headers={"X-API-Key": admin_key},
     )
     assert r.status_code == 201, r.text

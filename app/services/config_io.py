@@ -643,13 +643,16 @@ async def _import_inputs(session: AsyncSession, items: list[dict[str, Any]], pla
                 f"input {item['name']!r}: ignored masked placeholder(s) "
                 f"{dropped} from a masked export — live secret kept"
             )
-        from ..inputs.webhook import INBOUND_KINDS, validate_inbound_auth
+        from ..inputs.webhook import INBOUND_KINDS, auth_changed, validate_inbound_auth
 
         if item["kind"] in INBOUND_KINDS:
             # The same rule as the API: an inbound input that requires a token
-            # must have one (a masked export carries none for a new input).
+            # must have one (a masked export carries none for a new input), and
+            # a token that is set or changed must be long enough — restoring an
+            # export of an input as it is never fails on its old token.
+            before = (existing.config or {}) if existing and existing.kind.value in INBOUND_KINDS else None
             try:
-                validate_inbound_auth(config or {})
+                validate_inbound_auth(config or {}, judge_token=auth_changed(before, config or {}))
             except ValueError as e:
                 plan.errors.append(f"input {item['name']!r}: {e}")
                 continue

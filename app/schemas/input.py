@@ -35,6 +35,10 @@ class InputRead(InputBase):
     # this map says how each secret field is provided (``"literal"`` /
     # ``"env:<NAME>"``). See ``app/secrets_registry.py``.
     secret_fields_set: dict[str, str] = Field(default_factory=dict)
+    # An inbound input whose token is shorter than the floor (32 characters),
+    # saved before it existed: it works, and needs a new token.
+    token_too_short: bool = Field(default=False, description=(
+        "Inbound input whose token is shorter than 32 characters: it still works; set a new token."))
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -235,6 +235,8 @@ _CHANNELS: dict[str, list[dict[str, Any]]] = {
 _OPEN_INPUT_HELP = ("On by default, and saving needs a token then. Turn it off only for a sender on your "
                     "own network that cannot send a header: anyone who can reach Klopot could post here.")
 
+_TOKEN_HELP = "At least 32 characters, e.g. openssl rand -base64 32."
+
 _INPUTS: dict[str, list[dict[str, Any]]] = {
     "mqtt": [
         _f("host", "string", required=True, help="Broker host."),
@@ -259,7 +261,7 @@ _INPUTS: dict[str, list[dict[str, Any]]] = {
     "webhook": [
         _f("auth_required", "bool", default=True,
            help="Require X-Input-Token on POST /v1/inputs/{id}/webhook. " + _OPEN_INPUT_HELP),
-        _f("auth_token", "string", help="Expected inbound token (write-only)."),
+        _f("auth_token", "string", help="Expected inbound token (write-only). " + _TOKEN_HELP),
     ],
     "sms_inbox": [
         # The adapter does NOT poll — it receives inbound SMS forwarded as
@@ -269,7 +271,7 @@ _INPUTS: dict[str, list[dict[str, Any]]] = {
            help="Require X-Input-Token on the inbound POST /v1/inputs/{id}/webhook. " + _OPEN_INPUT_HELP),
         _f("auth_token", "string",
            help="Expected inbound token (write-only), checked when "
-                "auth_required is true."),
+                "auth_required is true. " + _TOKEN_HELP),
     ],
     "alertmanager": [
         _f("default_type", "string", required=True, default="alertmanager_alert",
@@ -288,7 +290,7 @@ _INPUTS: dict[str, list[dict[str, Any]]] = {
         _f("auth_required", "bool", default=True,
            help="Require the token as X-Input-Token or Authorization: Bearer. " + _OPEN_INPUT_HELP),
         _f("auth_token", "string",
-           help="Expected token (write-only). In Alertmanager: http_config.authorization.credentials."),
+           help="Expected token (write-only). In Alertmanager: http_config.authorization.credentials. " + _TOKEN_HELP),
     ],
     "schedule": [],
     "email_imap": [

@@ -36,6 +36,8 @@ class InputRead:
             config (InputReadConfig | Unset):
             enabled (bool | Unset):  Default: True.
             secret_fields_set (InputReadSecretFieldsSet | Unset):
+            token_too_short (bool | Unset): Inbound input whose token is shorter than 32 characters: it still works; set a
+                new token. Default: False.
      """
 
     created_at: None | str
@@ -46,6 +48,7 @@ class InputRead:
     config: InputReadConfig | Unset = UNSET
     enabled: bool | Unset = True
     secret_fields_set: InputReadSecretFieldsSet | Unset = UNSET
+    token_too_short: bool | Unset = False
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
 
@@ -77,6 +80,8 @@ class InputRead:
         if not isinstance(self.secret_fields_set, Unset):
             secret_fields_set = self.secret_fields_set.to_dict()
 
+        token_too_short = self.token_too_short
+
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
@@ -93,6 +98,8 @@ class InputRead:
             field_dict["enabled"] = enabled
         if secret_fields_set is not UNSET:
             field_dict["secret_fields_set"] = secret_fields_set
+        if token_too_short is not UNSET:
+            field_dict["token_too_short"] = token_too_short
 
         return field_dict
 
@@ -150,6 +157,8 @@ class InputRead:
 
 
 
+        token_too_short = d.pop("token_too_short", UNSET)
+
         input_read = cls(
             created_at=created_at,
             id=id,
@@ -159,6 +168,7 @@ class InputRead:
             config=config,
             enabled=enabled,
             secret_fields_set=secret_fields_set,
+            token_too_short=token_too_short,
         )
 
 

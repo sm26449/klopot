@@ -544,7 +544,9 @@ one is refused (`422`). An id that is no live inbound input (missing, another
 kind, disabled) and a wrong or missing token all get the same `401` ("Unknown
 input or wrong token"), and count against the sending address: after five in
 a minute every request from it gets `429` (`Retry-After: 60`) — the input's
-editor lists its recent requests with status and address. Alertmanager:
+editor lists its recent requests with status and address. A token needs at
+least 32 characters when it is set or changed; an older, shorter one keeps
+working and is flagged (`token_too_short` on `GET /v1/inputs`). Alertmanager:
 
 ```yaml
 receivers:

@@ -31,6 +31,12 @@ adheres to [Semantic Versioning](https://semver.org/).
   Inputs page marks it "no token"; set a token, or keep it for a sender on
   your own network. Saving an input that requires a token without one is
   refused with `422`; a config import is refused the same way.
+- **An inbound input's token needs at least 32 characters** when it is set
+  or changed (REST, admin UI, import). An input saved with a shorter one
+  keeps working and can still be edited, disabled, exported and restored as
+  it is; the Inputs page marks it "short token" until you set a new one
+  (`openssl rand -base64 32`) and give it to the sender. The refusals of the
+  inbound endpoint are now one `401`, budgeted per address (see Security).
 
 ### Added
 

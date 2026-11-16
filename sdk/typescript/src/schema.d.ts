@@ -2456,6 +2456,12 @@ export interface components {
             secret_fields_set?: {
                 [key: string]: string;
             };
+            /**
+             * Token Too Short
+             * @description Inbound input whose token is shorter than 32 characters: it still works; set a new token.
+             * @default false
+             */
+            token_too_short: boolean;
             /** Updated At */
             updated_at: string | null;
         };

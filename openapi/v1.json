@@ -2318,6 +2318,12 @@
             "title": "Secret Fields Set",
             "type": "object"
           },
+          "token_too_short": {
+            "default": false,
+            "description": "Inbound input whose token is shorter than 32 characters: it still works; set a new token.",
+            "title": "Token Too Short",
+            "type": "boolean"
+          },
           "updated_at": {
             "anyOf": [
               {

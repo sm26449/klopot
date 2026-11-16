@@ -1041,7 +1041,7 @@
           "required": false,
           "secret": true,
           "default": null,
-          "help": "Expected inbound token (write-only).",
+          "help": "Expected inbound token (write-only). At least 32 characters, e.g. openssl rand -base64 32.",
           "ref_field": "auth_token_ref"
         }
       ]
@@ -1062,7 +1062,7 @@
           "required": false,
           "secret": true,
           "default": null,
-          "help": "Expected inbound token (write-only), checked when auth_required is true.",
+          "help": "Expected inbound token (write-only), checked when auth_required is true. At least 32 characters, e.g. openssl rand -base64 32.",
           "ref_field": "auth_token_ref"
         }
       ]
@@ -1123,7 +1123,7 @@
           "required": false,
           "secret": true,
           "default": null,
-          "help": "Expected token (write-only). In Alertmanager: http_config.authorization.credentials.",
+          "help": "Expected token (write-only). In Alertmanager: http_config.authorization.credentials. At least 32 characters, e.g. openssl rand -base64 32.",
           "ref_field": "auth_token_ref"
         }
       ]

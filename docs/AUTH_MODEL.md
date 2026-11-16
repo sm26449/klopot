@@ -221,7 +221,17 @@ disabled) and a wrong or missing token all get the same `401`. Each of those
 counts against the sending address — five a minute, then `429` for every
 request from it, the right token included, so guessing stops there. This
 budget is separate from the API keys': a sender with a stale token does not
-lock out the keys used from the same address. Turning authentication off is for a sender on your own
+lock out the keys used from the same address.
+
+A token needs at least **32 characters** (`openssl rand -base64 32`), judged
+whenever the authentication is set or changed — on create, an edit of
+`auth_token` / `auth_token_ref` / `auth_required`, or an import that brings
+a different one; for `auth_token_ref`, the variable's value is measured
+(one not set yet cannot be, and the input refuses every post until it is).
+An input saved before this floor keeps working and stays editable;
+`GET /v1/inputs` says `token_too_short: true` and the Inputs page marks it.
+
+Turning authentication off is for a sender on your own
 network that cannot send a header; the public traefik overlay never opens
 this endpoint (docs/DEPLOY.md).
 

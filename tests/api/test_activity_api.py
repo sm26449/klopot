@@ -278,7 +278,7 @@ async def test_callers_who_did_not_get_in_leave_no_body(db_client, admin_key, db
     assert (await db_client.post("/v1/no/such/route", json=payload)).status_code == 404
     assert (await db_client.post("/v1/inputs/999999/webhook", json=payload)).status_code in (401, 403, 404)
     inp = (await db_client.post("/v1/inputs", headers=h, json={
-        "name": "locked", "kind": "webhook", "config": {"auth_required": True, "auth_token": "right-token-123456"}})).json()
+        "name": "locked", "kind": "webhook", "config": {"auth_required": True, "auth_token": "right-token-0123456789abcdef0123456789"}})).json()
     refused = await db_client.post(f"/v1/inputs/{inp['id']}/webhook", json=payload, headers={"X-Input-Token": "wrong"})
     assert refused.status_code in (401, 403)
     # A caller who did get in is still recorded with its body (an unknown type is a 4xx/202 either way).

@@ -21,7 +21,9 @@ webhook, sms_inbox, alertmanager) is defined here once: a token is required
 unless the configuration says ``auth_required: false``, and a configuration
 that requires a token without having one is refused when it is saved
 (``validate_inbound_auth``), not discovered later as an input that rejects —
-or, before 1.2, accepted — everything.
+or, before 1.2, accepted — everything. A token is also judged by its length
+(``MIN_TOKEN_LENGTH``) whenever the authentication is set or changed; an
+input saved before the floor keeps working, and is flagged (``short_token``).
 """
 from __future__ import annotations
 
@@ -95,6 +97,11 @@ class WebhookInput(BaseInput):
 
 # Kinds that receive posts at POST /v1/inputs/{id}/webhook.
 INBOUND_KINDS = frozenset({"webhook", "sms_inbox", "alertmanager"})
+# The fields that decide how an inbound input authenticates.
+AUTH_FIELDS = ("auth_required", "auth_token", "auth_token_ref")
+# Characters an inbound token needs: ~190 bits as base64, beyond guessing
+# even before the per-address budget (public-exposure review F3).
+MIN_TOKEN_LENGTH = 32
 
 
 def auth_required(config: dict[str, Any]) -> bool:
@@ -106,11 +113,37 @@ def auth_required(config: dict[str, Any]) -> bool:
     return config.get("auth_required", True) is not False
 
 
-def validate_inbound_auth(config: dict[str, Any]) -> None:
+def short_token(config: dict[str, Any]) -> str | None:
+    """Why the token an inbound input checks is too short, or ``None``. Only
+    a token that can be read now is judged: an ``auth_token_ref`` whose
+    variable is not set yet cannot be (the input refuses every post until it
+    is)."""
+    if not auth_required(config):
+        return None
+    token = resolve_secret_local(config, "auth_token", "auth_token_ref")
+    if token is None or len(token) >= MIN_TOKEN_LENGTH:
+        return None
+    where = f"the variable {config['auth_token_ref']}" if config.get("auth_token_ref") else "auth_token"
+    return (f"{where} has {len(token)} characters; an input token needs at least {MIN_TOKEN_LENGTH} "
+            "(e.g. openssl rand -base64 32)")
+
+
+def auth_changed(before: dict[str, Any] | None, after: dict[str, Any]) -> bool:
+    """Whether ``after`` authenticates differently from ``before`` (``None``
+    = a new input): the cue to judge the token again."""
+    return before is None or any(before.get(f) != after.get(f) for f in AUTH_FIELDS)
+
+
+def validate_inbound_auth(config: dict[str, Any], *, judge_token: bool = True) -> None:
     """Refuse an inbound input's config that cannot authenticate as intended:
-    ``auth_required`` that is not a boolean, or auth required (the default)
-    with no ``auth_token`` / ``auth_token_ref``. Raises ``ValueError`` with
-    the fix in the message."""
+    ``auth_required`` that is not a boolean, auth required (the default) with
+    no ``auth_token`` / ``auth_token_ref`` — and, with ``judge_token``, a
+    token shorter than ``MIN_TOKEN_LENGTH``. Raises ``ValueError`` with the
+    fix in the message.
+
+    Callers judge the token when the authentication is set or changed
+    (``auth_changed``), so an input saved before the floor can still be
+    edited, disabled or exported — it is flagged instead (``short_token``)."""
     flag = config.get("auth_required", True)
     if not isinstance(flag, bool):
         raise ValueError("auth_required must be true or false")
@@ -119,6 +152,9 @@ def validate_inbound_auth(config: dict[str, Any]) -> None:
             "this input needs a token: set auth_token (or auth_token_ref) — or set "
             "auth_required to false to accept posts without one"
         )
+    problem = short_token(config) if judge_token else None
+    if problem:
+        raise ValueError(problem)
 
 
 def webhook_auth_ok(config: dict[str, Any], header_token: str | None) -> bool:
