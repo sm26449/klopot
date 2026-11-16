@@ -43,6 +43,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 - Development needs Node 22+ (`.nvmrc`: 24): jsdom 31 and Playwright 1.65;
   the test scripts pin the TAP reporter, which Node 23+ no longer uses by
   default.
+- A delivery held back by its channel's rate limit is retried when a slot
+  frees — the oldest send leaving the 60 s window — instead of after a fixed
+  30 s (often refused again). The channel limit stays "at most N in any 60 s";
+  the API keys' GCRA limiter would allow close to 2N in a minute, too loose
+  for a provider's limit.
 
 ### Added
 

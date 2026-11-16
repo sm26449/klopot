@@ -62,19 +62,19 @@ async def test_a_probe_cancelled_before_its_send_started_is_released(db_session,
                         make_channel(kind=ChannelKind.ui, name="busy_ch")])
     await db_session.commit()
     await _open_breaker(mgr, "probe_ch")
-    real_allow = mgr._limiter.allow
+    real_admit = mgr._limiter.admit
 
     async def slow_limiter(name, per_min):
         if name == "busy_ch":
             await asyncio.sleep(5)
-        return await real_allow(name, per_min)
+        return await real_admit(name, per_min)
 
     async def send(notif, cfg, idempotency_key=None):
         return SendResult(ok=True)
 
     adapter = type("Adapter", (), {"send": staticmethod(send)})()
     with patch.object(mgr, "_get_adapter", return_value=adapter), \
-            patch.object(mgr._limiter, "allow", side_effect=slow_limiter):
+            patch.object(mgr._limiter, "admit", side_effect=slow_limiter):
         with pytest.raises(TimeoutError):
             await asyncio.wait_for(mgr.dispatch(_notif(3), ["probe_ch", "busy_ch"], db_session), timeout=0.1)
     assert mgr._breaker.state("probe_ch").probe_in_flight is False

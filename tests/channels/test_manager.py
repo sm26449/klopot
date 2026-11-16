@@ -157,6 +157,9 @@ async def test_rate_limited_channel_blocked(manager, db_session, make_channel):
     # Rate-limited is a deferral, not a transport failure (audit F22).
     assert "rate_limited" in out2.deferred[c.name]
     assert c.name not in out2.failed
+    # Retried when the slot frees (about 60 s after the first send), not after
+    # the fixed deferral delay.
+    assert 55 < out2.defer_sec[c.name] <= 60
 
 
 # ── Adapter caching ───────────────────────────────────────────────

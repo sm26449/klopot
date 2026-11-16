@@ -356,12 +356,15 @@ class ChannelManager:
                 probes.add(name)
 
             # Rate limiter — likewise a deferral, reschedule without an attempt.
-            if not await self._limiter.allow(name, ch.rate_limit_per_min):
+            slot = await self._limiter.admit(name, ch.rate_limit_per_min)
+            if not slot.allowed:
                 # The breaker may have reserved a half-open probe for this
                 # channel just above; release it since we won't send (F37).
                 await self._breaker.release_probe(name)
                 probes.discard(name)
                 outcome.deferred[name] = "rate_limited"
+                # Retry when a slot frees, not after the fixed deferral delay.
+                outcome.defer_sec[name] = slot.retry_after
                 record_attempt(channel=name, kind="alert", outcome="deferred", started_at=utc_now(), duration_ms=0,
                                exchange=None, notification_id=notif.id,
                                error=f"not sent: channel rate limit ({ch.rate_limit_per_min}/min)")
