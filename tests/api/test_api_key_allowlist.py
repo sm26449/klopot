@@ -22,7 +22,7 @@ INSIDE, OUTSIDE = "203.0.113.7", "198.51.100.9"
 
 
 def _failures(ip: str) -> int:
-    return len(auth._key_failures_recent(auth._budget_key(ip), auth._time.monotonic()))
+    return auth._KEY_BUDGET.count(ip)
 
 
 async def _resolve(raw: str, ip: str | None):

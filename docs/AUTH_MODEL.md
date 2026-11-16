@@ -215,8 +215,13 @@ needs a browser session. Each operation's scope is in `/openapi.json` as
 alertmanager) require their token unless the input's config says
 `auth_required: false` (the boolean; any other value fails closed). An input
 that requires a token without having one is refused when it is saved (REST
-or import). A disabled input answers like a missing one (`404`), before the
-token is looked at. Turning authentication off is for a sender on your own
+or import). The endpoint says nothing about an input before its token is
+accepted: an id that is no live inbound input (missing, another kind,
+disabled) and a wrong or missing token all get the same `401`. Each of those
+counts against the sending address — five a minute, then `429` for every
+request from it, the right token included, so guessing stops there. This
+budget is separate from the API keys': a sender with a stale token does not
+lock out the keys used from the same address. Turning authentication off is for a sender on your own
 network that cannot send a header; the public traefik overlay never opens
 this endpoint (docs/DEPLOY.md).
 

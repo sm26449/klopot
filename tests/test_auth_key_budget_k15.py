@@ -51,37 +51,37 @@ async def test_a_concurrent_burst_hashes_at_most_the_budget(db_session, admin_ke
         return 200
 
     codes = await asyncio.gather(*(one(k) for k in guesses))
-    assert len(hashed) <= auth._KEY_FAIL_MAX, f"{len(hashed)} hashes for one address"
-    assert codes.count(429) >= len(guesses) - auth._KEY_FAIL_MAX
+    assert len(hashed) <= auth._KEY_BUDGET.max_failures, f"{len(hashed)} hashes for one address"
+    assert codes.count(429) >= len(guesses) - auth._KEY_BUDGET.max_failures
 
 
 async def test_a_right_key_is_not_charged(db_session, admin_key):
     from app.db import session as session_module
 
-    for _ in range(auth._KEY_FAIL_MAX + 3):
+    for _ in range(auth._KEY_BUDGET.max_failures + 3):
         auth.invalidate_key_cache()
         async with session_module._session_factory() as s:
             await auth._resolve_key(admin_key, s, "203.0.113.51")
-    assert not auth._key_failure_budget_spent("203.0.113.51")
+    assert not auth._KEY_BUDGET.spent("203.0.113.51")
 
 
 def test_eviction_stays_cheap_past_the_address_cap(monkeypatch):
-    monkeypatch.setattr(auth, "_KEY_FAIL_IPS_MAX", 2000)
+    monkeypatch.setattr(auth._KEY_BUDGET, "max_addresses", 2000)
     for i in range(2000):
-        auth._note_key_failure(f"10.{i // 250}.{i % 250}.1")
+        auth._KEY_BUDGET.note(f"10.{i // 250}.{i % 250}.1")
     started = time.perf_counter()
     for i in range(500):
-        auth._note_key_failure(f"192.0.{i // 250}.{i % 250}")
+        auth._KEY_BUDGET.note(f"192.0.{i // 250}.{i % 250}")
     per_call = (time.perf_counter() - started) / 500
     assert per_call < 0.0002, f"{per_call * 1000:.2f} ms per new address"
-    assert len(auth._KEY_FAILURES) <= 2000
+    assert len(auth._KEY_BUDGET) <= 2000
 
 
 def test_ipv6_addresses_share_their_64():
-    for i in range(auth._KEY_FAIL_MAX):
-        auth._note_key_failure(f"2001:db8:1:2::{i + 1:x}")
-    assert auth._key_failure_budget_spent("2001:db8:1:2:ffff::9")
-    assert not auth._key_failure_budget_spent("2001:db8:1:3::1")
+    for i in range(auth._KEY_BUDGET.max_failures):
+        auth._KEY_BUDGET.note(f"2001:db8:1:2::{i + 1:x}")
+    assert auth._KEY_BUDGET.spent("2001:db8:1:2:ffff::9")
+    assert not auth._KEY_BUDGET.spent("2001:db8:1:3::1")
 
 
 def test_all_trusted_hops_fall_back_to_the_peer():

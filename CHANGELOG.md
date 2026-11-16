@@ -64,8 +64,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 - An inbound input without a token accepted posts from anyone, and the API
   saved one without a word. A token is now required by default and checked
   when the input is saved; `auth_required` must be a boolean (the string
-  "false" used to mean "required"), and a disabled input answers `404` like
-  a missing one instead of revealing it exists.
+  "false" used to mean "required").
+- The inbound endpoint (`POST /v1/inputs/{id}/webhook`) revealed which ids
+  are live inputs (`404` vs `401`), and wrong tokens were never budgeted. Now
+  a missing, other-kind or disabled input and a wrong or missing token all
+  get the same `401` ("Unknown input or wrong token"), and count against the
+  address: five a minute, then `429` with `Retry-After` — a budget separate
+  from the API keys'. The input's editor lists the refused requests.
 - `POST /v1/fire` bounds its `context`: at most `ALERTD_FIRE_CONTEXT_MAX_BYTES`
   (default 16 KiB) as compact JSON and 16 levels deep, `422` beyond. It is
   stored, hashed and rendered for every fire — even of an unknown type — and

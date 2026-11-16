@@ -25,6 +25,7 @@ from ...auth import (
     SESSION_COOKIE,
     Actor,
     SessionContext,
+    client_address,
     invalidate_session_cache,
     require_user_session,
     session_expiry,
@@ -44,7 +45,6 @@ from ...schemas.auth import (
     SessionsRevoked,
     UserRead,
 )
-from ...utils.client_ip import real_client_ip
 from ...utils.time import utc_now
 
 logger = logging.getLogger(__name__)
@@ -63,14 +63,6 @@ def _audited_username(typed: str, account_exists: bool) -> str:
 # Sign-ins allowed to wait for a hashing slot on top of those running
 # (review K07); beyond that the answer is 503, like wrong API keys (P07).
 _LOGIN_VERIFY_QUEUE_MAX = 16
-
-
-def _client_ip(request: Request) -> str | None:
-    # Honor X-Forwarded-For from a trusted proxy so the per-IP login lockout
-    # keys on the real client, not the reverse proxy (audit S-07).
-    peer = request.client.host if request.client else None
-    xff = request.headers.get("x-forwarded-for")
-    return real_client_ip(peer, xff, get_settings().trusted_proxy_cidr_list)
 
 
 def _user_agent(request: Request) -> str | None:
@@ -134,7 +126,7 @@ async def login(
     session: AsyncSession = Depends(get_session),
 ) -> LoginResponse:
     s = get_settings()
-    ip = _client_ip(request)
+    ip = client_address(request)
     username = body.username.strip()
 
     lock = await login_guard.check(
@@ -277,7 +269,7 @@ async def me(
         session=SessionRead.model_validate(sess, from_attributes=True).model_copy(
             update={"current": True}
         ),
-        client_ip=_client_ip(request),
+        client_ip=client_address(request),
     )
 
 

@@ -26,7 +26,7 @@ def _wrong(i: int) -> str:
 
 async def test_an_address_gets_five_wrong_keys_a_minute(db_client, admin_key):
     assert (await db_client.get("/v1/channels", headers=_h(admin_key))).status_code == 200   # now cached
-    for i in range(auth._KEY_FAIL_MAX):
+    for i in range(auth._KEY_BUDGET.max_failures):
         assert (await db_client.get("/v1/channels", headers=_h(_wrong(i)))).status_code == 401
     r = await db_client.get("/v1/channels", headers=_h(_wrong(99)))
     assert r.status_code == 429
@@ -36,7 +36,7 @@ async def test_an_address_gets_five_wrong_keys_a_minute(db_client, admin_key):
 
 
 async def test_a_spent_budget_costs_no_hash(db_client, monkeypatch):
-    for i in range(auth._KEY_FAIL_MAX):
+    for i in range(auth._KEY_BUDGET.max_failures):
         await db_client.get("/v1/channels", headers=_h(_wrong(i)))
     hashed: list[bytes] = []
 
@@ -51,22 +51,22 @@ async def test_a_spent_budget_costs_no_hash(db_client, monkeypatch):
 
 async def test_the_budget_expires_and_is_per_address(monkeypatch):
     clock = [1000.0]
-    monkeypatch.setattr(auth._time, "monotonic", lambda: clock[0])
-    for _ in range(auth._KEY_FAIL_MAX):
-        auth._note_key_failure("203.0.113.7")
-    assert auth._key_failure_budget_spent("203.0.113.7")
-    assert not auth._key_failure_budget_spent("203.0.113.8")
-    assert not auth._key_failure_budget_spent(None)
-    clock[0] += auth._KEY_FAIL_WINDOW_SEC + 1
-    assert not auth._key_failure_budget_spent("203.0.113.7")
-    assert "203.0.113.7" not in auth._KEY_FAILURES
+    monkeypatch.setattr(auth._KEY_BUDGET, "_clock", lambda: clock[0])
+    for _ in range(auth._KEY_BUDGET.max_failures):
+        auth._KEY_BUDGET.note("203.0.113.7")
+    assert auth._KEY_BUDGET.spent("203.0.113.7")
+    assert not auth._KEY_BUDGET.spent("203.0.113.8")
+    assert not auth._KEY_BUDGET.spent(None)
+    clock[0] += auth._KEY_BUDGET.window_sec + 1
+    assert not auth._KEY_BUDGET.spent("203.0.113.7")
+    assert "203.0.113.7" not in auth._KEY_BUDGET
 
 
 async def test_the_failure_table_is_bounded(monkeypatch):
-    monkeypatch.setattr(auth, "_KEY_FAIL_IPS_MAX", 50)
+    monkeypatch.setattr(auth._KEY_BUDGET, "max_addresses", 50)
     for i in range(500):
-        auth._note_key_failure(f"198.51.100.{i}")
-    assert len(auth._KEY_FAILURES) <= 50
+        auth._KEY_BUDGET.note(f"198.51.100.{i}")
+    assert len(auth._KEY_BUDGET) <= 50
 
 
 async def _seed_key(db_session, raw: str) -> None:
@@ -143,7 +143,7 @@ async def test_a_new_key_is_found_without_bcrypt(db_client, admin_key, db_sessio
 
 async def test_a_right_key_gets_in_from_an_address_that_spent_its_budget(db_client, admin_key):
     created = (await db_client.post("/v1/api_keys", headers=_h(admin_key), json={"name": "fast2", "scopes": ["read"]})).json()
-    for i in range(auth._KEY_FAIL_MAX + 2):
+    for i in range(auth._KEY_BUDGET.max_failures + 2):
         await db_client.get("/v1/channels", headers=_h(_wrong(i)))
     assert (await db_client.get("/v1/channels", headers=_h(_wrong(50)))).status_code == 429
     assert (await db_client.get("/v1/channels", headers=_h(created["key"]))).status_code == 200

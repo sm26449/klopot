@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...audit import model_to_dict, record_change
-from ...auth import Actor, require_scope
+from ...auth import Actor, client_address, require_scope
 from ...config import get_settings
 from ...core.manager import get_manager
 from ...db import get_session
@@ -22,6 +22,7 @@ from ...inputs.webhook import INBOUND_KINDS, WebhookInput, validate_inbound_auth
 from ...schemas.common import InputKind, Page
 from ...schemas.input import InputCreate, InputHealth, InputRead, InputUpdate
 from ...secrets_registry import mask_config, merge_secret_update, secret_status
+from ...utils.failure_budget import FailureBudget
 from ._crud import crud_get_or_404, crud_list, enforce_create_cap, flush_or_409
 
 logger = logging.getLogger(__name__)
@@ -263,6 +264,25 @@ async def restart_input(
 
 # ── Webhook receiver (no API key — auth is per-input via X-Input-Token) ──
 
+# Wrong or missing input tokens (and ids that are no input), per address:
+# kept apart from the API-key budget, so a sender with a stale token does not
+# lock out the keys used from the same address.
+_TOKEN_BUDGET = FailureBudget(max_failures=5, window_sec=60.0, max_addresses=10_000)
+
+
+def reset_input_token_failures() -> None:
+    """Forget every wrong-token count (tests)."""
+    _TOKEN_BUDGET.reset()
+
+
+def _presented_token(kind: str, x_input_token: str | None, authorization: str | None) -> str | None:
+    """The token as sent: X-Input-Token, or for Alertmanager / Grafana
+    ``Authorization: Bearer <token>`` (their http_config.authorization)."""
+    if x_input_token is not None or kind != "alertmanager" or not authorization:
+        return x_input_token
+    scheme, _, value = authorization.partition(" ")
+    return value.strip() if scheme.lower() == "bearer" else None
+
 
 @router.post(
     "/{input_id}/webhook",
@@ -283,27 +303,26 @@ async def receive_webhook(
     authorization: str | None = Header(default=None),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    # Anonymous endpoint: nothing about an input — its name, kind or state —
-    # is said before the caller's token is checked (review K10). Anything that
-    # is not a webhook-kind input looks like no input at all.
-    # A disabled input is not there either: it gets the same answer as an id
-    # that does not exist, before its token is looked at.
+    # Anonymous endpoint: nothing about an input — whether the id exists, its
+    # kind or state — is said before the caller's token is accepted (reviews
+    # K10, F11). An id that is no inbound input, a disabled input and a wrong
+    # or missing token all get the same 401, and all count against the
+    # address's budget; the input's editor lists them (recent requests).
+    ip = client_address(request)
+    if _TOKEN_BUDGET.spent(ip):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many refused input requests from this address",
+            headers={"Retry-After": str(_TOKEN_BUDGET.retry_after)},
+        )
     obj = await session.get(Input, input_id)
-    if obj is None or not obj.enabled or obj.kind.value not in INBOUND_KINDS:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Input not found")
-
-    # Auth check (per-input), from the stored config. Alertmanager / Grafana
-    # send the token as "Authorization: Bearer <token>" (http_config.authorization).
-    token = x_input_token
-    if token is None and obj.kind.value == "alertmanager" and authorization:
-        scheme, _, value = authorization.partition(" ")
-        if scheme.lower() == "bearer":
-            token = value.strip()
-    if not webhook_auth_ok(obj.config or {}, token):
-        # Don't leak whether the token was wrong vs missing — return generic 401
+    if (obj is None or not obj.enabled or obj.kind.value not in INBOUND_KINDS
+            or not webhook_auth_ok(obj.config or {}, _presented_token(obj.kind.value, x_input_token, authorization))):
+        _TOKEN_BUDGET.note(ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or missing X-Input-Token",
+            detail="Unknown input or wrong token",
+            headers={"WWW-Authenticate": 'Bearer realm="klopot-input"'},
         )
     # The caller got in: the activity log may keep this request's body.
     request.state.inbound_ok = True

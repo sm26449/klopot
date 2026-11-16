@@ -58,7 +58,7 @@ async def test_over_the_limit_is_429_with_retry_after_and_not_a_wrong_key(db_cli
     assert API_KEY_RATE_LIMITED_TOTAL.labels(key="poller")._value.get() == before + 1
     # A right key: no address's wrong-key budget moved, so another key still works.
     assert (await _get(db_client, admin_key)).status_code == 200
-    assert not auth._key_failure_budget_spent("127.0.0.1")
+    assert not auth._KEY_BUDGET.spent("127.0.0.1")
 
 
 async def test_the_resolve_cache_does_not_refill_the_allowance(db_client, admin_key):

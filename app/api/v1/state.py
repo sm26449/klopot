@@ -24,16 +24,15 @@ from ...auth import (
     Actor,
     _resolve_key,
     _resolve_session,
+    client_address,
     require_scope,
     scope_grants,
 )
-from ...config import get_settings
 from ...core.manager import get_manager
 from ...core.state_cache import VarSnapshot
 from ...core.ws_registry import get_ws_registry
 from ...db import get_session
 from ...schemas.variable import StateResponse, VarState
-from ...utils.client_ip import real_client_ip
 from ...utils.time import utc_now
 
 logger = logging.getLogger(__name__)
@@ -163,13 +162,7 @@ async def _ws_authenticate(websocket: WebSocket) -> Actor | None:
     async for session in get_session():
         try:
             if api_key:
-                # The real client behind a trusted proxy, as for HTTP: the TCP
-                # peer would put every WebSocket on the proxy's budget (K15).
-                client_host = real_client_ip(
-                    websocket.client.host if websocket.client else None,
-                    websocket.headers.get("x-forwarded-for"), get_settings().trusted_proxy_cidr_list,
-                )
-                actor = await _resolve_key(api_key, session, client_host)
+                actor = await _resolve_key(api_key, session, client_address(websocket))
             else:
                 actor, _ctx = await _resolve_session(cookie or "", session)
         except Exception as e:

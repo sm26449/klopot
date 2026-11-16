@@ -546,8 +546,12 @@ pe `POST /v1/inputs/{id}/webhook`. Tokenul vine în `X-Input-Token` sau
 `Authorization: Bearer` (același endpoint servește și inputurile
 `webhook` și `sms_inbox`). Orice input de intrare cere tokenul, dacă în
 configurația lui nu scrie `auth_required: false`; salvarea unuia care cere
-token fără să aibă unul e refuzată (`422`), iar un input dezactivat răspunde
-`404`, ca unul inexistent — în Alertmanager:
+token fără să aibă unul e refuzată (`422`). Un id care nu e un input de
+intrare activ (inexistent, de alt tip, dezactivat) și un token greșit sau lipsă
+primesc același `401` („Unknown input or wrong token") și se numără pentru
+adresa care trimite: după cinci într-un minut, orice cerere de la ea primește
+`429` (`Retry-After: 60`) — editorul inputului arată cererile recente, cu
+status și adresă. În Alertmanager:
 
 ```yaml
 receivers:

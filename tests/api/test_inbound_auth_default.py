@@ -95,7 +95,7 @@ async def test_a_disabled_input_looks_missing_even_with_the_right_token(db_clien
         "name": "paused", "kind": "webhook", "enabled": False, "config": {"auth_token": TOKEN}})).json()
     disabled = await db_client.post(f"/v1/inputs/{created['id']}/webhook", json={"v": 1}, headers={"X-Input-Token": TOKEN})
     missing = await db_client.post("/v1/inputs/987654/webhook", json={"v": 1}, headers={"X-Input-Token": TOKEN})
-    assert disabled.status_code == 404
+    assert disabled.status_code == 401
     assert disabled.json() == missing.json()
 
 

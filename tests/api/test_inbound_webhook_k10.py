@@ -5,8 +5,9 @@ is kind=…`` and 503 ``Adapter for input <name> not running`` before checking
 the token, so input ids, names and kinds could be enumerated. The activity log
 dropped the body only on 401/403/404, so those answers — and FastAPI's 422 for
 a non-numeric id — kept up to 64 KiB of an anonymous body for the retention
-period. Now: a generic 404 for anything that is not a webhook-kind input, the
-token next, and a body is stored only for a caller the endpoint let in.
+period. Now: one 401 for anything that is not a live inbound input or brings a
+wrong token (review F11), and a body is stored only for a caller the endpoint
+let in.
 """
 from __future__ import annotations
 
@@ -42,6 +43,8 @@ async def test_anonymous_callers_learn_nothing_and_leave_no_body(db_client, admi
                           config={"url": "https://example.com", "interval_sec": 60})
     paused = await _input(db_client, admin_key, name="paused_hook", kind="webhook", enabled=False,
                           config={"auth_required": True, "auth_token": "right-token-123456"})
+    open_hook = await _input(db_client, admin_key, name="live_hook", kind="webhook",
+                             config={"auth_required": True, "auth_token": "right-token-123456"})
 
     non_numeric = await db_client.post("/v1/inputs/abc/webhook", json=PAYLOAD)
     other_kind = await db_client.post(f"/v1/inputs/{poller['id']}/webhook", json=PAYLOAD)
@@ -49,18 +52,20 @@ async def test_anonymous_callers_learn_nothing_and_leave_no_body(db_client, admi
     not_running = await db_client.post(f"/v1/inputs/{paused['id']}/webhook", json=PAYLOAD)
 
     assert non_numeric.status_code == 422
-    assert other_kind.status_code == 404
-    assert other_kind.json() == missing.json(), "a non-webhook input must look like a missing one"
+    # Nothing tells an id that exists from one that does not (review F11):
+    # another kind, no input, a disabled one and a wrong token are one answer.
+    wrong_token = await db_client.post(f"/v1/inputs/{open_hook['id']}/webhook", json=PAYLOAD,
+                                       headers={"X-Input-Token": "not-the-token"})
+    answers = [other_kind, missing, not_running, wrong_token]
+    assert {r.status_code for r in answers} == {401}
+    assert all(r.json() == missing.json() for r in answers)
+    assert all(r.headers.get("www-authenticate") == missing.headers["www-authenticate"] for r in answers)
     assert "secret_poller" not in other_kind.text
-    # A disabled input is not there: the same answer as an id that does not
-    # exist, whatever the token (public-exposure review).
-    assert not_running.status_code == 404
-    assert not_running.json() == missing.json()
     assert "paused_hook" not in not_running.text
 
     stored = await _bodies(db_session)
     anonymous = {k: v for k, v in stored.items() if k[0].endswith("/webhook")}
-    assert len(anonymous) == 4, anonymous.keys()
+    assert len(anonymous) == 5, anonymous.keys()
     assert all(body is None for body in anonymous.values()), [k for k, v in anonymous.items() if v]
 
 

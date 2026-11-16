@@ -298,15 +298,18 @@ def make_channel():
 @pytest.fixture(autouse=True)
 def _fresh_key_failure_budget():
     """Wrong-key counts are per client address and every test client has the
-    same one: without this a test's 401s would turn a later test's into 429s.
-    Key rate allowances are by key id, and ids repeat in every test database."""
+    same one: without this a test's 401s would turn a later test's into 429s
+    (API keys and input tokens alike). Key rate allowances are by key id, and
+    ids repeat in every test database."""
+    from app.api.v1.inputs import reset_input_token_failures
     from app.auth import reset_key_failures, reset_key_rates
 
-    reset_key_failures()
-    reset_key_rates()
+    resets = (reset_key_failures, reset_key_rates, reset_input_token_failures)
+    for reset in resets:
+        reset()
     yield
-    reset_key_failures()
-    reset_key_rates()
+    for reset in resets:
+        reset()
 
 
 @pytest.fixture(autouse=True)

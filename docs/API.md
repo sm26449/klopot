@@ -540,8 +540,11 @@ at `POST /v1/inputs/{id}/webhook`. The token goes in `X-Input-Token` or
 `Authorization: Bearer` (the same endpoint serves `webhook` and
 `sms_inbox` inputs). Every inbound input requires its token unless its config
 says `auth_required: false`; saving one that requires a token without having
-one is refused (`422`), and a disabled input answers `404` like a missing one
-— Alertmanager:
+one is refused (`422`). An id that is no live inbound input (missing, another
+kind, disabled) and a wrong or missing token all get the same `401` ("Unknown
+input or wrong token"), and count against the sending address: after five in
+a minute every request from it gets `429` (`Retry-After: 60`) — the input's
+editor lists its recent requests with status and address. Alertmanager:
 
 ```yaml
 receivers:

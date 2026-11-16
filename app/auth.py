@@ -21,14 +21,11 @@ Scope hierarchy (per docs/AUTH_MODEL.md):
 from __future__ import annotations
 
 import hmac
-import ipaddress
 import math
 import re
-from collections import OrderedDict
 from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import cast
 from urllib.parse import urlsplit
 
 import bcrypt
@@ -36,11 +33,13 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security.api_key import APIKeyHeader
 from sqlalchemy import select, true, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import HTTPConnection
 
 from .config import get_settings
 from .db import get_session
 from .db.models import AdminSession, AdminUser, ApiKey
 from .utils.client_ip import Network, in_networks, parse_networks, real_client_ip
+from .utils.failure_budget import FailureBudget
 from .utils.rate_limit import PerMinuteLimiter
 from .utils.time import utc_now
 
@@ -206,75 +205,17 @@ def _key_cache_set(
 # an unauthenticated client fill the hashing pool and stall every caller.
 # Three bounds: a client IP gets a handful of wrong keys per minute, the
 # hashing queue has a ceiling, and no DB connection is held while hashing.
-_KEY_FAIL_WINDOW_SEC = 60.0
-_KEY_FAIL_MAX = 5
-_KEY_FAIL_IPS_MAX = 10_000
-# Insertion-ordered by the last failure: the front is the address that failed
-# longest ago, so making room costs O(1) (review K15 — a full rebuild of 10,000
-# entries per new address blocked the loop ~3 ms a request).
-_KEY_FAILURES: OrderedDict[str, list[float]] = OrderedDict()
+# Per address (IPv6 by /64), oldest address evicted first — utils/failure_budget.py.
+_KEY_BUDGET = FailureBudget(max_failures=5, window_sec=60.0, max_addresses=10_000)
 # Verifications allowed to wait for a hashing slot, on top of those running.
 _KEY_VERIFY_QUEUE_MAX = 16
 _key_verifies_pending = 0
 
 
-def _budget_key(ip: str) -> str:
-    """The unit a budget is kept for: the address, or its /64 for IPv6 (a
-    client gets a whole /64; one budget per /128 would be one per request)."""
-    try:
-        addr = ipaddress.ip_address(ip)
-    except ValueError:
-        return ip
-    if isinstance(addr, ipaddress.IPv6Address):
-        if addr.ipv4_mapped is not None:
-            return str(addr.ipv4_mapped)
-        return str(ipaddress.ip_network(f"{addr}/64", strict=False))
-    return str(addr)
-
-
-def _key_failures_recent(key: str, now: float) -> list[float]:
-    recent = [t for t in _KEY_FAILURES.get(key, ()) if now - t < _KEY_FAIL_WINDOW_SEC]
-    if recent:
-        _KEY_FAILURES[key] = recent
-    else:
-        _KEY_FAILURES.pop(key, None)
-    return recent
-
-
-def _key_failure_budget_spent(ip: str | None) -> bool:
-    return bool(ip) and len(_key_failures_recent(_budget_key(cast(str, ip)), _time.monotonic())) >= _KEY_FAIL_MAX
-
-
-def _note_key_failure(ip: str | None) -> None:
-    if not ip:
-        return
-    key = _budget_key(ip)
-    now = _time.monotonic()
-    recent = _key_failures_recent(key, now)
-    if key not in _KEY_FAILURES:
-        while len(_KEY_FAILURES) >= _KEY_FAIL_IPS_MAX:
-            _KEY_FAILURES.popitem(last=False)    # the address that failed longest ago
-    _KEY_FAILURES[key] = [*recent, now]
-    _KEY_FAILURES.move_to_end(key)
-
-
-def _refund_key_failure(ip: str | None) -> None:
-    """Take back the failure counted up front for a verification that did
-    not turn out to be a wrong key (right key, expired key, busy)."""
-    if not ip:
-        return
-    key = _budget_key(ip)
-    stamps = _KEY_FAILURES.get(key)
-    if stamps:
-        stamps.pop()
-        if not stamps:
-            _KEY_FAILURES.pop(key, None)
-
-
 def reset_key_failures() -> None:
     """Forget every wrong-key count (tests)."""
     global _key_verifies_pending
-    _KEY_FAILURES.clear()
+    _KEY_BUDGET.reset()
     _key_verifies_pending = 0
 
 
@@ -373,7 +314,7 @@ async def _authenticate_key(
     cached = _key_cache_get(raw)
     if cached is not None:
         if not _source_allowed(cached, client_ip):
-            _note_key_failure(client_ip)
+            _KEY_BUDGET.note(client_ip)
             raise _source_refused()
         return cached
 
@@ -394,20 +335,20 @@ async def _authenticate_key(
             try:
                 return await _accept_key(session, row, raw, client_ip, gen0)
             except _WrongSource:
-                _note_key_failure(client_ip)
+                _KEY_BUDGET.note(client_ip)
                 raise _source_refused() from None
 
     # bcrypt path: keys issued before the digest column existed (their digest
     # is written below, on first use) and keys chosen by the operator.
-    if _key_failure_budget_spent(client_ip):
+    if _KEY_BUDGET.spent(client_ip):
         raise HTTPException(
             status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many invalid API keys from this address",
-            headers={"Retry-After": str(int(_KEY_FAIL_WINDOW_SEC))},
+            headers={"Retry-After": str(_KEY_BUDGET.retry_after)},
         )
     # Count this attempt as a failure NOW, before any await, and refund it if
     # it turns out not to be one (review K15): checked here but recorded after
     # hashing, a burst of concurrent wrong keys all passed the check above.
-    _note_key_failure(client_ip)
+    _KEY_BUDGET.note(client_ip)
     wrong = False
     try:
         rows = (
@@ -445,7 +386,7 @@ async def _authenticate_key(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
     finally:
         if not wrong:
-            _refund_key_failure(client_ip)
+            _KEY_BUDGET.refund(client_ip)
 
 
 async def _accept_key(
@@ -720,6 +661,17 @@ def _enforce_browser_write_rules(request: Request, ctx: SessionContext) -> None:
         )
 
 
+def client_address(conn: HTTPConnection) -> str | None:
+    """The caller's address, for a request or a WebSocket: behind a trusted
+    proxy the TCP peer is the proxy, and one budget (or allowlist, or log
+    line) for everybody behind it would let one client lock the others out
+    (audit S-07, review K15)."""
+    return real_client_ip(
+        conn.client.host if conn.client else None,
+        conn.headers.get("x-forwarded-for"), get_settings().trusted_proxy_cidr_list,
+    )
+
+
 async def get_current_actor(
     request: Request,
     api_key: str | None = Depends(_HEADER),
@@ -731,13 +683,7 @@ async def get_current_actor(
     Use this directly when scope check is per-handler; use
     ``require_scope`` factory when scope is endpoint-uniform.
     """
-    # The caller's address as the login guard sees it: behind a trusted proxy
-    # the TCP peer is the proxy, and one budget for everybody behind it would
-    # let one client lock the others out.
-    client_ip = real_client_ip(
-        request.client.host if request.client else None,
-        request.headers.get("x-forwarded-for"), get_settings().trusted_proxy_cidr_list,
-    )
+    client_ip = client_address(request)
     if api_key:
         actor = await _resolve_key(api_key, session, client_ip)
         request.state.actor = actor
