@@ -81,6 +81,13 @@ is decided by **activity rules** (next section); without a matching rule:
 | `/v1/auth/*` | `log_retention_days` | **never** (passwords) | **never** |
 | `/v1/config/*`, `/v1/packs/*` | `log_retention_days` | **never** (whole configurations, literal secrets included) | on error only |
 
+A **refused anonymous request** — any `4xx` for a caller who was not let in:
+a wrong or missing API key, a wrong input token, a locked login, a path that
+does not exist — is kept `ALERTD_ACTIVITY_REFUSED_DAYS` (default **1**) days
+instead, without bodies: guesses are cheap to send, and months of their rows
+would bury the requests you look for. A rule with its own `keep_days` still
+decides (e.g. keep `401`s on `/v1/fire` for 30 days while you investigate).
+
 A fresh install has two preset rules — health probes (`/v1/health*`) and the
 Prometheus scrape (`/v1/metrics*`) are kept **one day** without bodies — so
 they stay visible without piling up. Edit or delete them like any rule.

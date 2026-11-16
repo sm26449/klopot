@@ -80,6 +80,7 @@ services:
       ALERTD_SECRET_REF_ALLOW: ${ALERTD_SECRET_REF_ALLOW:-}
       # Activity log: false keeps the rows but no request/response bodies.
       ALERTD_ACTIVITY_LOG_BODIES: ${ALERTD_ACTIVITY_LOG_BODIES:-true}
+      ALERTD_ACTIVITY_REFUSED_DAYS: ${ALERTD_ACTIVITY_REFUSED_DAYS:-1}
       # Web Push: extra push-service hosts besides Apple / Google / Mozilla / Microsoft.
       ALERTD_PUSH_ALLOWED_HOSTS: ${ALERTD_PUSH_ALLOWED_HOSTS:-}
       # docs/metrics: blank = auto (off / read-key-required under cookie_secure).

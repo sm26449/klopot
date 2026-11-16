@@ -13,7 +13,7 @@ import time
 from datetime import timedelta
 from typing import Any
 
-from .config import get_settings
+from .config import Settings, get_settings
 from .core.activity import (
     ERROR_RESPONSE_LIMIT,
     FIRE_BODY_LIMIT,
@@ -94,6 +94,19 @@ def route_template(path: str, params: dict[str, Any] | None, *, matched: bool) -
     return "/".join(segments)
 
 
+def _keep_days(rule: Rule | None, status: int, let_in: bool, settings: Settings) -> int:
+    """How long a request's row is kept: the matching rule's ``keep_days``;
+    else, for a refused caller who was not let in (any 4xx — a wrong key, a
+    guessed path, a locked login), ``activity_refused_days`` (review F5:
+    anonymous guesses are cheap, months of rows are not); else
+    ``log_retention_days``."""
+    if rule is not None and rule.keep_days:
+        return rule.keep_days
+    if not let_in and 400 <= status < 500:
+        return min(settings.activity_refused_days, settings.log_retention_days)
+    return settings.log_retention_days
+
+
 class ActivityLogMiddleware:
     def __init__(self, app: Any) -> None:
         self.app = app
@@ -156,8 +169,8 @@ class ActivityLogMiddleware:
         if rule is not None:
             cache.count_hit(rule, ip)
         route = route_template(path, scope.get("path_params"), matched=scope.get("route") is not None)
-        keep_days = rule.keep_days if rule is not None and rule.keep_days else settings.log_retention_days
         let_in = (scope.get("state") or {}).get("inbound_ok") if _is_ingress(path) else actor is not None
+        keep_days = _keep_days(rule, status, bool(let_in), settings)
         req_limit = _want_request_body(rule.request_body if rule else "auto", method, path, status,
                                        authenticated=bool(let_in))
         resp_limit = _want_response_body(rule.response_body if rule else "auto", path, status)

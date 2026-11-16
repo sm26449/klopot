@@ -247,6 +247,10 @@ class Settings(BaseSettings):
     # Rows waiting for the background writer; beyond this a row is dropped
     # (and counted in klopot_activity_dropped_total) rather than block.
     activity_queue_max: int = Field(default=5000, ge=100, le=1_000_000)
+    # Days a refused anonymous request (a 4xx from a caller not let in) is
+    # kept, unless an activity rule says otherwise: a flood of guesses must
+    # not become months of rows (review F5). Capped by log_retention_days.
+    activity_refused_days: int = Field(default=1, ge=1, le=3650)
 
     # ── Web Push (docs/WEB_PUSH.md) ────────────────────────────
     # A device's endpoint is a URL its browser chose; only these push

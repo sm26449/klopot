@@ -36,6 +36,7 @@ _EXPOSED: tuple[str, ...] = (
     "default_eval_interval_sec",
     "idempotency_window_sec",
     "log_retention_days",
+    "activity_refused_days",
     "audit_retention_days",
     "circuit_breaker_threshold",
     "circuit_breaker_open_sec",

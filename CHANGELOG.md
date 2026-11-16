@@ -86,6 +86,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+- The Activity log kept every refused anonymous request (wrong keys or
+  tokens, guessed paths, locked logins) for 90 days, so a cheap flood became
+  months of rows. Those are now kept `ALERTD_ACTIVITY_REFUSED_DAYS` (1)
+  unless an activity rule says otherwise. A rule's preview no longer reads up
+  to 5000 rows with their bodies to show five examples.
 - Live streams were unbounded: one caller could open any number, each with
   its queue and an encode per update. Now at most 10 per session or API key
   and 500 in all; one past either is closed (`1013`) before it is accepted,

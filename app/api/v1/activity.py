@@ -301,9 +301,18 @@ async def preview_rule(
 ) -> RulePreview:
     rule = Rule(0, body.name, body.match_method, body.match_path, body.match_status, body.match_actor,
                 body.match_ip, body.action, body.keep_days, body.request_body, body.response_body)
-    rows = (await session.execute(select(ApiRequest).where(ApiRequest.ts >= utc_now() - timedelta(hours=hours))
-                                  .order_by(ApiRequest.ts.desc()).limit(5000))).scalars().all()
-    hits = [r for r in rows if rule.matches(method=r.method, path=r.path.split("?", 1)[0], status=r.status,
-                                           actor=r.actor_name, ip=r.client_ip)]
+    # Scan only the columns a rule matches on — the bodies (up to 64 KiB
+    # each) are read for the five examples alone (review F15).
+    rows = (await session.execute(
+        select(ApiRequest.id, ApiRequest.method, ApiRequest.path, ApiRequest.status,
+               ApiRequest.actor_name, ApiRequest.client_ip)
+        .where(ApiRequest.ts >= utc_now() - timedelta(hours=hours))
+        .order_by(ApiRequest.ts.desc()).limit(5000)
+    )).all()
+    hits = [r.id for r in rows if rule.matches(method=r.method, path=r.path.split("?", 1)[0], status=r.status,
+                                               actor=r.actor_name, ip=r.client_ip)]
+    examples = (await session.execute(
+        select(ApiRequest).where(ApiRequest.id.in_(hits[:5])).order_by(ApiRequest.ts.desc())
+    )).scalars().all() if hits else []
     return RulePreview(window_hours=hours, checked=len(rows), matched=len(hits),
-                       examples=[_request_read(r) for r in hits[:5]])
+                       examples=[_request_read(r) for r in examples])
