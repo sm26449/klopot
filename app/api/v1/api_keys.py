@@ -112,6 +112,7 @@ async def create_key(
         enabled=body.enabled,
         expires_at=to_naive_utc(body.expires_at),
         allowed_cidrs=body.allowed_cidrs or None,
+        rate_limit_per_min=body.rate_limit_per_min,
     )
     session.add(obj)
     await flush_or_409(session, "API key create")
@@ -163,9 +164,10 @@ async def update_key(
         before=before, after=model_to_dict(obj),
     )
     await session.commit()
-    # Scope / enabled / expiry / allowlist changes must take effect on the
-    # next request, not after the 30s resolve cache expires; the key's live
-    # streams are closed too and must reconnect from an allowed address.
+    # Scope / enabled / expiry / allowlist / rate-limit changes must take
+    # effect on the next request, not after the 30s resolve cache expires; the
+    # key's live streams are closed too and must reconnect from an allowed
+    # address. The key's rate allowance itself carries over (auth.py).
     invalidate_key_cache(obj.id)
     return ApiKeyRead.model_validate(obj)
 
@@ -222,6 +224,7 @@ async def rotate_key(
         expires_at=old.expires_at,
         # The successor keeps the source allowlist: rotating must not lift it.
         allowed_cidrs=list(old.allowed_cidrs) if old.allowed_cidrs else None,
+        rate_limit_per_min=old.rate_limit_per_min,
         rotated_from_id=old.id,
     )
     if grace_sec > 0:

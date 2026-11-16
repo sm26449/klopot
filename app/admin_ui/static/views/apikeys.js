@@ -41,15 +41,13 @@ export function ApiKeysView() {
         actions=${[{ label: t("apikeys.newKey"), primary: true, onClick: () => setEditing({ __new: true }) }, { label: t("apikeys.blank.reference"), href: "#/api" }]} />`
       : html`<div class="card scroll-x" style="padding:0" tabindex="0" role="region" aria-label=${t("apikeys.tableAria")}>
         <table class="tbl">
-          <thead><tr><th>${t("apikeys.colName")}</th><th>${t("apikeys.colPrefix")}</th><th>${t("apikeys.colScopes")}</th><th>${t("apikeys.colState")}</th><th>${t("apikeys.colAddresses")}</th><th>${t("apikeys.colExpires")}</th><th>${t("apikeys.colLastUsed")}</th></tr></thead>
+          <thead><tr><th>${t("apikeys.colName")}</th><th>${t("apikeys.colPrefix")}</th><th>${t("apikeys.colScopes")}</th><th>${t("apikeys.colState")}</th><th>${t("apikeys.colRestrictions")}</th><th>${t("apikeys.colExpires")}</th><th>${t("apikeys.colLastUsed")}</th></tr></thead>
           <tbody>${items.map((k) => html`<tr key=${k.id} style="cursor:pointer" ...${clickable(() => setEditing(k), t("apikeys.editAria", { name: k.name }))}>
             <td><b>${k.name}</b>${k.rotated_from_id ? html` <span class="muted small">${t("apikeys.rotatedFrom", { id: k.rotated_from_id })}</span>` : null}</td>
             <td class="mono small">${k.key_prefix}…</td>
             <td>${k.scopes.map((s) => html`<span key=${s} class="chip tag">${s}</span>`)}</td>
             <td>${k.enabled ? html`<span class="badge ok plain">${t("apikeys.badgeEnabled")}</span>` : html`<span class="badge plain">${t("apikeys.badgeRevoked")}</span>`}</td>
-            <td>${(k.allowed_cidrs || []).length
-              ? html`<span class="chip tag" title=${k.allowed_cidrs.join("\n")}>${t("apikeys.addressesCount", { count: k.allowed_cidrs.length })}</span>`
-              : html`<span class="muted small">${t("apikeys.addressesAny")}</span>`}</td>
+            <td>${restrictions(k)}</td>
             <td title=${fmtDateTime(k.expires_at)}>${k.expires_at ? fmtRelative(k.expires_at) : t("apikeys.never")}</td>
             <td title=${fmtDateTime(k.last_used_at)}>${k.last_used_at ? html`${fmtRelative(k.last_used_at)}${k.last_used_ip ? html` <span class="muted small mono">${k.last_used_ip}</span>` : null}` : t("apikeys.never")}</td>
           </tr>`)}</tbody></table></div>`}
@@ -89,6 +87,16 @@ function toLocalDatetimeInput(iso) {
   return local.toISOString().slice(0, 16);
 }
 
+/** The table cell: what limits the key — its addresses and its rate — or "none". */
+function restrictions(k) {
+  const cidrs = k.allowed_cidrs || [];
+  const chips = [
+    cidrs.length ? html`<span key="a" class="chip tag" title=${cidrs.join("\n")}>${t("apikeys.addressesCount", { count: cidrs.length })}</span>` : null,
+    k.rate_limit_per_min != null ? html`<span key="r" class="chip tag">${t("apikeys.rateChip", { count: k.rate_limit_per_min })}</span>` : null,
+  ].filter(Boolean);
+  return chips.length ? chips : html`<span class="muted small">${t("apikeys.restrictionsNone")}</span>`;
+}
+
 function KeyEditor({ apikey, onClose, onSaved, onPlaintext }) {
   const isNew = !!apikey.__new;
   const [name, setName] = useState(isNew ? "" : apikey.name);
@@ -98,6 +106,8 @@ function KeyEditor({ apikey, onClose, onSaved, onPlaintext }) {
   const [grace, setGrace] = useState("0");
   // The source allowlist as typed: one address or network per line.
   const [cidrs, setCidrs] = useState(isNew ? "" : (apikey.allowed_cidrs || []).join("\n"));
+  // Requests a minute as typed; empty = no limit.
+  const [rate, setRate] = useState(isNew || apikey.rate_limit_per_min == null ? "" : String(apikey.rate_limit_per_min));
   const [myIp, setMyIp] = useState(null);
   useEffect(() => { lookup(api.me().then((m) => setMyIp(m.client_ip || null))); }, []);
   const [busy, setBusy] = useState(false);
@@ -109,6 +119,7 @@ function KeyEditor({ apikey, onClose, onSaved, onPlaintext }) {
   const cidrList = cidrs.split(/[\s,]+/).map((x) => x.trim()).filter(Boolean);
   const addAddress = (ip) => { if (ip && !cidrList.includes(ip)) setCidrs((cur) => (cur.trim() ? cur.trimEnd() + "\n" : "") + ip); };
   const expiresIso = expires ? new Date(expires).toISOString() : null;
+  const ratePerMin = rate.trim() ? Number(rate) : null;
 
   async function save() {
     fe.clear();
@@ -117,11 +128,11 @@ function KeyEditor({ apikey, onClose, onSaved, onPlaintext }) {
     setBusy(true);
     try {
       if (isNew) {
-        const created = await api.post("/v1/api_keys", { name, scopes, enabled, expires_at: expiresIso, allowed_cidrs: cidrList });
+        const created = await api.post("/v1/api_keys", { name, scopes, enabled, expires_at: expiresIso, allowed_cidrs: cidrList, rate_limit_per_min: ratePerMin });
         draft.clear();
         onPlaintext({ name: created.name, key: created.key });
       } else {
-        await api.patch(`/v1/api_keys/${apikey.id}`, { scopes, enabled, expires_at: expiresIso, allowed_cidrs: cidrList });
+        await api.patch(`/v1/api_keys/${apikey.id}`, { scopes, enabled, expires_at: expiresIso, allowed_cidrs: cidrList, rate_limit_per_min: ratePerMin });
         toast.ok(t("apikeys.keyUpdated")); draft.clear(); onSaved();
       }
     } catch (e) { if (!fe.show(e)) toast.error(e); } finally { setBusy(false); }
@@ -139,14 +150,14 @@ function KeyEditor({ apikey, onClose, onSaved, onPlaintext }) {
     catch (e) { toast.error(e); setConfirmDel(false); } finally { setBusy(false); }
   }
 
-  const dirty = useDirty({ name, scopes, enabled, expires, grace, cidrs });
-  const draft = useDraft("apikeys", isNew ? null : apikey.id, { name, scopes, enabled, expires, grace, cidrs }, dirty);
-  const restoreDraft = () => { const d = draft.recovered; setName(d.name); setScopes(d.scopes); setEnabled(d.enabled); setExpires(d.expires); setGrace(d.grace); setCidrs(d.cidrs ?? ""); draft.restore(); };
+  const dirty = useDirty({ name, scopes, enabled, expires, grace, cidrs, rate });
+  const draft = useDraft("apikeys", isNew ? null : apikey.id, { name, scopes, enabled, expires, grace, cidrs, rate }, dirty);
+  const restoreDraft = () => { const d = draft.recovered; setName(d.name); setScopes(d.scopes); setEnabled(d.enabled); setExpires(d.expires); setGrace(d.grace); setCidrs(d.cidrs ?? ""); setRate(d.rate ?? ""); draft.restore(); };
   const closeDraft = () => { draft.clear(); onClose(); };
   return html`<${Drawer} open=${true} width=${560} title=${isNew ? t("apikeys.newKeyTitle") : apikey.name} onClose=${closeDraft} dirty=${dirty}>
     ${draft.recovered ? html`<${DraftBanner} onRestore=${restoreDraft} onDiscard=${draft.dismiss} />` : null}
     <${FieldErrorSummary} errors=${fe.errors}
-      idFor=${(f) => ({ name: "k-name", expires_at: "k-expires", allowed_cidrs: "k-cidrs" }[f.split(".").pop()] || "k-name")} />
+      idFor=${(f) => ({ name: "k-name", expires_at: "k-expires", allowed_cidrs: "k-cidrs", rate_limit_per_min: "k-rate" }[f.split(".").pop()] || "k-name")} />
     <div class="editor">
       ${isNew ? html`<div class="field"><label for="k-name">${t("apikeys.fieldName")} <span class="req">*</span></label>
         <input id="k-name" value=${name} onInput=${(e) => setName(e.target.value)}
@@ -172,6 +183,16 @@ function KeyEditor({ apikey, onClose, onSaved, onPlaintext }) {
           ${myIp ? html`<button type="button" class="btn sm" onClick=${() => addAddress(myIp)} disabled=${cidrList.includes(myIp)}>${t("apikeys.addMine", { ip: myIp })}</button>` : null}
           ${!isNew && apikey.last_used_ip && apikey.last_used_ip !== myIp ? html`<button type="button" class="btn sm" onClick=${() => addAddress(apikey.last_used_ip)} disabled=${cidrList.includes(apikey.last_used_ip)}>${t("apikeys.addLastUsed", { ip: apikey.last_used_ip })}</button>` : null}
         </div>
+      </div>
+
+      <div class=${"field" + (fe.msgFor("rate_limit_per_min") ? " has-error" : "")}>
+        <label for="k-rate">${t("apikeys.fieldRate")}</label>
+        <input id="k-rate" type="number" min="1" max="60000" step="1" inputmode="numeric" style="max-width:12rem"
+          value=${rate} onInput=${(e) => setRate(e.target.value)} placeholder=${t("apikeys.ratePlaceholder")}
+          aria-invalid=${fe.msgFor("rate_limit_per_min") ? "true" : undefined}
+          aria-describedby=${"k-rate-help" + (fe.msgFor("rate_limit_per_min") ? " " + fieldErrorId("rate_limit_per_min") : "")} />
+        <div id="k-rate-help" class="hint">${t("apikeys.rateHelp")}</div>
+        ${fe.msgFor("rate_limit_per_min") ? html`<div id=${fieldErrorId("rate_limit_per_min")} class="error small" role="alert">${fe.msgFor("rate_limit_per_min")}</div>` : null}
       </div>
 
       <div class="row2">

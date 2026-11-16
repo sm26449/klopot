@@ -708,15 +708,21 @@ Toate apelurile `/v1/api_keys` cer `admin`.
 | Apel | Ce face |
 |------|---------|
 | `GET /v1/api_keys` | Listă (filtru `enabled`); nu arată niciodată secretul, doar prefixul |
-| `POST /v1/api_keys` | `{"name", "scopes", "expires_at"?, "enabled"?, "allowed_cidrs"?}` → 201 cu `key` în clar, afișată **o singură dată** |
-| `GET` / `PATCH` / `DELETE /v1/api_keys/{id}` | Citire, modificare (scopes, expirare, enabled, adrese permise), ștergere |
-| `POST /v1/api_keys/{id}/rotate?grace_sec=N` | Cheie nouă în clar, cu aceleași scopes, expirare și adrese permise; cea veche e revocată imediat sau după `N` secunde (0–600, implicit 0) |
+| `POST /v1/api_keys` | `{"name", "scopes", "expires_at"?, "enabled"?, "allowed_cidrs"?, "rate_limit_per_min"?}` → 201 cu `key` în clar, afișată **o singură dată** |
+| `GET` / `PATCH` / `DELETE /v1/api_keys/{id}` | Citire, modificare (scopes, expirare, enabled, adrese permise, limită de rată — `null` o scoate), ștergere |
+| `POST /v1/api_keys/{id}/rotate?grace_sec=N` | Cheie nouă în clar, cu aceleași scopes, expirare, adrese permise și limită de rată; cea veche e revocată imediat sau după `N` secunde (0–600, implicit 0) |
 
 `allowed_cidrs`: IP-uri sau CIDR-uri (IPv4/IPv6, cel mult 64) de la care se
 poate folosi cheia; gol = orice adresă. De oriunde altundeva cheia primește
 `403` și se numără drept cheie greșită pentru adresa aceea
 ([AUTH_MODEL](AUTH_MODEL.md#source-allowlist)). `GET /v1/auth/me` întoarce
 `client_ip`, adresa la care te vede Klopot.
+
+`rate_limit_per_min`: câte cereri pe minut poate face cheia (1–60000); `null`
+= fără limită. O cheie care n-a mai fost folosită de un timp poate trimite
+atâtea deodată, apoi câte una la 60/N secunde; peste limită cererea primește
+`429` cu `Retry-After`, secundele până încape următoarea
+([AUTH_MODEL](AUTH_MODEL.md#rate-limit)). Așteaptă atât înainte să reîncerci.
 
 ## Endpoint-uri pentru sesiunea de browser
 

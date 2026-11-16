@@ -46,6 +46,7 @@ CREATE TABLE api_keys (
     last_used_at TIMESTAMP NULL,
     last_used_ip VARCHAR(45),
     allowed_cidrs JSON NULL,                  -- source allowlist; NULL / [] = any address (0042)
+    rate_limit_per_min INT NULL,              -- requests a minute; NULL = no limit (0043)
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     rotated_from_id BIGINT NULL                -- chain rotated keys for audit
 );
@@ -148,6 +149,38 @@ because an empty list already means "any".
 Give every key used from outside your network both a `fire`-only scope and
 the narrowest list you can.
 
+### Rate limit
+
+A key may be limited to a number of requests a minute: `rate_limit_per_min`
+(1–60000; empty = no limit, which every key has unless you set one). Set it
+in the admin UI (API keys → the key → Requests per minute) or on `POST` /
+`PATCH /v1/api_keys` (`null` removes it).
+
+- **How it counts** (GCRA, `app/utils/rate_limit.py`): a key that has been
+  quiet may send N requests at once, then one every 60/N seconds — the
+  steady rate is N a minute, without a cliff at a minute boundary.
+- **Over it: `429`** ("This API key is limited to N requests a minute") with
+  `Retry-After`, the whole seconds until the next request fits. A refused
+  request spends nothing, so a client that waits `Retry-After` gets in.
+- **Every request with the key counts**, HTTP and the WebSocket handshake,
+  cached or not — and only requests with the right key: it is not a wrong
+  key, and does not touch any address's wrong-key budget. Order: key, then
+  source allowlist, then rate limit.
+- **Per key, not per address**: a key used from several places shares one
+  allowance. Per-address limits for the public `/v1/fire` belong in the
+  proxy ([DEPLOY](DEPLOY.md), `compose.public.yml`).
+- **Kept in the process** (Klopot runs one worker): a restart refills every
+  key. Editing the key, or its cached credentials expiring, does not; a
+  lower limit applies to what is already spent (10 requests at 60/min are
+  10 s of the minute — at 6/min, room for 5 more). Rotation copies the limit;
+  during a rotation grace period the old and the new key count separately.
+- **Watch it**: `alertd_api_key_rate_limited_total{key}` on `/metrics`, and
+  the refused requests (status 429) in the Activity log.
+
+Size the limit from the caller's normal rate with room for bursts: a
+script that fires once a minute needs about 5, a UI that polls every few
+seconds 60 or more.
+
 ### Rotation
 
 `POST /v1/api_keys/{id}/rotate` returns a new plaintext key and:
@@ -156,7 +189,7 @@ the narrowest list you can.
   stays valid for N seconds
 - During grace, both keys work; after grace, old returns 401
 - `rotated_from_id` chains forward for audit trail
-- The new key keeps the old key's scopes, expiry and source allowlist
+- The new key keeps the old key's scopes, expiry, source allowlist and rate limit
 
 This lets rolling deploys swap secrets without downtime.
 

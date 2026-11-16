@@ -57,6 +57,7 @@ assumes the sample job name `klopot`; adjust it for another job name.
 | `alertd_telegram_last_poll_timestamp{channel}` | Last successful poll; zero before first success. |
 | `alertd_mqtt_output_active{channel}` | Enabled output has been used in this process. |
 | `alertd_mqtt_output_connected{channel}` | Live persistent output connection. Unused channels are not outages. |
+| `alertd_api_key_rate_limited_total{key}` | Requests refused (`429`) because the key was over its own `rate_limit_per_min` ([AUTH_MODEL](AUTH_MODEL.md#rate-limit)). A steady rise: the caller's limit is too low, or the key is being misused. |
 
 Also exported: `alertd_fires_total`, `alertd_escalations_total`,
 `alertd_rule_eval_duration_ms`, `alertd_rule_eval_errors_total`,

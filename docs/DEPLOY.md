@@ -417,6 +417,9 @@ Before you open it:
   addresses", docs/AUTH_MODEL.md "Source allowlist"): a key copied elsewhere
   then gets `403`, and its attempts count toward that address's wrong-key
   limit.
+- **Give each public key a rate limit** (its "Requests per minute",
+  docs/AUTH_MODEL.md "Rate limit"): the proxy limits each address, the key's
+  own limit caps one caller however many addresses it uses.
 - **Set a read timeout on traefik's entrypoint** (static configuration, not a
   label), so a slow upload cannot hold a connection open:
   ```yaml

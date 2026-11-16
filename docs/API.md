@@ -697,14 +697,20 @@ All `/v1/api_keys` calls need `admin`.
 | Call | What it does |
 |------|--------------|
 | `GET /v1/api_keys` | List (filter `enabled`); never shows the secret, only its prefix |
-| `POST /v1/api_keys` | `{"name", "scopes", "expires_at"?, "enabled"?, "allowed_cidrs"?}` → 201 with the plaintext `key`, shown **once** |
-| `GET` / `PATCH` / `DELETE /v1/api_keys/{id}` | Read, change (scopes, expiry, enabled, allowed addresses), delete |
-| `POST /v1/api_keys/{id}/rotate?grace_sec=N` | New plaintext key with the same scopes, expiry and allowed addresses; the old one is revoked now, or after `N` seconds (0–600, default 0) |
+| `POST /v1/api_keys` | `{"name", "scopes", "expires_at"?, "enabled"?, "allowed_cidrs"?, "rate_limit_per_min"?}` → 201 with the plaintext `key`, shown **once** |
+| `GET` / `PATCH` / `DELETE /v1/api_keys/{id}` | Read, change (scopes, expiry, enabled, allowed addresses, rate limit — `null` removes it), delete |
+| `POST /v1/api_keys/{id}/rotate?grace_sec=N` | New plaintext key with the same scopes, expiry, allowed addresses and rate limit; the old one is revoked now, or after `N` seconds (0–600, default 0) |
 
 `allowed_cidrs`: IPs or CIDRs (IPv4/IPv6, at most 64) the key may be used
 from; empty = any address. From anywhere else the key gets `403` and counts
 as a wrong key for that address ([AUTH_MODEL](AUTH_MODEL.md#source-allowlist)).
 `GET /v1/auth/me` returns `client_ip`, the address Klopot sees you at.
+
+`rate_limit_per_min`: requests a minute the key may make (1–60000); `null` =
+no limit. A quiet key may send that many at once, then one every 60/N
+seconds; over it the request gets `429` with `Retry-After`, the seconds until
+the next one fits ([AUTH_MODEL](AUTH_MODEL.md#rate-limit)). Wait that long
+before retrying.
 
 ## Browser session endpoints
 

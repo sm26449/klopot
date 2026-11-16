@@ -889,6 +889,9 @@ class ApiKey(Base):
     # NULL or empty = any address. Checked on every request (auth.py), after
     # the key itself, against the real client address (utils/client_ip.py).
     allowed_cidrs: Mapped[list[str] | None] = mapped_column(JSON)
+    # Requests a minute the key may make (GCRA, utils/rate_limit.py); NULL =
+    # no limit. Over it: 429 with Retry-After (auth.py).
+    rate_limit_per_min: Mapped[int | None] = mapped_column(Integer)
     rotated_from_id: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("api_keys.id", ondelete="SET NULL"),

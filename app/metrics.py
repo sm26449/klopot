@@ -37,6 +37,16 @@ from prometheus_client import (
 REGISTRY = CollectorRegistry()
 
 
+# ── API keys ──────────────────────────────────────────────────────
+
+API_KEY_RATE_LIMITED_TOTAL = Counter(
+    "alertd_api_key_rate_limited_total",
+    "Requests refused because the API key was over its own rate limit (api_keys.rate_limit_per_min).",
+    ["key"],
+    registry=REGISTRY,
+)
+
+
 # ── Engine fires ──────────────────────────────────────────────────
 
 FIRES_TOTAL = Counter(

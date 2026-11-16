@@ -499,6 +499,7 @@ CREATE TABLE api_keys (
     last_used_at TIMESTAMP NULL,
     last_used_ip VARCHAR(45),
     allowed_cidrs JSON NULL,                -- source allowlist (normalised IPs/CIDRs); NULL/[] = any (0042)
+    rate_limit_per_min INT NULL,            -- requests a minute (GCRA, in process); NULL = no limit (0043)
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     rotated_from_id BIGINT NULL,
     INDEX idx_apikey_prefix (key_prefix),
@@ -777,6 +778,7 @@ All shipped. Migrations run automatically at container startup
 | `0040` | Added (2026-11-16) | `throttle_state.is_test`, primary key `(type, is_test)`: test fires are throttled among themselves and never delay a real alert; existing rows are real-fire state |
 | `0041` | Added (2026-11-16) | Inbound inputs: the old authentication behaviour made explicit (`auth_required: false` for an input without a token or flag; a non-boolean flag becomes the boolean it meant); data only |
 | `0042` | Added (2026-11-16) | `api_keys.allowed_cidrs` (JSON, nullable): per-key source allowlist; NULL = any address |
+| `0043` | Added (2026-11-16) | `api_keys.rate_limit_per_min` (INT, nullable): per-key rate limit; NULL = no limit |
 
 ### Provider lifecycle (`0029`)
 

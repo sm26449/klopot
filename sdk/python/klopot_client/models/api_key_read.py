@@ -36,6 +36,8 @@ class ApiKeyRead:
             expires_at (None | str | Unset):
             last_used_at (None | str | Unset):
             last_used_ip (None | str | Unset):
+            rate_limit_per_min (int | None | Unset): Requests a minute the key may make; null = no limit. A quiet key may
+                send this many at once, then one every 60/N seconds. Over it: 429 with Retry-After.
             rotated_from_id (int | None | Unset):
      """
 
@@ -49,6 +51,7 @@ class ApiKeyRead:
     expires_at: None | str | Unset = UNSET
     last_used_at: None | str | Unset = UNSET
     last_used_ip: None | str | Unset = UNSET
+    rate_limit_per_min: int | None | Unset = UNSET
     rotated_from_id: int | None | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
@@ -96,6 +99,12 @@ class ApiKeyRead:
         else:
             last_used_ip = self.last_used_ip
 
+        rate_limit_per_min: int | None | Unset
+        if isinstance(self.rate_limit_per_min, Unset):
+            rate_limit_per_min = UNSET
+        else:
+            rate_limit_per_min = self.rate_limit_per_min
+
         rotated_from_id: int | None | Unset
         if isinstance(self.rotated_from_id, Unset):
             rotated_from_id = UNSET
@@ -121,6 +130,8 @@ class ApiKeyRead:
             field_dict["last_used_at"] = last_used_at
         if last_used_ip is not UNSET:
             field_dict["last_used_ip"] = last_used_ip
+        if rate_limit_per_min is not UNSET:
+            field_dict["rate_limit_per_min"] = rate_limit_per_min
         if rotated_from_id is not UNSET:
             field_dict["rotated_from_id"] = rotated_from_id
 
@@ -183,6 +194,16 @@ class ApiKeyRead:
         last_used_ip = _parse_last_used_ip(d.pop("last_used_ip", UNSET))
 
 
+        def _parse_rate_limit_per_min(data: object) -> int | None | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(int | None | Unset, data)
+
+        rate_limit_per_min = _parse_rate_limit_per_min(d.pop("rate_limit_per_min", UNSET))
+
+
         def _parse_rotated_from_id(data: object) -> int | None | Unset:
             if data is None:
                 return data
@@ -204,6 +225,7 @@ class ApiKeyRead:
             expires_at=expires_at,
             last_used_at=last_used_at,
             last_used_ip=last_used_ip,
+            rate_limit_per_min=rate_limit_per_min,
             rotated_from_id=rotated_from_id,
         )
 

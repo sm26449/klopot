@@ -1721,6 +1721,11 @@ export interface components {
             expires_at?: string | null;
             /** Name */
             name: string;
+            /**
+             * Rate Limit Per Min
+             * @description Requests a minute the key may make; null = no limit. A quiet key may send this many at once, then one every 60/N seconds. Over it: 429 with Retry-After.
+             */
+            rate_limit_per_min?: number | null;
             /** Scopes */
             scopes?: string[];
         };
@@ -1752,6 +1757,11 @@ export interface components {
             last_used_ip?: string | null;
             /** Name */
             name: string;
+            /**
+             * Rate Limit Per Min
+             * @description Requests a minute the key may make; null = no limit. A quiet key may send this many at once, then one every 60/N seconds. Over it: 429 with Retry-After.
+             */
+            rate_limit_per_min?: number | null;
             /** Rotated From Id */
             rotated_from_id?: number | null;
             /** Scopes */
@@ -1783,6 +1793,11 @@ export interface components {
             last_used_ip?: string | null;
             /** Name */
             name: string;
+            /**
+             * Rate Limit Per Min
+             * @description Requests a minute the key may make; null = no limit. A quiet key may send this many at once, then one every 60/N seconds. Over it: 429 with Retry-After.
+             */
+            rate_limit_per_min?: number | null;
             /** Rotated From Id */
             rotated_from_id?: number | null;
             /** Scopes */
@@ -1799,6 +1814,11 @@ export interface components {
             enabled?: boolean | null;
             /** Expires At */
             expires_at?: string | null;
+            /**
+             * Rate Limit Per Min
+             * @description Requests a minute the key may make; null = no limit. A quiet key may send this many at once, then one every 60/N seconds. Over it: 429 with Retry-After.
+             */
+            rate_limit_per_min?: number | null;
             /** Scopes */
             scopes?: string[] | null;
         };

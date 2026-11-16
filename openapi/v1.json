@@ -394,6 +394,20 @@
             "title": "Name",
             "type": "string"
           },
+          "rate_limit_per_min": {
+            "anyOf": [
+              {
+                "maximum": 60000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Requests a minute the key may make; null = no limit. A quiet key may send this many at once, then one every 60/N seconds. Over it: 429 with Retry-After.",
+            "title": "Rate Limit Per Min"
+          },
           "scopes": {
             "items": {
               "type": "string"
@@ -482,6 +496,18 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "rate_limit_per_min": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Requests a minute the key may make; null = no limit. A quiet key may send this many at once, then one every 60/N seconds. Over it: 429 with Retry-After.",
+            "title": "Rate Limit Per Min"
           },
           "rotated_from_id": {
             "anyOf": [
@@ -585,6 +611,18 @@
             "title": "Name",
             "type": "string"
           },
+          "rate_limit_per_min": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Requests a minute the key may make; null = no limit. A quiet key may send this many at once, then one every 60/N seconds. Over it: 429 with Retry-After.",
+            "title": "Rate Limit Per Min"
+          },
           "rotated_from_id": {
             "anyOf": [
               {
@@ -654,6 +692,20 @@
               }
             ],
             "title": "Expires At"
+          },
+          "rate_limit_per_min": {
+            "anyOf": [
+              {
+                "maximum": 60000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Requests a minute the key may make; null = no limit. A quiet key may send this many at once, then one every 60/N seconds. Over it: 429 with Retry-After.",
+            "title": "Rate Limit Per Min"
           },
           "scopes": {
             "anyOf": [

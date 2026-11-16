@@ -41,6 +41,13 @@ adheres to [Semantic Versioning](https://semver.org/).
   request, cached or not, HTTP and WebSocket; rotation keeps it; a change
   applies at once. Empty = any address, as for every existing key
   (migration `0042`). `GET /v1/auth/me` returns `client_ip`.
+- **Per-key rate limit**: `rate_limit_per_min` on an API key (API keys → the
+  key → *Requests per minute*). A quiet key may send that many at once, then
+  one every 60/N seconds; over it, `429` with `Retry-After` — the seconds
+  until the next request fits. Counted per key on every request, HTTP and
+  WebSocket, and not as a wrong key; an edit or the resolve cache never
+  refills it; rotation keeps it. Empty = no limit, as for every existing key
+  (migration `0043`). Metric `alertd_api_key_rate_limited_total{key}`.
 - `compose.public.yml`: accept alerts from the internet — opens exactly
   `POST /v1/fire`, with a per-client rate limit, an overall in-flight limit
   and a 64 KiB body limit in traefik (docs/DEPLOY.md, "Exposing /v1/fire to

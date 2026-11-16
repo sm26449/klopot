@@ -29,12 +29,15 @@ class ApiKeyUpdate:
                 Empty = any address. A request from elsewhere gets 403 and counts as a wrong key for that address.
             enabled (bool | None | Unset):
             expires_at (datetime.datetime | None | Unset):
+            rate_limit_per_min (int | None | Unset): Requests a minute the key may make; null = no limit. A quiet key may
+                send this many at once, then one every 60/N seconds. Over it: 429 with Retry-After.
             scopes (list[str] | None | Unset):
      """
 
     allowed_cidrs: list[str] | None | Unset = UNSET
     enabled: bool | None | Unset = UNSET
     expires_at: datetime.datetime | None | Unset = UNSET
+    rate_limit_per_min: int | None | Unset = UNSET
     scopes: list[str] | None | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
@@ -67,6 +70,12 @@ class ApiKeyUpdate:
         else:
             expires_at = self.expires_at
 
+        rate_limit_per_min: int | None | Unset
+        if isinstance(self.rate_limit_per_min, Unset):
+            rate_limit_per_min = UNSET
+        else:
+            rate_limit_per_min = self.rate_limit_per_min
+
         scopes: list[str] | None | Unset
         if isinstance(self.scopes, Unset):
             scopes = UNSET
@@ -88,6 +97,8 @@ class ApiKeyUpdate:
             field_dict["enabled"] = enabled
         if expires_at is not UNSET:
             field_dict["expires_at"] = expires_at
+        if rate_limit_per_min is not UNSET:
+            field_dict["rate_limit_per_min"] = rate_limit_per_min
         if scopes is not UNSET:
             field_dict["scopes"] = scopes
 
@@ -146,6 +157,16 @@ class ApiKeyUpdate:
         expires_at = _parse_expires_at(d.pop("expires_at", UNSET))
 
 
+        def _parse_rate_limit_per_min(data: object) -> int | None | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(int | None | Unset, data)
+
+        rate_limit_per_min = _parse_rate_limit_per_min(d.pop("rate_limit_per_min", UNSET))
+
+
         def _parse_scopes(data: object) -> list[str] | None | Unset:
             if data is None:
                 return data
@@ -168,6 +189,7 @@ class ApiKeyUpdate:
             allowed_cidrs=allowed_cidrs,
             enabled=enabled,
             expires_at=expires_at,
+            rate_limit_per_min=rate_limit_per_min,
             scopes=scopes,
         )
 

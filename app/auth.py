@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import hmac
 import ipaddress
+import math
 import re
 from collections import OrderedDict
 from collections.abc import Collection
@@ -40,6 +41,7 @@ from .config import get_settings
 from .db import get_session
 from .db.models import AdminSession, AdminUser, ApiKey
 from .utils.client_ip import Network, in_networks, parse_networks, real_client_ip
+from .utils.rate_limit import PerMinuteLimiter
 from .utils.time import utc_now
 
 _HEADER = APIKeyHeader(
@@ -70,6 +72,8 @@ class Actor:
     # any address. Kept on the cached actor so every request — a cache hit
     # too — is checked against its own client address (_source_allowed).
     allowed_networks: tuple[Network, ...] = ()
+    # An API key's own limit (api_keys.rate_limit_per_min); None = no limit.
+    rate_limit_per_min: int | None = None
 
     def has_scope(self, required: str) -> bool:
         """``admin`` implies all other scopes."""
@@ -296,7 +300,53 @@ def _source_refused() -> HTTPException:
     return HTTPException(status.HTTP_403_FORBIDDEN, detail="This API key is not allowed from this address")
 
 
+# Each key's rate allowance (api_keys.rate_limit_per_min), by key id: kept
+# across the resolve cache and edits of the key, so neither refills it.
+_KEY_RATE = PerMinuteLimiter()
+
+
+def reset_key_rates() -> None:
+    """Forget every key's rate allowance (tests: key ids repeat per database)."""
+    _KEY_RATE.forget()
+
+
+def _admit(actor: Actor) -> None:
+    """Spend one request of the key's own rate limit, or refuse it with 429
+    and the seconds until the next one fits. The key is right, so this is
+    not a wrong key for anybody's budget."""
+    limit = actor.rate_limit_per_min
+    if limit is None or actor.id is None:
+        return
+    admission = _KEY_RATE.admit(actor.id, limit)
+    if admission.allowed:
+        return
+    from .metrics import API_KEY_RATE_LIMITED_TOTAL
+
+    API_KEY_RATE_LIMITED_TOTAL.labels(key=actor.name).inc()
+    raise HTTPException(
+        status.HTTP_429_TOO_MANY_REQUESTS,
+        detail=f"This API key is limited to {limit} requests a minute",
+        headers={"Retry-After": str(max(1, math.ceil(admission.retry_after)))},
+    )
+
+
 async def _resolve_key(
+    raw: str,
+    session: AsyncSession,
+    client_ip: str | None,
+) -> Actor:
+    """The actor of a plaintext API key, admitted within the key's rate
+    limit — the one entry point for HTTP and WebSocket alike.
+
+    Raises what ``_authenticate_key`` raises, and 429 (with ``Retry-After``)
+    for a right key over its ``rate_limit_per_min``.
+    """
+    actor = await _authenticate_key(raw, session, client_ip)
+    _admit(actor)
+    return actor
+
+
+async def _authenticate_key(
     raw: str,
     session: AsyncSession,
     client_ip: str | None,
@@ -408,7 +458,7 @@ async def _accept_key(
     if row.expires_at is not None and row.expires_at < utc_now():
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="API key expired")
     actor = Actor(kind="api_key", id=row.id, name=row.name, scopes=frozenset(row.scopes or []),
-                  allowed_networks=_key_networks(row))
+                  allowed_networks=_key_networks(row), rate_limit_per_min=row.rate_limit_per_min)
     if not _source_allowed(actor, client_ip):
         raise _WrongSource
     # Best-effort, no commit barrier. On cached hits we skip this —

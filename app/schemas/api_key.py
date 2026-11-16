@@ -15,6 +15,12 @@ from .log import _as_utc_iso
 
 VALID_SCOPES = frozenset({"fire", "read", "ack", "admin"})
 MAX_ALLOWED_CIDRS = 64
+MAX_RATE_LIMIT_PER_MIN = 60_000   # 1000 a second: above that a limit means nothing
+
+_RATE_LIMIT_DOC = (
+    "Requests a minute the key may make; null = no limit. A quiet key may send this many at once, "
+    "then one every 60/N seconds. Over it: 429 with Retry-After."
+)
 
 _ALLOWED_CIDRS_DOC = (
     "Addresses the key may be used from: IPs or CIDRs (IPv4 and IPv6). Empty = any address. "
@@ -39,6 +45,8 @@ class ApiKeyBase(BaseModel):
     expires_at: datetime | None = None
     enabled: bool = True
     allowed_cidrs: list[str] = Field(default_factory=list, description=_ALLOWED_CIDRS_DOC)
+    rate_limit_per_min: int | None = Field(default=None, ge=1, le=MAX_RATE_LIMIT_PER_MIN,
+                                           description=_RATE_LIMIT_DOC)
 
     @field_validator("allowed_cidrs")
     @classmethod
@@ -55,6 +63,9 @@ class ApiKeyUpdate(BaseModel):
     expires_at: datetime | None = None
     enabled: bool | None = None
     allowed_cidrs: list[str] | None = Field(default=None, description=_ALLOWED_CIDRS_DOC)
+    # Sent as null: remove the limit (an omitted field leaves it as it is).
+    rate_limit_per_min: int | None = Field(default=None, ge=1, le=MAX_RATE_LIMIT_PER_MIN,
+                                           description=_RATE_LIMIT_DOC)
 
     @field_validator("allowed_cidrs")
     @classmethod
@@ -74,15 +85,16 @@ class ApiKeyRead(BaseModel):
     last_used_at: datetime | None = None
     last_used_ip: str | None = None
     allowed_cidrs: list[str] = Field(default_factory=list, description=_ALLOWED_CIDRS_DOC)
+    rate_limit_per_min: int | None = Field(default=None, description=_RATE_LIMIT_DOC)
     rotated_from_id: int | None = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
     @field_validator("allowed_cidrs", mode="before")
     @classmethod
     def _null_is_any(cls, v: list[str] | None) -> list[str]:
         return list(v or [])
-    created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
 
     @field_serializer("expires_at", "last_used_at", "created_at")
     def _serialize_utc(self, value: datetime | None) -> str | None:
