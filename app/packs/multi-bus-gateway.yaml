@@ -1,0 +1,157 @@
+# Alerts from Multi-Bus Gateway (https://github.com/sm26449/multi-bus-gateway),
+# sent through POST /v1/fire. The same templates as MBG's own export
+# (GET /api/alerts/alertd-pack, multibus/outputs/alertd_catalog.py) — keep the
+# two in step. MBG composes the text; the context carries source, message,
+# severity, key, host, ts, and device_id / field / label / value / code where
+# they apply.
+#
+# In MBG: alerts.enabled and alerts.alertd.enabled true, alerts.alertd.url
+# = this instance's /v1/fire, alerts.alertd.api_key = a key with the `fire`
+# scope. Settings → Alerts → Test sends mbg_test.
+#
+# The last three templates (latency, InfluxDB buffer, register threshold) are
+# conditions MBG does not fire itself: they render a Klopot rule you write
+# over your site's MQTT values.
+pack:
+  id: multi-bus-gateway
+  name: {en: "Multi-Bus Gateway", ro: "Multi-Bus Gateway"}
+  description:
+    en: "Templates for the alerts Multi-Bus Gateway sends — devices down and back, device alarms, MQTT and InfluxDB sinks, serial bridges, virtual meters, configuration, gateway role and rule failures — routed to one channel. The same set as MBG's own export."
+    ro: "Șabloane pentru alertele trimise de Multi-Bus Gateway — dispozitive căzute și revenite, alarmele dispozitivelor, ieșirile MQTT și InfluxDB, punțile seriale, contoarele virtuale, configurația, rolul gateway-ului și regulile care eșuează — trimise pe un canal. Același set ca exportul propriu al MBG."
+  version: 1.0.0
+  tags: [energy, modbus, gateway, mbg, api]
+  parameters:
+    - name: alert_channel
+      label: {en: "Send to channel", ro: "Trimite pe canalul"}
+      type: channel
+      default: ui_default
+
+version: "1.0"
+templates:
+  - type: mbg_device
+    severity: warning
+    icon: "🔌"
+    category: MBG
+    title_template: "{source}: {message}"
+    message_template: "{message}"
+    description: "A device stopped answering (after 45 s) or came back. Context: source, message, device_id."
+    min_repeat_min: 15
+  - type: mbg_sink
+    severity: warning
+    icon: "🔗"
+    category: MBG
+    title_template: "Sink {source}: {message}"
+    message_template: "{message}"
+    description: "The MQTT or InfluxDB output went down or came back."
+    min_repeat_min: 15
+  - type: mbg_influx_auth
+    severity: critical
+    icon: "🔑"
+    category: MBG
+    title_template: "InfluxDB rejects writes"
+    message_template: "{message}"
+    description: "InfluxDB answers 401 / 403 / 404 to writes — token, organisation or bucket."
+    min_repeat_min: 30
+  - type: mbg_influx_dropped
+    severity: warning
+    icon: "🗑️"
+    category: MBG
+    title_template: "InfluxDB dropped points"
+    message_template: "{message}"
+    description: "Points were dropped (schema conflict or a full buffer)."
+    min_repeat_min: 30
+  - type: mbg_device_alarm
+    severity: critical
+    icon: "🚨"
+    category: MBG
+    title_template: "{source}: {message}"
+    message_template: "{message} ({key})"
+    description: "An alarm declared in a device template went active or cleared. Context: device_id, field, label, value, code."
+    min_repeat_min: 15
+  - type: mbg_bridge
+    severity: warning
+    icon: "🚌"
+    category: MBG
+    title_template: "Bus {source}: {message}"
+    message_template: "{message}"
+    description: "A serial bridge's line errors, silence or reconnects (signals.bridge)."
+    min_repeat_min: 15
+  - type: mbg_vmeter
+    severity: critical
+    icon: "🧮"
+    category: MBG
+    title_template: "{source}: {message}"
+    message_template: "{message} ({key})"
+    description: "A virtual meter not serving, held, or without its consumer."
+    min_repeat_min: 15
+  - type: mbg_config
+    severity: critical
+    icon: "⚙️"
+    category: MBG
+    title_template: "Gateway config: {message}"
+    message_template: "{message}"
+    description: "The configuration failed to load, or was downgraded."
+    min_repeat_min: 60
+  - type: mbg_gateway
+    severity: warning
+    icon: "🛰️"
+    category: MBG
+    title_template: "Gateway: {message}"
+    message_template: "{source} — {message}"
+    description: "Role changes, lease and sequence problems, companion services, rule evaluation failures."
+    min_repeat_min: 15
+  - type: mbg_event
+    severity: warning
+    icon: "🔔"
+    category: MBG
+    title_template: "{source}: {message}"
+    message_template: "{message} ({key})"
+    description: "Everything else MBG reports: power-quality events, the rules engine (store, stalled, command failures)."
+    min_repeat_min: 15
+  - type: mbg_test
+    severity: info
+    icon: "🧪"
+    category: MBG
+    title_template: "MBG test alert"
+    message_template: "{message}"
+    description: "The Test button in MBG's alert settings."
+    min_repeat_min: 0
+  - type: mbg_latency
+    severity: warning
+    icon: "🐢"
+    category: MBG
+    title_template: "High read latency: {source}"
+    message_template: "{message}"
+    description: "Condition: render it from a Klopot rule over a device's read latency (MBG does not fire it)."
+    min_repeat_min: 30
+  - type: mbg_influx_buffer
+    severity: warning
+    icon: "📦"
+    category: MBG
+    title_template: "InfluxDB buffer backlog"
+    message_template: "{message}"
+    description: "Condition: render it from a Klopot rule over the InfluxDB buffer (MBG does not fire it)."
+    min_repeat_min: 30
+  - type: mbg_threshold
+    severity: warning
+    icon: "📈"
+    category: MBG
+    title_template: "{source}: {message}"
+    message_template: "{message} ({key})"
+    description: "Condition: render it from a Klopot rule over a register value (MBG does not fire it)."
+    min_repeat_min: 15
+routes:
+  - {template: mbg_device, channel: "${alert_channel}", severity_min: info}
+  - {template: mbg_sink, channel: "${alert_channel}", severity_min: info}
+  - {template: mbg_influx_auth, channel: "${alert_channel}", severity_min: info}
+  - {template: mbg_influx_dropped, channel: "${alert_channel}", severity_min: info}
+  - {template: mbg_device_alarm, channel: "${alert_channel}", severity_min: info}
+  - {template: mbg_bridge, channel: "${alert_channel}", severity_min: info}
+  - {template: mbg_vmeter, channel: "${alert_channel}", severity_min: info}
+  - {template: mbg_config, channel: "${alert_channel}", severity_min: info}
+  - {template: mbg_gateway, channel: "${alert_channel}", severity_min: info}
+  - {template: mbg_event, channel: "${alert_channel}", severity_min: info}
+  - {template: mbg_test, channel: "${alert_channel}", severity_min: info}
+  - {template: mbg_latency, channel: "${alert_channel}", severity_min: info}
+  - {template: mbg_influx_buffer, channel: "${alert_channel}", severity_min: info}
+  - {template: mbg_threshold, channel: "${alert_channel}", severity_min: info}

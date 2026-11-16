@@ -1,0 +1,234 @@
+# Inverter alerts for Fronius (SunSpec) inverters read by fronius-modbus-mqtt
+# (https://github.com/sm26449/fronius-modbus-mqtt, 1.16+). Install it once per
+# inverter (its Modbus id); the collector-wide alerts are the same in every
+# install, so a second install finds them identical and leaves them alone.
+#
+# What the collector publishes, and how the rules use it:
+# - <prefix>/inverter/<id>/St — the SunSpec operating state: 4 is normal
+#   production (MPPT), 5 throttled, 7 fault;
+# - <prefix>/inverter/<id>/PhVphA|B|C — phase voltages, V;
+# - <prefix>/inverter/<id>/runtime/status — online / offline (3 failed reads);
+# - <prefix>/inverter/status — online / partial / offline for the whole fleet,
+#   re-sent every 30 s: the collector's heartbeat;
+# - <prefix>/status — the collector's last will (offline).
+# Readings are published on change only, so freshness comes from the
+# heartbeat, not from a reading's age. At night the collector stops reading
+# the inverters, so "not responding" alerts only within the daylight hours.
+pack:
+  id: fronius-inverter
+  name: {en: "Fronius inverter", ro: "Invertor Fronius"}
+  description:
+    en: "Alerts for a Fronius inverter read by fronius-modbus-mqtt: fault, overvoltage (warning and critical), not responding during daylight, optionally throttling — plus the collector going offline and no inverter responding. Install once per inverter."
+    ro: "Alerte pentru un invertor Fronius citit de fronius-modbus-mqtt: defect, supratensiune (avertizare și critic), invertor care nu răspunde ziua, opțional limitarea puterii — plus colectorul căzut și niciun invertor care nu răspunde. Se instalează o dată pentru fiecare invertor."
+  version: 1.0.0
+  tags: [energy, solar, inverter, fronius, mqtt]
+  parameters:
+    - name: inverter_id
+      label: {en: "Inverter Modbus id", ro: "Id Modbus al invertorului"}
+      description:
+        en: "As in the collector's devices.inverters list (INVERTER_IDS). It goes into the names, so the pack installs once per inverter."
+        ro: "Ca în lista devices.inverters a colectorului (INVERTER_IDS). Intră în nume, ca pachetul să se instaleze o dată pentru fiecare invertor."
+      type: integer
+      default: 1
+    - name: inverter_name
+      label: {en: "Inverter name (shown in the alert)", ro: "Numele invertorului (apare în alertă)"}
+      default: Inverter 1
+    - name: broker_host
+      label: {en: "MQTT broker host", ro: "Host broker MQTT"}
+      description:
+        en: "The broker fronius-modbus-mqtt publishes to."
+        ro: "Brokerul în care publică fronius-modbus-mqtt."
+      default: mqtt.example.com
+    - name: broker_port
+      label: {en: "MQTT broker port", ro: "Port broker MQTT"}
+      type: integer
+      default: 1883
+    - name: topic_prefix
+      label: {en: "Topic prefix", ro: "Prefix topic"}
+      description:
+        en: "The collector's mqtt.topic_prefix (MQTT_PREFIX in Docker)."
+        ro: "mqtt.topic_prefix al colectorului (MQTT_PREFIX în Docker)."
+      default: fronius
+    - name: ov_warning_v
+      label: {en: "Overvoltage warning above (V)", ro: "Avertizare supratensiune peste (V)"}
+      description:
+        en: "Highest phase voltage. 253 V is 230 V + 10 %, the EN 50160 upper limit. Shared by every installed inverter."
+        ro: "Cea mai mare tensiune de fază. 253 V înseamnă 230 V + 10 %, limita superioară din EN 50160. Comună tuturor invertoarelor instalate."
+      type: number
+      default: 253
+    - name: ov_critical_v
+      label: {en: "Overvoltage critical above (V)", ro: "Supratensiune critică peste (V)"}
+      description:
+        en: "Close to where the inverter disconnects. Shared by every installed inverter."
+        ro: "Aproape de pragul la care invertorul se deconectează. Comun tuturor invertoarelor instalate."
+      type: number
+      default: 258
+    - name: day_start
+      label: {en: "Daylight from (hour)", ro: "Lumină de la (ora)"}
+      type: integer
+      default: 8
+    - name: day_end
+      label: {en: "Daylight until (hour)", ro: "Lumină până la (ora)"}
+      type: integer
+      default: 19
+    - name: alert_channel
+      label: {en: "Send to channel", ro: "Trimite pe canalul"}
+      type: channel
+      default: ui_default
+
+version: "1.0"
+inputs:
+  - name: fronius_mqtt
+    kind: mqtt
+    config: {host: "${broker_host}", port: "${broker_port}"}
+variables:
+  # The collector (the same in every install)
+  - name: fronius.collector
+    source: mqtt
+    input: fronius_mqtt
+    config: {topic: "${topic_prefix}/status", type: string}
+    description: "online, or offline when the collector's MQTT session ends (last will)."
+  - name: fronius.fleet
+    source: mqtt
+    input: fronius_mqtt
+    config: {topic: "${topic_prefix}/inverter/status", type: string}
+    description: "online / partial / offline for all inverters, re-sent every 30 s — the collector's heartbeat."
+  - name: fronius.ov_warning_v
+    source: constant
+    config: {type: number, value: "${ov_warning_v}"}
+    description: "Overvoltage warning above this phase voltage, V (every inverter)."
+  - name: fronius.ov_critical_v
+    source: constant
+    config: {type: number, value: "${ov_critical_v}"}
+    description: "Overvoltage critical above this phase voltage, V (every inverter)."
+  # This inverter
+  - name: fronius.inv${inverter_id}.state
+    source: mqtt
+    input: fronius_mqtt
+    config: {topic: "${topic_prefix}/inverter/${inverter_id}/St", type: number}
+    description: "${inverter_name}: SunSpec operating state (4 MPPT, 5 throttled, 7 fault)."
+  - name: fronius.inv${inverter_id}.status
+    source: mqtt
+    input: fronius_mqtt
+    config: {topic: "${topic_prefix}/inverter/${inverter_id}/runtime/status", type: string}
+    description: "${inverter_name}: online, or offline after 3 failed reads."
+  - name: fronius.inv${inverter_id}.v_max
+    source: aggregate
+    input: fronius_mqtt
+    config:
+      type: number
+      aggregate: max
+      topics:
+        - "${topic_prefix}/inverter/${inverter_id}/PhVphA"
+        - "${topic_prefix}/inverter/${inverter_id}/PhVphB"
+        - "${topic_prefix}/inverter/${inverter_id}/PhVphC"
+    description: "${inverter_name}: the highest of the three phase voltages, V."
+templates:
+  - type: fronius_collector_offline
+    severity: critical
+    icon: "📡"
+    category: Inverter
+    title_template: "Fronius collector offline"
+    message_template: "fronius-modbus-mqtt stopped reporting — it went offline, or sent no fleet status for 3 minutes. Solar production is unmonitored: check its container and the MQTT broker."
+    min_repeat_min: 30
+  - type: fronius_fleet_offline
+    severity: critical
+    icon: "🌑"
+    category: Inverter
+    title_template: "No Fronius inverter is responding"
+    message_template: "The collector runs but no inverter answers during daylight. Check the network or Modbus link to the inverters (the DataManager)."
+    min_repeat_min: 30
+  - type: fronius_inv${inverter_id}_not_responding
+    severity: warning
+    icon: "📵"
+    category: Inverter
+    title_template: "${inverter_name} not responding"
+    message_template: "${inverter_name} failed three reads in a row during daylight while the collector runs. It may still be producing, unmonitored — check its network and Modbus settings."
+    min_repeat_min: 30
+  - type: fronius_inv${inverter_id}_fault
+    severity: critical
+    icon: "🚨"
+    category: Inverter
+    title_template: "${inverter_name} fault"
+    message_template: "${inverter_name} reports a fault (SunSpec state 7) and is not producing. See the event code on the inverter's display or in Solar.web."
+    min_repeat_min: 30
+  - type: fronius_inv${inverter_id}_throttled
+    severity: warning
+    icon: "🚧"
+    category: Inverter
+    title_template: "${inverter_name} throttled"
+    message_template: "${inverter_name} has reduced its power (SunSpec state 5) for over 5 minutes — heat, grid voltage, or an export limit."
+    min_repeat_min: 60
+  - type: fronius_inv${inverter_id}_overvoltage
+    severity: warning
+    icon: "⚡"
+    category: Inverter
+    title_template: "${inverter_name} overvoltage: {fronius.inv${inverter_id}.v_max} V"
+    message_template: "${inverter_name}'s highest phase voltage is above {fronius.ov_warning_v} V. The inverter may reduce its power; sustained, it disconnects."
+    min_repeat_min: 30
+  - type: fronius_inv${inverter_id}_overvoltage_critical
+    severity: critical
+    icon: "⚡"
+    category: Inverter
+    title_template: "${inverter_name} overvoltage critical: {fronius.inv${inverter_id}.v_max} V"
+    message_template: "${inverter_name}'s highest phase voltage is above {fronius.ov_critical_v} V — it is about to disconnect from the grid. Report persistent overvoltage to the grid operator."
+    min_repeat_min: 15
+rules:
+  - name: fronius_collector_offline
+    template_type: fronius_collector_offline
+    condition_expr: "fronius.collector == 'offline' or (var_age('fronius.fleet') > 180 and var_age('fronius.fleet') < 86400)"
+    persist_n: 2
+    eval_interval_sec: 60
+    vars_extract: [fronius.collector, fronius.fleet]
+    trigger_summary: "The collector's last will, or no fleet status for 3 minutes"
+  - name: fronius_fleet_offline
+    template_type: fronius_fleet_offline
+    condition_expr: "in_window(${day_start}, ${day_end}) and var_age('fronius.fleet') < 120 and fronius.fleet == 'offline'"
+    persist_n: 4
+    eval_interval_sec: 60
+    vars_extract: [fronius.fleet]
+    trigger_summary: "During daylight the collector runs but reports every inverter offline"
+  - name: fronius_inv${inverter_id}_not_responding
+    template_type: fronius_inv${inverter_id}_not_responding
+    condition_expr: "in_window(${day_start}, ${day_end}) and var_age('fronius.fleet') < 120 and fronius.fleet == 'partial' and fronius.inv${inverter_id}.status == 'offline'"
+    persist_n: 4
+    eval_interval_sec: 60
+    vars_extract: ["fronius.inv${inverter_id}.status", fronius.fleet]
+    trigger_summary: "During daylight this inverter is offline while others answer"
+  - name: fronius_inv${inverter_id}_fault
+    template_type: fronius_inv${inverter_id}_fault
+    condition_expr: "var_age('fronius.fleet') < 120 and fronius.inv${inverter_id}.status == 'online' and fronius.inv${inverter_id}.state == 7"
+    persist_n: 2
+    eval_interval_sec: 30
+    vars_extract: ["fronius.inv${inverter_id}.state"]
+    trigger_summary: "SunSpec operating state 7 (fault) on a responding inverter"
+  - name: fronius_inv${inverter_id}_throttled
+    template_type: fronius_inv${inverter_id}_throttled
+    condition_expr: "var_age('fronius.fleet') < 120 and fronius.inv${inverter_id}.status == 'online' and fronius.inv${inverter_id}.state == 5"
+    persist_n: 10
+    eval_interval_sec: 30
+    vars_extract: ["fronius.inv${inverter_id}.state"]
+    trigger_summary: "SunSpec operating state 5 (throttled) for five minutes"
+    enabled: false
+  - name: fronius_inv${inverter_id}_overvoltage
+    template_type: fronius_inv${inverter_id}_overvoltage
+    condition_expr: "var_age('fronius.fleet') < 120 and fronius.inv${inverter_id}.status == 'online' and fronius.inv${inverter_id}.v_max > fronius.ov_warning_v and fronius.inv${inverter_id}.v_max <= fronius.ov_critical_v"
+    persist_n: 3
+    eval_interval_sec: 10
+    vars_extract: ["fronius.inv${inverter_id}.v_max", fronius.ov_warning_v]
+    trigger_summary: "Highest phase voltage in the warning band for three checks"
+  - name: fronius_inv${inverter_id}_overvoltage_critical
+    template_type: fronius_inv${inverter_id}_overvoltage_critical
+    condition_expr: "var_age('fronius.fleet') < 120 and fronius.inv${inverter_id}.status == 'online' and fronius.inv${inverter_id}.v_max > fronius.ov_critical_v"
+    persist_n: 2
+    eval_interval_sec: 5
+    vars_extract: ["fronius.inv${inverter_id}.v_max", fronius.ov_critical_v]
+    trigger_summary: "Highest phase voltage above the critical level"
+routes:
+  - {template: fronius_collector_offline, channel: "${alert_channel}", severity_min: info}
+  - {template: fronius_fleet_offline, channel: "${alert_channel}", severity_min: info}
+  - {template: "fronius_inv${inverter_id}_not_responding", channel: "${alert_channel}", severity_min: info}
+  - {template: "fronius_inv${inverter_id}_fault", channel: "${alert_channel}", severity_min: info}
+  - {template: "fronius_inv${inverter_id}_throttled", channel: "${alert_channel}", severity_min: info}
+  - {template: "fronius_inv${inverter_id}_overvoltage", channel: "${alert_channel}", severity_min: info}
+  - {template: "fronius_inv${inverter_id}_overvoltage_critical", channel: "${alert_channel}", severity_min: info}

@@ -114,6 +114,20 @@ Shipped in the image under `app/packs/`:
 | `sensor-threshold` | MQTT numeric sensor → alert above a threshold for N checks. |
 | `alertmanager` | Alertmanager / Grafana receiver with templates per severity. |
 | `script-alerts` | `script_info` / `script_warning` / `script_critical` templates showing the `title` and `message` a script sends to `POST /v1/fire`. Used by the setup guide's "my scripts" path. |
+| `seplos-bms` | Seplos BMS V3 batteries read by [seplos-modbus-mqtt](https://github.com/sm26449/seplos-modbus-mqtt): state of charge low / critical, temperature high / critical, cell imbalance, packs not reporting, collector offline. Thresholds become constant variables. |
+| `fronius-inverter` | Fronius (SunSpec) inverters read by [fronius-modbus-mqtt](https://github.com/sm26449/fronius-modbus-mqtt): fault, overvoltage warning / critical, not responding during daylight, throttling (installed disabled), collector offline, no inverter responding. **Install once per inverter**; the collector-wide items are shared. |
+| `openvigil-nvr` | Templates for every alert [OpenVigil](https://github.com/sm26449/openvigil) sends through `POST /v1/fire` (2.2+; 2.1 sends only fall detection), including the recovery templates of its episodes. The messages show OpenVigil's own `text`, so they read right in its language. |
+| `multi-bus-gateway` | Templates for every alert [Multi-Bus Gateway](https://github.com/sm26449/multi-bus-gateway) sends through `POST /v1/fire` — the same set as its own export (`GET /api/alerts/alertd-pack`), plus the three condition templates for rules you write. |
+
+The four packs above come from a real installation, rewritten against what
+each project publishes or sends (not against that installation's topics),
+in English and without channels or contact data. Two notes from that
+review: a MQTT collector that publishes **on change only** cannot be judged
+by a reading's age — these packs gate on the collector's heartbeat instead —
+and SunSpec operating state **4 is MPPT** (normal production); throttled is 5,
+fault 7. `tests/packs/test_catalog_rules.py` runs every catalog rule against
+scenarios (fires on its condition, stays silent otherwise and before any
+data arrives).
 
 To add one: a file `app/packs/<id>.yaml` in this format;
 `tests/api/test_packs_api.py` installs every catalog pack with its defaults on

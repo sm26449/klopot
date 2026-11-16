@@ -1,0 +1,223 @@
+# Alerts from OpenVigil, the self-hosted NVR (https://github.com/sm26449/openvigil),
+# sent through POST /v1/fire. OpenVigil composes each message in its own
+# language and sends it as `text`; these templates add an English title and
+# show that text, so they read right whatever language OpenVigil runs in.
+#
+# The type names are OpenVigil's (fixed in its code). OpenVigil 2.2 sends all
+# of them; 2.1 sends only nvr_cadere (fall detection). Camera, NVR, disk and
+# recording outages open an episode that OpenVigil closes itself — the
+# *_revenita / *_revenit / *_ok / *_reluata templates are the recovery
+# messages (resolved_type). In OpenVigil: Settings → Notifications → alert
+# service: the URL of /v1/fire and a key with the `fire` scope.
+pack:
+  id: openvigil-nvr
+  name: {en: "OpenVigil NVR", ro: "OpenVigil NVR"}
+  description:
+    en: "Templates for every alert OpenVigil sends — camera and NVR outages with their recovery, disk space, recording problems, backups, intruders, fall detection, noise and rule notifications, the daily digest — routed to one channel. Needs OpenVigil 2.2 (2.1 sends only fall detection)."
+    ro: "Șabloane pentru fiecare alertă trimisă de OpenVigil — camere și NVR căzute și revenite, spațiu pe disc, probleme de înregistrare, copii de siguranță, intruși, detecția căderilor, zgomot și notificările regulilor, rezumatul zilei — trimise pe un canal. Necesită OpenVigil 2.2 (2.1 trimite doar detecția căderilor)."
+  version: 1.0.0
+  tags: [cameras, nvr, security, openvigil, api]
+  parameters:
+    - name: alert_channel
+      label: {en: "Send to channel", ro: "Trimite pe canalul"}
+      description:
+        en: "Every OpenVigil alert goes here. Add a second route (an SMS, say) to the critical ones — intruder, fall, recording stopped — under Templates."
+        ro: "Toate alertele OpenVigil ajung aici. Adaugă o a doua rută (un SMS, de exemplu) celor critice — intrus, cădere, înregistrare oprită — din Șabloane."
+      type: channel
+      default: ui_default
+
+version: "1.0"
+templates:
+  # Cameras and the NVR
+  - type: nvr_camera_cazuta
+    severity: warning
+    icon: "📵"
+    category: Cameras
+    title_template: "Camera offline — {cam}"
+    message_template: "{text}{link}"
+    description: "A camera failed two checks in a row; reminders follow while it stays down. Context: text, cam, ip."
+    min_repeat_min: 0
+  - type: nvr_camera_revenita
+    severity: info
+    icon: "✅"
+    category: Cameras
+    title_template: "Camera back — {cam}"
+    message_template: "{text}{link}"
+    description: "Recovery of nvr_camera_cazuta (the episode's resolved_type)."
+    min_repeat_min: 0
+  - type: nvr_nvr_cazut
+    severity: warning
+    icon: "📵"
+    category: Cameras
+    title_template: "NVR offline — {ip}"
+    message_template: "{text}{link}"
+    description: "The NVR stopped answering. Context: text, ip."
+    min_repeat_min: 0
+  - type: nvr_nvr_revenit
+    severity: info
+    icon: "✅"
+    category: Cameras
+    title_template: "NVR back — {ip}"
+    message_template: "{text}{link}"
+    description: "Recovery of nvr_nvr_cazut (the episode's resolved_type)."
+    min_repeat_min: 0
+  - type: nvr_fluxuri_lipsa
+    severity: warning
+    icon: "⚠️"
+    category: Cameras
+    title_template: "Cameras without a video stream"
+    message_template: "{text}{link}"
+    description: "Cameras missing from the streaming configuration; at most every 6 hours."
+    min_repeat_min: 60
+  - type: nvr_flux_regenerat
+    severity: info
+    icon: "🔁"
+    category: Cameras
+    title_template: "Streaming configuration regenerated"
+    message_template: "{text}{link}"
+    description: "OpenVigil rewrote the streaming configuration at startup."
+    min_repeat_min: 60
+  # Disk and recording
+  - type: nvr_disc_plin
+    severity: warning
+    icon: "💾"
+    category: Cameras
+    title_template: "Disk almost full — {liber} GB free"
+    message_template: "{text}{link}"
+    description: "Free space under twice the recording minimum; at most every 12 hours. Context: text, liber (GB)."
+    min_repeat_min: 0
+  - type: nvr_disc_ok
+    severity: info
+    icon: "💾"
+    category: Cameras
+    title_template: "Disk space sufficient again"
+    message_template: "{text}{link}"
+    description: "Recovery of nvr_disc_plin (the episode's resolved_type)."
+    min_repeat_min: 0
+  - type: nvr_spatiu_insuficient
+    severity: warning
+    icon: "💾"
+    category: Cameras
+    title_template: "Recordings deleted before their retention"
+    message_template: "{text}{link}"
+    description: "Not enough space: segments were deleted before the retention period ended."
+    min_repeat_min: 60
+  - type: nvr_curatare_esuata
+    severity: warning
+    icon: "⚠️"
+    category: Cameras
+    title_template: "Recording cleanup failed"
+    message_template: "{text}{link}"
+    description: "The hourly cleanup of old recordings failed; it retries in an hour."
+    min_repeat_min: 60
+  - type: nvr_inregistrare_bucla
+    severity: warning
+    icon: "⚠️"
+    category: Cameras
+    title_template: "Recording keeps crashing — {cam}"
+    message_template: "{text}{link}"
+    description: "A camera's recorder crashed 5 times in under a minute. Context: text, cam (cam<id>)."
+    min_repeat_min: 30
+  - type: nvr_inregistrare_problema
+    severity: warning
+    icon: "⚠️"
+    category: Cameras
+    title_template: "Recording problem"
+    message_template: "{text}{link}"
+    description: "A gap or a problem in a camera's recording; a silent camera opens an episode."
+    min_repeat_min: 60
+  - type: nvr_inregistrare_oprita
+    severity: critical
+    icon: "🔒"
+    category: Cameras
+    title_template: "Recording stopped"
+    message_template: "{text}{link}"
+    description: "The recordings directory is not writable — nothing is being recorded."
+    min_repeat_min: 0
+  - type: nvr_inregistrare_reluata
+    severity: info
+    icon: "✅"
+    category: Cameras
+    title_template: "Recording resumed"
+    message_template: "{text}{link}"
+    description: "Recovery of nvr_inregistrare_oprita and of a silent camera (the episode's resolved_type)."
+    min_repeat_min: 0
+  - type: nvr_backup_esuat
+    severity: warning
+    icon: "⚠️"
+    category: Cameras
+    title_template: "OpenVigil backup failed"
+    message_template: "{text}{link}"
+    description: "The nightly backup failed, or was written locally but did not leave the premises."
+    min_repeat_min: 360
+  # Detections and rules
+  - type: nvr_intrus
+    severity: critical
+    icon: "🚨"
+    category: Cameras
+    title_template: "Intruder confirmed — {cam}"
+    message_template: "{text}{link}"
+    description: "A person (or an unknown face) confirmed while the house is in away or night mode. Context: text, cam, ora."
+    min_repeat_min: 5
+  - type: nvr_intrus_acasa
+    severity: info
+    icon: "🚨"
+    category: Cameras
+    title_template: "Intruder confirmed (home mode) — {cam}"
+    message_template: "{text}{link}"
+    description: "The same, while someone is home. Context: text, cam, ora."
+    min_repeat_min: 0
+  - type: nvr_cadere
+    severity: critical
+    icon: "🆘"
+    category: Cameras
+    title_template: "Possible fall — {nume_cam}"
+    message_template: "{nume_cam}: a person appears to have fallen and not got up ({ora}). {link}"
+    description: "Fall detection (the only type OpenVigil 2.1 sends). Context: nume_cam, cam, ora, link — no text."
+    min_repeat_min: 5
+  - type: nvr_zgomot
+    severity: warning
+    icon: "🔊"
+    category: Cameras
+    title_template: "Noise — {cam}"
+    message_template: "{text}{link}"
+    description: "The noise alarm of a camera's audio. Context: text, cam."
+    min_repeat_min: 10
+  - type: nvr_regula
+    severity: warning
+    icon: "⚡"
+    category: Cameras
+    title_template: "OpenVigil rule — {cam}"
+    message_template: "{text}{link}"
+    description: "A rule's “notify” action. Context: text, cam (or “sistem”)."
+    min_repeat_min: 0
+  - type: nvr_rezumat
+    severity: info
+    icon: "📋"
+    category: Cameras
+    title_template: "OpenVigil daily digest"
+    message_template: "{text}{link}"
+    description: "The daily digest, the weekly channel check and the test button in OpenVigil's settings."
+    min_repeat_min: 0
+routes:
+  - {template: nvr_camera_cazuta, channel: "${alert_channel}", severity_min: info}
+  - {template: nvr_camera_revenita, channel: "${alert_channel}", severity_min: info}
+  - {template: nvr_nvr_cazut, channel: "${alert_channel}", severity_min: info}
+  - {template: nvr_nvr_revenit, channel: "${alert_channel}", severity_min: info}
+  - {template: nvr_fluxuri_lipsa, channel: "${alert_channel}", severity_min: info}
+  - {template: nvr_flux_regenerat, channel: "${alert_channel}", severity_min: info}
+  - {template: nvr_disc_plin, channel: "${alert_channel}", severity_min: info}
+  - {template: nvr_disc_ok, channel: "${alert_channel}", severity_min: info}
+  - {template: nvr_spatiu_insuficient, channel: "${alert_channel}", severity_min: info}
+  - {template: nvr_curatare_esuata, channel: "${alert_channel}", severity_min: info}
+  - {template: nvr_inregistrare_bucla, channel: "${alert_channel}", severity_min: info}
+  - {template: nvr_inregistrare_problema, channel: "${alert_channel}", severity_min: info}
+  - {template: nvr_inregistrare_oprita, channel: "${alert_channel}", severity_min: info}
+  - {template: nvr_inregistrare_reluata, channel: "${alert_channel}", severity_min: info}
+  - {template: nvr_backup_esuat, channel: "${alert_channel}", severity_min: info}
+  - {template: nvr_intrus, channel: "${alert_channel}", severity_min: info}
+  - {template: nvr_intrus_acasa, channel: "${alert_channel}", severity_min: info}
+  - {template: nvr_cadere, channel: "${alert_channel}", severity_min: info}
+  - {template: nvr_zgomot, channel: "${alert_channel}", severity_min: info}
+  - {template: nvr_regula, channel: "${alert_channel}", severity_min: info}
+  - {template: nvr_rezumat, channel: "${alert_channel}", severity_min: info}

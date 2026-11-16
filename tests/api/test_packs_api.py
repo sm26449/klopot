@@ -60,6 +60,26 @@ async def test_install_with_parameters_and_a_second_instance(db_client, admin_ke
     assert len(audit) == 2
 
 
+async def test_fronius_installs_once_per_inverter_and_shares_the_collector_alerts(db_client, admin_key, db_session, ui_channel):
+    """The collector-wide items are the same in every install: the second
+    inverter finds them identical and adds only its own."""
+    first = {"inverter_id": 1, "inverter_name": "Roof east"}
+    assert (await db_client.post("/v1/packs/apply", json={"pack_id": "fronius-inverter", "params": first},
+                                 headers=_h(admin_key))).json()["applied"]
+    second = {"inverter_id": 2, "inverter_name": "Roof west"}
+    preview = (await db_client.post("/v1/packs/preview", json={"pack_id": "fronius-inverter", "params": second},
+                                    headers=_h(admin_key))).json()
+    assert preview["counts"]["differs"] == 0, preview
+    new = {(i["section"], i["key"]) for i in preview["items"] if i["status"] == "new"}
+    assert ("rules", "fronius_inv2_fault") in new and ("variables", "fronius.inv2.v_max") in new
+    assert not any("inv1" in key or key in {"fronius_collector_offline", "fronius.fleet"} for _, key in new)
+    assert (await db_client.post("/v1/packs/apply", json={"pack_id": "fronius-inverter", "params": second},
+                                 headers=_h(admin_key))).json()["applied"]
+    rules = {r.name: r for r in (await db_session.execute(select(Rule))).scalars()}
+    assert {"fronius_inv1_fault", "fronius_inv2_fault", "fronius_collector_offline"} <= set(rules)
+    assert rules["fronius_inv2_throttled"].enabled is False   # opt-in: an export limit throttles on purpose
+
+
 async def test_bad_parameters_are_reported_not_applied(db_client, admin_key, ui_channel):
     r = (await db_client.post("/v1/packs/apply", json={"pack_id": "sensor-threshold", "params": {"threshold": "warm"}},
                               headers=_h(admin_key))).json()

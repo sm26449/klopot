@@ -1,0 +1,223 @@
+# Battery alerts for Seplos BMS V3 packs read by seplos-modbus-mqtt
+# (https://github.com/sm26449/seplos-modbus-mqtt, 2.5+): state of charge,
+# temperature, cell balance, packs that stopped reporting and the collector
+# itself. The thresholds are constant variables — change them later under
+# Variables without touching the rules.
+#
+# The collector publishes a value only when it changes, so the rules judge
+# freshness by its heartbeat (<prefix>/health/uptime, every 60 s), not by the
+# age of a reading: a battery that sits at 18 % for an hour is still low.
+pack:
+  id: seplos-bms
+  name: {en: "Seplos BMS battery", ro: "Baterie Seplos BMS"}
+  description:
+    en: "Alerts for Seplos BMS V3 batteries read by seplos-modbus-mqtt: low and critical state of charge, high and critical temperature, cell imbalance, battery packs that stopped reporting, and the collector going offline."
+    ro: "Alerte pentru bateriile Seplos BMS V3 citite de seplos-modbus-mqtt: stare de încărcare scăzută și critică, temperatură ridicată și critică, dezechilibru între celule, pachete care nu mai raportează și colectorul căzut."
+  version: 1.0.0
+  tags: [energy, battery, seplos, mqtt]
+  parameters:
+    - name: broker_host
+      label: {en: "MQTT broker host", ro: "Host broker MQTT"}
+      description:
+        en: "The broker seplos-modbus-mqtt publishes to."
+        ro: "Brokerul în care publică seplos-modbus-mqtt."
+      default: mqtt.example.com
+    - name: broker_port
+      label: {en: "MQTT broker port", ro: "Port broker MQTT"}
+      type: integer
+      default: 1883
+    - name: topic_prefix
+      label: {en: "Topic prefix", ro: "Prefix topic"}
+      description:
+        en: "The collector's MQTT prefix (prefix in seplos_bms_mqtt.ini, MQTT_PREFIX in Docker)."
+        ro: "Prefixul MQTT al colectorului (prefix în seplos_bms_mqtt.ini, MQTT_PREFIX în Docker)."
+      default: seplos
+    - name: soc_low_pct
+      label: {en: "Warn below state of charge (%)", ro: "Avertizare sub starea de încărcare (%)"}
+      type: number
+      default: 20
+    - name: soc_critical_pct
+      label: {en: "Critical below state of charge (%)", ro: "Critic sub starea de încărcare (%)"}
+      type: number
+      default: 15
+    - name: temp_high_c
+      label: {en: "Warn above temperature (°C)", ro: "Avertizare peste temperatura (°C)"}
+      type: number
+      default: 45
+    - name: temp_critical_c
+      label: {en: "Critical above temperature (°C)", ro: "Critic peste temperatura (°C)"}
+      type: number
+      default: 50
+    - name: cell_delta_mv
+      label: {en: "Warn above cell spread (mV)", ro: "Avertizare peste diferența între celule (mV)"}
+      type: number
+      default: 50
+    - name: alert_channel
+      label: {en: "Send to channel", ro: "Trimite pe canalul"}
+      type: channel
+      default: ui_default
+
+version: "1.0"
+inputs:
+  - name: seplos_mqtt
+    kind: mqtt
+    config: {host: "${broker_host}", port: "${broker_port}"}
+variables:
+  - name: seplos.soc
+    source: mqtt
+    input: seplos_mqtt
+    config: {topic: "${topic_prefix}/pack/pack_average_soc", type: number}
+    description: "Average state of charge of all packs, %."
+  - name: seplos.temp_avg
+    source: mqtt
+    input: seplos_mqtt
+    config: {topic: "${topic_prefix}/pack/pack_avg_temp", type: number}
+    description: "Average cell temperature of all packs, °C."
+  - name: seplos.cell_delta_mv
+    source: mqtt
+    input: seplos_mqtt
+    config: {topic: "${topic_prefix}/pack/pack_cell_delta", type: number}
+    description: "Spread between the highest and the lowest cell voltage, mV."
+  - name: seplos.stale_batteries
+    source: mqtt
+    input: seplos_mqtt
+    config: {topic: "${topic_prefix}/health/stale_batteries", type: number}
+    description: "Packs with no data for over 2 minutes (the collector's own count)."
+  - name: seplos.uptime
+    source: mqtt
+    input: seplos_mqtt
+    config: {topic: "${topic_prefix}/health/uptime", type: number}
+    description: "The collector's heartbeat: its uptime, published every 60 s."
+  - name: seplos.status
+    source: mqtt
+    input: seplos_mqtt
+    config: {topic: "${topic_prefix}/health/status", type: string}
+    description: "online, or offline when the collector's MQTT session ends (last will)."
+  - name: seplos.soc_low_pct
+    source: constant
+    config: {type: number, value: "${soc_low_pct}"}
+    description: "Warn below this state of charge, %."
+  - name: seplos.soc_critical_pct
+    source: constant
+    config: {type: number, value: "${soc_critical_pct}"}
+    description: "Critical below this state of charge, %."
+  - name: seplos.temp_high_c
+    source: constant
+    config: {type: number, value: "${temp_high_c}"}
+    description: "Warn above this temperature, °C."
+  - name: seplos.temp_critical_c
+    source: constant
+    config: {type: number, value: "${temp_critical_c}"}
+    description: "Critical above this temperature, °C."
+  - name: seplos.cell_delta_warning_mv
+    source: constant
+    config: {type: number, value: "${cell_delta_mv}"}
+    description: "Warn above this cell voltage spread, mV."
+templates:
+  - type: seplos_soc_low
+    severity: warning
+    icon: "🔋"
+    category: Battery
+    title_template: "Battery low: {seplos.soc} %"
+    message_template: "The average state of charge fell below {seplos.soc_low_pct} %. Reduce the load or let the battery charge."
+    min_repeat_min: 30
+  - type: seplos_soc_critical
+    severity: critical
+    icon: "🚨"
+    category: Battery
+    title_template: "Battery critical: {seplos.soc} %"
+    message_template: "The average state of charge fell below {seplos.soc_critical_pct} %. The BMS will soon stop discharging — shed load now."
+    min_repeat_min: 60
+  - type: seplos_temp_high
+    severity: warning
+    icon: "🌡️"
+    category: Battery
+    title_template: "Battery hot: {seplos.temp_avg} °C"
+    message_template: "The average cell temperature is above {seplos.temp_high_c} °C. Check the ventilation and the load — heat ages the cells."
+    min_repeat_min: 30
+  - type: seplos_temp_critical
+    severity: critical
+    icon: "🔥"
+    category: Battery
+    title_template: "Battery temperature critical: {seplos.temp_avg} °C"
+    message_template: "The average cell temperature is above {seplos.temp_critical_c} °C. The BMS limits charging and discharging near this point — inspect the battery cabinet."
+    min_repeat_min: 15
+  - type: seplos_cell_imbalance
+    severity: warning
+    icon: "⚡"
+    category: Battery
+    title_template: "Cell imbalance: {seplos.cell_delta_mv} mV"
+    message_template: "The spread between the highest and the lowest cell voltage exceeds {seplos.cell_delta_warning_mv} mV. A full charge lets the BMS balance; if it persists, check the pack."
+    min_repeat_min: 60
+  - type: seplos_packs_stale
+    severity: warning
+    icon: "📡"
+    category: Battery
+    title_template: "Battery packs not reporting: {seplos.stale_batteries}"
+    message_template: "seplos-modbus-mqtt is running but has had no data from {seplos.stale_batteries} pack(s) for over 2 minutes. Check the RS485 link to the BMS."
+    min_repeat_min: 30
+  - type: seplos_collector_offline
+    severity: critical
+    icon: "📡"
+    category: Battery
+    title_template: "Seplos collector offline"
+    message_template: "seplos-modbus-mqtt stopped reporting — no heartbeat for 3 minutes, or it went offline. The battery state is unknown: check its container and the MQTT broker."
+    min_repeat_min: 30
+rules:
+  - name: seplos_soc_low
+    template_type: seplos_soc_low
+    condition_expr: "var_age('seplos.uptime') < 180 and seplos.soc < seplos.soc_low_pct and seplos.soc >= seplos.soc_critical_pct"
+    persist_n: 2
+    eval_interval_sec: 30
+    vars_extract: [seplos.soc, seplos.soc_low_pct]
+    trigger_summary: "State of charge below the warning level, collector alive"
+  - name: seplos_soc_critical
+    template_type: seplos_soc_critical
+    condition_expr: "var_age('seplos.uptime') < 180 and seplos.soc < seplos.soc_critical_pct"
+    persist_n: 2
+    eval_interval_sec: 15
+    vars_extract: [seplos.soc, seplos.soc_critical_pct]
+    trigger_summary: "State of charge below the critical level, collector alive"
+  - name: seplos_temp_high
+    template_type: seplos_temp_high
+    condition_expr: "var_age('seplos.uptime') < 180 and seplos.temp_avg > seplos.temp_high_c and seplos.temp_avg <= seplos.temp_critical_c"
+    persist_n: 3
+    eval_interval_sec: 30
+    vars_extract: [seplos.temp_avg, seplos.temp_high_c]
+    trigger_summary: "Average cell temperature above the warning level"
+  - name: seplos_temp_critical
+    template_type: seplos_temp_critical
+    condition_expr: "var_age('seplos.uptime') < 180 and seplos.temp_avg > seplos.temp_critical_c"
+    persist_n: 2
+    eval_interval_sec: 15
+    vars_extract: [seplos.temp_avg, seplos.temp_critical_c]
+    trigger_summary: "Average cell temperature above the critical level"
+  - name: seplos_cell_imbalance
+    template_type: seplos_cell_imbalance
+    condition_expr: "var_age('seplos.uptime') < 180 and seplos.cell_delta_mv > seplos.cell_delta_warning_mv"
+    persist_n: 5
+    eval_interval_sec: 60
+    vars_extract: [seplos.cell_delta_mv, seplos.cell_delta_warning_mv]
+    trigger_summary: "Cell voltage spread above the warning level for five checks"
+  - name: seplos_packs_stale
+    template_type: seplos_packs_stale
+    condition_expr: "var_age('seplos.uptime') < 180 and seplos.stale_batteries > 0"
+    persist_n: 2
+    eval_interval_sec: 60
+    vars_extract: [seplos.stale_batteries]
+    trigger_summary: "The collector reports packs with no data"
+  - name: seplos_collector_offline
+    template_type: seplos_collector_offline
+    condition_expr: "seplos.status == 'offline' or (var_age('seplos.uptime') > 180 and var_age('seplos.uptime') < 86400)"
+    persist_n: 2
+    eval_interval_sec: 60
+    vars_extract: [seplos.status]
+    trigger_summary: "No collector heartbeat for 3 minutes, or its last will says offline"
+routes:
+  - {template: seplos_soc_low, channel: "${alert_channel}", severity_min: info}
+  - {template: seplos_soc_critical, channel: "${alert_channel}", severity_min: info}
+  - {template: seplos_temp_high, channel: "${alert_channel}", severity_min: info}
+  - {template: seplos_temp_critical, channel: "${alert_channel}", severity_min: info}
+  - {template: seplos_cell_imbalance, channel: "${alert_channel}", severity_min: info}
+  - {template: seplos_packs_stale, channel: "${alert_channel}", severity_min: info}
+  - {template: seplos_collector_offline, channel: "${alert_channel}", severity_min: info}
