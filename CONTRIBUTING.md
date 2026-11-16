@@ -22,8 +22,8 @@ pip install -e ".[dev]"
 > **One command for everything CI runs:** `scripts/check.sh` (add `--mysql`
 > to also run the MySQL gate against a throwaway container).
 
-The admin-UI tests also need Node — 24 LTS, as in CI (`.nvmrc`; 18 and later
-work) — `node --test tests/js/*.mjs`; the
+The admin-UI tests also need Node — 24 LTS, as in CI (`.nvmrc`; jsdom 31
+needs 22.22+ or 24.15+, Playwright 1.62+ needs 20+) — `node --test tests/js/*.mjs`; the
 accessibility suite and the browser tests install their dev tooling with `npm ci`.
 
 > **CI.** GitHub Actions runs on every push to `main` and every pull request;

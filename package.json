@@ -5,12 +5,12 @@
   "description": "Dev-only test tooling for the alertd admin UI. The shipped UI is the vendored static ESM under app/admin_ui/static; these devDependencies back the node --test accessibility harness only.",
   "type": "module",
   "scripts": {
-    "test": "node --test tests/js/*.mjs"
+    "test": "node --test --test-reporter=tap tests/js/*.mjs"
   },
   "devDependencies": {
-    "axe-core": "4.14.0",
-    "jsdom": "26.1.0",
+    "axe-core": "4.14.1",
+    "jsdom": "31.0.1",
     "openapi-typescript": "7.13.0",
-    "playwright": "1.61.1"
+    "playwright": "1.65.1"
   }
 }

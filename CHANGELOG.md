@@ -35,6 +35,9 @@ adheres to [Semantic Versioning](https://semver.org/).
   one typed place instead of five; the failed-operations list reads only the
   columns it shows. The mypy baseline lost eight entries.
 - CI: `actions/setup-python` 7; the MySQL job may take 30 minutes.
+- Development needs Node 22+ (`.nvmrc`: 24): jsdom 31 and Playwright 1.65;
+  the test scripts pin the TAP reporter, which Node 23+ no longer uses by
+  default.
 
 ### Added
 

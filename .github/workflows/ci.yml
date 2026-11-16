@@ -256,7 +256,7 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - run: node --test tests/js/*.mjs
+      - run: node --test --test-reporter=tap tests/js/*.mjs
 
   # ── Browser end-to-end (Playwright) ──────────────────────────────
   # scripts/e2e.sh builds the image from the checkout, starts a fresh

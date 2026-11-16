@@ -14,7 +14,7 @@
 # MySQL 8 and the app image on a free 127.0.0.1 port — exactly a first install:
 # bootstrap admin password (forced change at first login) plus a bootstrap admin
 # API key the tests use to seed data. Never touches any other container.
-# Needs: docker, node ≥ 18, `npm ci` (Playwright), Chromium (installed on demand).
+# Needs: docker, node ≥ 22 (see .nvmrc), `npm ci` (Playwright), Chromium (installed on demand).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -86,7 +86,7 @@ else
   [ -n "$files" ] || { echo "no e2e test files match '${E2E_ONLY:-}'" >&2; exit 1; }
   echo "== running $(echo "$files" | wc -w) e2e file(s)"
   # Files run in name order (00_first_run must go first: it sets the password).
-  node --test --test-concurrency=1 $files || rc=$?
+  node --test --test-reporter=tap --test-concurrency=1 $files || rc=$?
 fi
 if [ "$rc" = 0 ] && [ -n "${E2E_AFTER:-}" ]; then
   echo "== after: $E2E_AFTER"
@@ -94,7 +94,7 @@ if [ "$rc" = 0 ] && [ -n "${E2E_AFTER:-}" ]; then
 fi
 if [ "$KEEP" = 1 ]; then
   echo "stack kept: $E2E_URL — rerun a file with:"
-  echo "  E2E_URL=$E2E_URL E2E_PASSWORD=$E2E_PASSWORD E2E_ADMIN_KEY=$E2E_ADMIN_KEY node --test tests/e2e/<file>"
+  echo "  E2E_URL=$E2E_URL E2E_PASSWORD=$E2E_PASSWORD E2E_ADMIN_KEY=$E2E_ADMIN_KEY node --test --test-reporter=tap tests/e2e/<file>"
   echo "remove it: docker rm -f $APP $DB; docker network rm $NET"
 fi
 exit "$rc"

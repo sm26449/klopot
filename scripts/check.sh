@@ -92,7 +92,7 @@ if [ "$FAST" = 0 ]; then step "mypy (baseline)" mypy_baseline; fi
 step "pytest (SQLite)" env ALERTD_MQTT_HOST="" "$PY" -m pytest -q -p no:cacheprovider -m "not mysql"
 if [ "$FAST" = 0 ]; then
   if command -v node >/dev/null; then
-    step "admin-ui node tests" bash -c 'node --test tests/js/*.mjs 2>&1 | grep -E "^# (tests|pass|fail)|^not ok"; exit "${PIPESTATUS[0]}"'
+    step "admin-ui node tests" bash -c 'node --test --test-reporter=tap tests/js/*.mjs 2>&1 | grep -E "^# (tests|pass|fail)|^not ok"; exit "${PIPESTATUS[0]}"'
   else
     echo; echo "== admin-ui node tests: SKIPPED (node not installed)"
   fi
