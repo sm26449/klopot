@@ -139,6 +139,11 @@ def test_fronius_inverters_asleep_at_night_are_not_an_outage():
     assert fired("fronius-inverter", night, params=NIGHT) == set()
 
 
+def test_fronius_state_7_after_dark_is_not_a_fault():
+    # Seen on a real site: idle Fronius inverters report SunSpec 7 at night.
+    assert fired("fronius-inverter", _fronius(fronius__inv1__state=7), params=NIGHT) == set()
+
+
 def test_fronius_a_dead_collector_raises_one_alert_not_stale_readings():
     stale = _fronius(fronius__inv1__state=7, fronius__inv1__v_max=259)
     assert fired("fronius-inverter", stale, ages={"fronius.fleet": 600}, params=DAY) == {"fronius_collector_offline"}

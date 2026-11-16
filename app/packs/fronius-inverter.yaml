@@ -13,7 +13,8 @@
 # - <prefix>/status — the collector's last will (offline).
 # Readings are published on change only, so freshness comes from the
 # heartbeat, not from a reading's age. At night the collector stops reading
-# the inverters, so "not responding" alerts only within the daylight hours.
+# the inverters, and an idle Fronius reports state 7 (fault) after dark — so
+# "fault" and "not responding" alert only within the daylight hours.
 pack:
   id: fronius-inverter
   name: {en: "Fronius inverter", ro: "Invertor Fronius"}
@@ -197,11 +198,11 @@ rules:
     trigger_summary: "During daylight this inverter is offline while others answer"
   - name: fronius_inv${inverter_id}_fault
     template_type: fronius_inv${inverter_id}_fault
-    condition_expr: "var_age('fronius.fleet') < 120 and fronius.inv${inverter_id}.status == 'online' and fronius.inv${inverter_id}.state == 7"
+    condition_expr: "in_window(${day_start}, ${day_end}) and var_age('fronius.fleet') < 120 and fronius.inv${inverter_id}.status == 'online' and fronius.inv${inverter_id}.state == 7"
     persist_n: 2
     eval_interval_sec: 30
     vars_extract: ["fronius.inv${inverter_id}.state"]
-    trigger_summary: "SunSpec operating state 7 (fault) on a responding inverter"
+    trigger_summary: "SunSpec operating state 7 (fault) on a responding inverter, in daylight"
   - name: fronius_inv${inverter_id}_throttled
     template_type: fronius_inv${inverter_id}_throttled
     condition_expr: "var_age('fronius.fleet') < 120 and fronius.inv${inverter_id}.status == 'online' and fronius.inv${inverter_id}.state == 5"

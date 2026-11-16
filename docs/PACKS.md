@@ -125,7 +125,8 @@ in English and without channels or contact data. Two notes from that
 review: a MQTT collector that publishes **on change only** cannot be judged
 by a reading's age — these packs gate on the collector's heartbeat instead —
 and SunSpec operating state **4 is MPPT** (normal production); throttled is 5,
-fault 7. `tests/packs/test_catalog_rules.py` runs every catalog rule against
+fault 7 — but an idle Fronius also reports 7 after dark, so the fault rule
+only alerts in daylight. `tests/packs/test_catalog_rules.py` runs every catalog rule against
 scenarios (fires on its condition, stays silent otherwise and before any
 data arrives).
 
