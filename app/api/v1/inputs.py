@@ -5,6 +5,7 @@ adapters + topic filters)."""
 from __future__ import annotations
 
 import logging
+import math
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
@@ -22,14 +23,16 @@ from ...inputs.webhook import (
     INBOUND_KINDS,
     WebhookInput,
     auth_changed,
+    rate_limit,
     short_token,
-    validate_inbound_auth,
+    validate_inbound,
     webhook_auth_ok,
 )
 from ...schemas.common import InputKind, Page
 from ...schemas.input import InputCreate, InputHealth, InputRead, InputUpdate
 from ...secrets_registry import mask_config, merge_secret_update, secret_status
 from ...utils.failure_budget import FailureBudget
+from ...utils.rate_limit import PerMinuteLimiter
 from ._crud import crud_get_or_404, crud_list, enforce_create_cap, flush_or_409
 
 logger = logging.getLogger(__name__)
@@ -55,15 +58,16 @@ def _require_supported_kind(kind: Any) -> None:
 
 def _require_valid_auth(kind: Any, config: dict[str, Any] | None,
                         before: dict[str, Any] | None = None) -> None:
-    """An inbound input must be able to authenticate as configured
-    (inputs/webhook.py ``validate_inbound_auth``): 422 otherwise. Its token's
-    length is judged when the authentication is new or changes against
-    ``before`` (the stored config of an input that already was inbound)."""
+    """An inbound input's config must be valid (inputs/webhook.py
+    ``validate_inbound``: authentication, rate limit): 422 otherwise. Its
+    token's length is judged when the authentication is new or changes
+    against ``before`` (the stored config of an input that already was
+    inbound)."""
     if getattr(kind, "value", kind) not in INBOUND_KINDS:
         return
     config = config or {}
     try:
-        validate_inbound_auth(config, judge_token=auth_changed(before, config))
+        validate_inbound(config, judge_token=auth_changed(before, config))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e)) from None
 
@@ -279,6 +283,9 @@ async def restart_input(
 
 # ── Webhook receiver (no API key — auth is per-input via X-Input-Token) ──
 
+# Each inbound input's own request allowance (config rate_limit_per_min), by id.
+_INPUT_RATE = PerMinuteLimiter()
+
 # Wrong or missing input tokens (and ids that are no input), per address:
 # kept apart from the API-key budget, so a sender with a stale token does not
 # lock out the keys used from the same address.
@@ -286,8 +293,10 @@ _TOKEN_BUDGET = FailureBudget(max_failures=5, window_sec=60.0, max_addresses=10_
 
 
 def reset_input_token_failures() -> None:
-    """Forget every wrong-token count (tests)."""
+    """Forget every wrong-token count and input allowance (tests: input ids
+    repeat in every test database)."""
     _TOKEN_BUDGET.reset()
+    _INPUT_RATE.forget()
 
 
 def _presented_token(kind: str, x_input_token: str | None, authorization: str | None) -> str | None:
@@ -341,6 +350,17 @@ async def receive_webhook(
         )
     # The caller got in: the activity log may keep this request's body.
     request.state.inbound_ok = True
+    # Within the input's own limit, if it has one: a sender with the right
+    # token cannot flood it either.
+    limit = rate_limit(obj.config or {})
+    if limit is not None:
+        admission = _INPUT_RATE.admit(obj.id, limit)
+        if not admission.allowed:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"This input takes at most {limit} requests a minute",
+                headers={"Retry-After": str(max(1, math.ceil(admission.retry_after)))},
+            )
 
     adapter = get_manager().get_adapter(obj.name)
     if adapter is None or not isinstance(adapter, WebhookInput):

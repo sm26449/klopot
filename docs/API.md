@@ -546,7 +546,9 @@ input or wrong token"), and count against the sending address: after five in
 a minute every request from it gets `429` (`Retry-After: 60`) — the input's
 editor lists its recent requests with status and address. A token needs at
 least 32 characters when it is set or changed; an older, shorter one keeps
-working and is flagged (`token_too_short` on `GET /v1/inputs`). Alertmanager:
+working and is flagged (`token_too_short` on `GET /v1/inputs`). An input may
+limit its own requests (`rate_limit_per_min` in its config): over it, `429`
+with `Retry-After`. Alertmanager:
 
 ```yaml
 receivers:

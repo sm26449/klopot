@@ -231,6 +231,12 @@ a different one; for `auth_token_ref`, the variable's value is measured
 An input saved before this floor keeps working and stays editable;
 `GET /v1/inputs` says `token_too_short: true` and the Inputs page marks it.
 
+An inbound input may also limit its own requests: `rate_limit_per_min` in its
+config (1–60000, empty = no limit), counted like an API key's ([Rate
+limit](#rate-limit)) — after the token, so a sender with the right token
+over the limit gets `429` with `Retry-After`, and a wrong token is still the
+`401` above.
+
 Turning authentication off is for a sender on your own
 network that cannot send a header; the public traefik overlay never opens
 this endpoint (docs/DEPLOY.md).

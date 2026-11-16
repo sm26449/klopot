@@ -553,7 +553,9 @@ adresa care trimite: după cinci într-un minut, orice cerere de la ea primește
 `429` (`Retry-After: 60`) — editorul inputului arată cererile recente, cu
 status și adresă. Un token are nevoie de cel puțin 32 de caractere când e setat
 sau schimbat; unul mai vechi și mai scurt funcționează în continuare și e
-semnalat (`token_too_short` în `GET /v1/inputs`). În Alertmanager:
+semnalat (`token_too_short` în `GET /v1/inputs`). Un input își poate limita
+cererile (`rate_limit_per_min` în configurația lui): peste limită, `429` cu
+`Retry-After`. În Alertmanager:
 
 ```yaml
 receivers:

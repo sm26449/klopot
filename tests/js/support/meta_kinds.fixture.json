@@ -1043,6 +1043,14 @@
           "default": null,
           "help": "Expected inbound token (write-only). At least 32 characters, e.g. openssl rand -base64 32.",
           "ref_field": "auth_token_ref"
+        },
+        {
+          "name": "rate_limit_per_min",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Requests a minute this input takes, empty = no limit. A quiet sender may send this many at once, then one every 60/N seconds; over it, 429 with Retry-After."
         }
       ]
     },
@@ -1064,6 +1072,14 @@
           "default": null,
           "help": "Expected inbound token (write-only), checked when auth_required is true. At least 32 characters, e.g. openssl rand -base64 32.",
           "ref_field": "auth_token_ref"
+        },
+        {
+          "name": "rate_limit_per_min",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Requests a minute this input takes, empty = no limit. A quiet sender may send this many at once, then one every 60/N seconds; over it, 429 with Retry-After."
         }
       ]
     },
@@ -1125,6 +1141,14 @@
           "default": null,
           "help": "Expected token (write-only). In Alertmanager: http_config.authorization.credentials. At least 32 characters, e.g. openssl rand -base64 32.",
           "ref_field": "auth_token_ref"
+        },
+        {
+          "name": "rate_limit_per_min",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Requests a minute this input takes, empty = no limit. A quiet sender may send this many at once, then one every 60/N seconds; over it, 429 with Retry-After."
         }
       ]
     }

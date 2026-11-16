@@ -54,6 +54,9 @@ adheres to [Semantic Versioning](https://semver.org/).
   WebSocket, and not as a wrong key; an edit or the resolve cache never
   refills it; rotation keeps it. Empty = no limit, as for every existing key
   (migration `0043`). Metric `alertd_api_key_rate_limited_total{key}`.
+- **Per-input rate limit** for webhook, SMS inbox and Alertmanager inputs:
+  `rate_limit_per_min` in the input's config (Inputs → the input). Counted
+  like an API key's, after the token; over it, `429` with `Retry-After`.
 - `compose.public.yml`: accept alerts from the internet — opens exactly
   `POST /v1/fire`, with a per-client rate limit, an overall in-flight limit
   and a 64 KiB body limit in traefik (docs/DEPLOY.md, "Exposing /v1/fire to

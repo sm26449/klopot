@@ -99,6 +99,8 @@ class WebhookInput(BaseInput):
 INBOUND_KINDS = frozenset({"webhook", "sms_inbox", "alertmanager"})
 # The fields that decide how an inbound input authenticates.
 AUTH_FIELDS = ("auth_required", "auth_token", "auth_token_ref")
+# An inbound input's own request limit (``rate_limit_per_min``), like an API key's.
+MAX_RATE_LIMIT_PER_MIN = 60_000
 # Characters an inbound token needs: ~190 bits as base64, beyond guessing
 # even before the per-address budget (public-exposure review F3).
 MIN_TOKEN_LENGTH = 32
@@ -155,6 +157,26 @@ def validate_inbound_auth(config: dict[str, Any], *, judge_token: bool = True) -
     problem = short_token(config) if judge_token else None
     if problem:
         raise ValueError(problem)
+
+
+def rate_limit(config: dict[str, Any]) -> int | None:
+    """The input's ``rate_limit_per_min`` (requests a minute), or ``None``
+    for no limit. Saved configs are validated (``validate_inbound``); a value
+    that is not a positive integer here means no limit."""
+    value = config.get("rate_limit_per_min")
+    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else None
+
+
+def validate_inbound(config: dict[str, Any], *, judge_token: bool = True) -> None:
+    """Everything an inbound input's config must satisfy to be saved: its
+    authentication (``validate_inbound_auth``) and its optional
+    ``rate_limit_per_min`` (an integer, 1–60000, or absent / null)."""
+    validate_inbound_auth(config, judge_token=judge_token)
+    value = config.get("rate_limit_per_min")
+    if value is not None and (not isinstance(value, int) or isinstance(value, bool)
+                              or not 1 <= value <= MAX_RATE_LIMIT_PER_MIN):
+        raise ValueError(f"rate_limit_per_min must be a whole number from 1 to {MAX_RATE_LIMIT_PER_MIN}, "
+                         "or empty for no limit")
 
 
 def webhook_auth_ok(config: dict[str, Any], header_token: str | None) -> bool:

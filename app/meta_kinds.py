@@ -236,6 +236,8 @@ _OPEN_INPUT_HELP = ("On by default, and saving needs a token then. Turn it off o
                     "own network that cannot send a header: anyone who can reach Klopot could post here.")
 
 _TOKEN_HELP = "At least 32 characters, e.g. openssl rand -base64 32."
+_RATE_HELP = ("Requests a minute this input takes, empty = no limit. A quiet sender may send this many "
+              "at once, then one every 60/N seconds; over it, 429 with Retry-After.")
 
 _INPUTS: dict[str, list[dict[str, Any]]] = {
     "mqtt": [
@@ -262,6 +264,7 @@ _INPUTS: dict[str, list[dict[str, Any]]] = {
         _f("auth_required", "bool", default=True,
            help="Require X-Input-Token on POST /v1/inputs/{id}/webhook. " + _OPEN_INPUT_HELP),
         _f("auth_token", "string", help="Expected inbound token (write-only). " + _TOKEN_HELP),
+        _f("rate_limit_per_min", "int", help=_RATE_HELP),
     ],
     "sms_inbox": [
         # The adapter does NOT poll — it receives inbound SMS forwarded as
@@ -272,6 +275,7 @@ _INPUTS: dict[str, list[dict[str, Any]]] = {
         _f("auth_token", "string",
            help="Expected inbound token (write-only), checked when "
                 "auth_required is true. " + _TOKEN_HELP),
+        _f("rate_limit_per_min", "int", help=_RATE_HELP),
     ],
     "alertmanager": [
         _f("default_type", "string", required=True, default="alertmanager_alert",
@@ -291,6 +295,7 @@ _INPUTS: dict[str, list[dict[str, Any]]] = {
            help="Require the token as X-Input-Token or Authorization: Bearer. " + _OPEN_INPUT_HELP),
         _f("auth_token", "string",
            help="Expected token (write-only). In Alertmanager: http_config.authorization.credentials. " + _TOKEN_HELP),
+        _f("rate_limit_per_min", "int", help=_RATE_HELP),
     ],
     "schedule": [],
     "email_imap": [
