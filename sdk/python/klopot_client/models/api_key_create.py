@@ -28,6 +28,8 @@ class ApiKeyCreate:
             name (str):
             allowed_cidrs (list[str] | Unset): Addresses the key may be used from: IPs or CIDRs (IPv4 and IPv6). Empty = any
                 address. A request from elsewhere gets 403 and counts as a wrong key for that address.
+            allowed_types (list[str] | Unset): Alert types the key may fire through POST /v1/fire: template types or
+                patterns like backup_*. Empty = every type. Another type (or resolved_type) gets 403.
             enabled (bool | Unset):  Default: True.
             expires_at (datetime.datetime | None | Unset):
             rate_limit_per_min (int | None | Unset): Requests a minute the key may make; null = no limit. A quiet key may
@@ -37,6 +39,7 @@ class ApiKeyCreate:
 
     name: str
     allowed_cidrs: list[str] | Unset = UNSET
+    allowed_types: list[str] | Unset = UNSET
     enabled: bool | Unset = True
     expires_at: datetime.datetime | None | Unset = UNSET
     rate_limit_per_min: int | None | Unset = UNSET
@@ -53,6 +56,12 @@ class ApiKeyCreate:
         allowed_cidrs: list[str] | Unset = UNSET
         if not isinstance(self.allowed_cidrs, Unset):
             allowed_cidrs = self.allowed_cidrs
+
+
+
+        allowed_types: list[str] | Unset = UNSET
+        if not isinstance(self.allowed_types, Unset):
+            allowed_types = self.allowed_types
 
 
 
@@ -86,6 +95,8 @@ class ApiKeyCreate:
         })
         if allowed_cidrs is not UNSET:
             field_dict["allowed_cidrs"] = allowed_cidrs
+        if allowed_types is not UNSET:
+            field_dict["allowed_types"] = allowed_types
         if enabled is not UNSET:
             field_dict["enabled"] = enabled
         if expires_at is not UNSET:
@@ -105,6 +116,9 @@ class ApiKeyCreate:
         name = d.pop("name")
 
         allowed_cidrs = cast(list[str], d.pop("allowed_cidrs", UNSET))
+
+
+        allowed_types = cast(list[str], d.pop("allowed_types", UNSET))
 
 
         enabled = d.pop("enabled", UNSET)
@@ -145,6 +159,7 @@ class ApiKeyCreate:
         api_key_create = cls(
             name=name,
             allowed_cidrs=allowed_cidrs,
+            allowed_types=allowed_types,
             enabled=enabled,
             expires_at=expires_at,
             rate_limit_per_min=rate_limit_per_min,

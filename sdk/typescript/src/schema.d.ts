@@ -1713,6 +1713,11 @@ export interface components {
              */
             allowed_cidrs?: string[];
             /**
+             * Allowed Types
+             * @description Alert types the key may fire through POST /v1/fire: template types or patterns like backup_*. Empty = every type. Another type (or resolved_type) gets 403.
+             */
+            allowed_types?: string[];
+            /**
              * Enabled
              * @default true
              */
@@ -1739,6 +1744,11 @@ export interface components {
              * @description Addresses the key may be used from: IPs or CIDRs (IPv4 and IPv6). Empty = any address. A request from elsewhere gets 403 and counts as a wrong key for that address.
              */
             allowed_cidrs?: string[];
+            /**
+             * Allowed Types
+             * @description Alert types the key may fire through POST /v1/fire: template types or patterns like backup_*. Empty = every type. Another type (or resolved_type) gets 403.
+             */
+            allowed_types?: string[];
             /** Created At */
             created_at: string | null;
             /** Enabled */
@@ -1777,6 +1787,11 @@ export interface components {
              * @description Addresses the key may be used from: IPs or CIDRs (IPv4 and IPv6). Empty = any address. A request from elsewhere gets 403 and counts as a wrong key for that address.
              */
             allowed_cidrs?: string[];
+            /**
+             * Allowed Types
+             * @description Alert types the key may fire through POST /v1/fire: template types or patterns like backup_*. Empty = every type. Another type (or resolved_type) gets 403.
+             */
+            allowed_types?: string[];
             /** Created At */
             created_at: string | null;
             /** Enabled */
@@ -1810,6 +1825,11 @@ export interface components {
              * @description Addresses the key may be used from: IPs or CIDRs (IPv4 and IPv6). Empty = any address. A request from elsewhere gets 403 and counts as a wrong key for that address.
              */
             allowed_cidrs?: string[] | null;
+            /**
+             * Allowed Types
+             * @description Alert types the key may fire through POST /v1/fire: template types or patterns like backup_*. Empty = every type. Another type (or resolved_type) gets 403.
+             */
+            allowed_types?: string[] | null;
             /** Enabled */
             enabled?: boolean | null;
             /** Expires At */

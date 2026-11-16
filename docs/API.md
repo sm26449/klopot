@@ -201,6 +201,10 @@ If the `type` has no configured template, the fire is accepted, logged
 as `unknown_type`, and nothing is dispatched (a safe no-op you can see
 in the log).
 
+A key limited to some alert types (`allowed_types`, see
+[API keys](#api-keys)) gets `403` with `{"code": "TYPE_NOT_ALLOWED"}` for any
+other `type` or `resolved_type`; nothing is logged or sent.
+
 #### Episodes (`idempotency_key`)
 
 A script that reports the same problem every minute should notify once, not
@@ -731,9 +735,9 @@ All `/v1/api_keys` calls need `admin`.
 | Call | What it does |
 |------|--------------|
 | `GET /v1/api_keys` | List (filter `enabled`); never shows the secret, only its prefix |
-| `POST /v1/api_keys` | `{"name", "scopes", "expires_at"?, "enabled"?, "allowed_cidrs"?, "rate_limit_per_min"?}` → 201 with the plaintext `key`, shown **once** |
-| `GET` / `PATCH` / `DELETE /v1/api_keys/{id}` | Read, change (scopes, expiry, enabled, allowed addresses, rate limit — `null` removes it), delete |
-| `POST /v1/api_keys/{id}/rotate?grace_sec=N` | New plaintext key with the same scopes, expiry, allowed addresses and rate limit; the old one is revoked now, or after `N` seconds (0–600, default 0) |
+| `POST /v1/api_keys` | `{"name", "scopes", "expires_at"?, "enabled"?, "allowed_cidrs"?, "rate_limit_per_min"?, "allowed_types"?}` → 201 with the plaintext `key`, shown **once** |
+| `GET` / `PATCH` / `DELETE /v1/api_keys/{id}` | Read, change (scopes, expiry, enabled, allowed addresses, rate limit — `null` removes it, allowed alert types), delete |
+| `POST /v1/api_keys/{id}/rotate?grace_sec=N` | New plaintext key with the same scopes, expiry, allowed addresses, rate limit and alert types; the old one is revoked now, or after `N` seconds (0–600, default 0) |
 
 `allowed_cidrs`: IPs or CIDRs (IPv4/IPv6, at most 64) the key may be used
 from; empty = any address. From anywhere else the key gets `403` and counts
@@ -745,6 +749,11 @@ no limit. A quiet key may send that many at once, then one every 60/N
 seconds; over it the request gets `429` with `Retry-After`, the seconds until
 the next one fits ([AUTH_MODEL](AUTH_MODEL.md#rate-limit)). Wait that long
 before retrying.
+
+`allowed_types`: template types or patterns (`backup_*`, at most 64) the key
+may fire through `POST /v1/fire`; empty = every type. Another `type` — or an
+episode's `resolved_type` — gets `403` `TYPE_NOT_ALLOWED`
+([AUTH_MODEL](AUTH_MODEL.md#allowed-alert-types)).
 
 ## Browser session endpoints
 

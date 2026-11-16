@@ -500,6 +500,7 @@ CREATE TABLE api_keys (
     last_used_ip VARCHAR(45),
     allowed_cidrs JSON NULL,                -- source allowlist (normalised IPs/CIDRs); NULL/[] = any (0042)
     rate_limit_per_min INT NULL,            -- requests a minute (GCRA, in process); NULL = no limit (0043)
+    allowed_types JSON NULL,                -- types / patterns it may fire (/v1/fire); NULL/[] = every type (0044)
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     rotated_from_id BIGINT NULL,
     INDEX idx_apikey_prefix (key_prefix),
@@ -779,6 +780,7 @@ All shipped. Migrations run automatically at container startup
 | `0041` | Added (2026-11-16) | Inbound inputs: the old authentication behaviour made explicit (`auth_required: false` for an input without a token or flag; a non-boolean flag becomes the boolean it meant); data only |
 | `0042` | Added (2026-11-16) | `api_keys.allowed_cidrs` (JSON, nullable): per-key source allowlist; NULL = any address |
 | `0043` | Added (2026-11-16) | `api_keys.rate_limit_per_min` (INT, nullable): per-key rate limit; NULL = no limit |
+| `0044` | Added (2026-11-16) | `api_keys.allowed_types` (JSON, nullable): the alert types (or patterns) a key may fire; NULL = every type |
 
 ### Provider lifecycle (`0029`)
 

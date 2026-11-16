@@ -201,6 +201,10 @@ curl -X POST https://host/v1/fire \
 Dacă `type` nu are template configurat, fire-ul e acceptat, logat ca
 `unknown_type` și nu se trimite nimic (un no-op sigur, vizibil în log).
 
+O cheie limitată la anumite tipuri de alerte (`allowed_types`, vezi
+[Chei API](#chei-api)) primește `403` cu `{"code": "TYPE_NOT_ALLOWED"}` pentru
+orice alt `type` sau `resolved_type`; nu se înregistrează și nu se trimite nimic.
+
 #### Episoade (`idempotency_key`)
 
 Un script care raportează aceeași problemă în fiecare minut trebuie să
@@ -742,9 +746,9 @@ Toate apelurile `/v1/api_keys` cer `admin`.
 | Apel | Ce face |
 |------|---------|
 | `GET /v1/api_keys` | Listă (filtru `enabled`); nu arată niciodată secretul, doar prefixul |
-| `POST /v1/api_keys` | `{"name", "scopes", "expires_at"?, "enabled"?, "allowed_cidrs"?, "rate_limit_per_min"?}` → 201 cu `key` în clar, afișată **o singură dată** |
-| `GET` / `PATCH` / `DELETE /v1/api_keys/{id}` | Citire, modificare (scopes, expirare, enabled, adrese permise, limită de rată — `null` o scoate), ștergere |
-| `POST /v1/api_keys/{id}/rotate?grace_sec=N` | Cheie nouă în clar, cu aceleași scopes, expirare, adrese permise și limită de rată; cea veche e revocată imediat sau după `N` secunde (0–600, implicit 0) |
+| `POST /v1/api_keys` | `{"name", "scopes", "expires_at"?, "enabled"?, "allowed_cidrs"?, "rate_limit_per_min"?, "allowed_types"?}` → 201 cu `key` în clar, afișată **o singură dată** |
+| `GET` / `PATCH` / `DELETE /v1/api_keys/{id}` | Citire, modificare (scopes, expirare, enabled, adrese permise, limită de rată — `null` o scoate, tipuri de alerte permise), ștergere |
+| `POST /v1/api_keys/{id}/rotate?grace_sec=N` | Cheie nouă în clar, cu aceleași scopes, expirare, adrese permise, limită de rată și tipuri de alerte; cea veche e revocată imediat sau după `N` secunde (0–600, implicit 0) |
 
 `allowed_cidrs`: IP-uri sau CIDR-uri (IPv4/IPv6, cel mult 64) de la care se
 poate folosi cheia; gol = orice adresă. De oriunde altundeva cheia primește
@@ -757,6 +761,11 @@ poate folosi cheia; gol = orice adresă. De oriunde altundeva cheia primește
 atâtea deodată, apoi câte una la 60/N secunde; peste limită cererea primește
 `429` cu `Retry-After`, secundele până încape următoarea
 ([AUTH_MODEL](AUTH_MODEL.md#rate-limit)). Așteaptă atât înainte să reîncerci.
+
+`allowed_types`: tipuri de șablon sau modele (`backup_*`, cel mult 64) pe care
+cheia le poate trimite prin `POST /v1/fire`; gol = orice tip. Alt `type` — sau
+`resolved_type`-ul unui episod — primește `403` `TYPE_NOT_ALLOWED`
+([AUTH_MODEL](AUTH_MODEL.md#allowed-alert-types)).
 
 ## Endpoint-uri pentru sesiunea de browser
 

@@ -26,6 +26,7 @@ import re
 from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from fnmatch import fnmatchcase
 from urllib.parse import urlsplit
 
 import bcrypt
@@ -73,10 +74,17 @@ class Actor:
     allowed_networks: tuple[Network, ...] = ()
     # An API key's own limit (api_keys.rate_limit_per_min); None = no limit.
     rate_limit_per_min: int | None = None
+    # Alert types the key may fire (api_keys.allowed_types): names or fnmatch
+    # patterns; empty = every type. Only POST /v1/fire checks it.
+    allowed_types: tuple[str, ...] = ()
 
     def has_scope(self, required: str) -> bool:
         """``admin`` implies all other scopes."""
         return scope_grants(self.scopes, required)
+
+    def may_fire(self, alert_type: str) -> bool:
+        """Whether this caller may fire ``alert_type`` (a key's allowed_types)."""
+        return not self.allowed_types or any(fnmatchcase(alert_type, p) for p in self.allowed_types)
 
     @property
     def is_user(self) -> bool:
@@ -401,7 +409,8 @@ async def _accept_key(
     if row.expires_at is not None and row.expires_at < utc_now():
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="API key expired")
     actor = Actor(kind="api_key", id=row.id, name=row.name, scopes=frozenset(row.scopes or []),
-                  allowed_networks=_key_networks(row), rate_limit_per_min=row.rate_limit_per_min)
+                  allowed_networks=_key_networks(row), rate_limit_per_min=row.rate_limit_per_min,
+                  allowed_types=tuple(row.allowed_types or ()))
     if not _source_allowed(actor, client_ip):
         raise _WrongSource
     # Best-effort, no commit barrier. On cached hits we skip this —

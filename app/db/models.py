@@ -809,6 +809,9 @@ class ApiKey(Base):
     # Requests a minute the key may make (GCRA, utils/rate_limit.py); NULL =
     # no limit. Over it: 429 with Retry-After (auth.py).
     rate_limit_per_min: Mapped[int | None] = mapped_column(Integer)
+    # Template types (or fnmatch patterns) the key may fire through /v1/fire;
+    # NULL or empty = every type. Checked per request (api/v1/fire.py).
+    allowed_types: Mapped[list[str] | None] = mapped_column(JSON)
     rotated_from_id: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("api_keys.id", ondelete="SET NULL"),

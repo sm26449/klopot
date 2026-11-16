@@ -87,12 +87,14 @@ function toLocalDatetimeInput(iso) {
   return local.toISOString().slice(0, 16);
 }
 
-/** The table cell: what limits the key — its addresses and its rate — or "none". */
+/** The table cell: what limits the key — its addresses, its rate, its alert types — or "none". */
 function restrictions(k) {
   const cidrs = k.allowed_cidrs || [];
+  const types = k.allowed_types || [];
   const chips = [
     cidrs.length ? html`<span key="a" class="chip tag" title=${cidrs.join("\n")}>${t("apikeys.addressesCount", { count: cidrs.length })}</span>` : null,
     k.rate_limit_per_min != null ? html`<span key="r" class="chip tag">${t("apikeys.rateChip", { count: k.rate_limit_per_min })}</span>` : null,
+    types.length ? html`<span key="t" class="chip tag mono" title=${types.join("\n")}>${t("apikeys.typesChip", { first: types[0], more: types.length > 1 ? ` +${types.length - 1}` : "" })}</span>` : null,
   ].filter(Boolean);
   return chips.length ? chips : html`<span class="muted small">${t("apikeys.restrictionsNone")}</span>`;
 }
@@ -108,6 +110,8 @@ function KeyEditor({ apikey, onClose, onSaved, onPlaintext }) {
   const [cidrs, setCidrs] = useState(isNew ? "" : (apikey.allowed_cidrs || []).join("\n"));
   // Requests a minute as typed; empty = no limit.
   const [rate, setRate] = useState(isNew || apikey.rate_limit_per_min == null ? "" : String(apikey.rate_limit_per_min));
+  // The alert types it may fire, as typed: one type or pattern per line.
+  const [types, setTypes] = useState(isNew ? "" : (apikey.allowed_types || []).join("\n"));
   const [myIp, setMyIp] = useState(null);
   useEffect(() => { lookup(api.me().then((m) => setMyIp(m.client_ip || null))); }, []);
   const [busy, setBusy] = useState(false);
@@ -120,6 +124,7 @@ function KeyEditor({ apikey, onClose, onSaved, onPlaintext }) {
   const addAddress = (ip) => { if (ip && !cidrList.includes(ip)) setCidrs((cur) => (cur.trim() ? cur.trimEnd() + "\n" : "") + ip); };
   const expiresIso = expires ? new Date(expires).toISOString() : null;
   const ratePerMin = rate.trim() ? Number(rate) : null;
+  const typeList = types.split(/[\s,]+/).map((x) => x.trim()).filter(Boolean);
 
   async function save() {
     fe.clear();
@@ -128,11 +133,11 @@ function KeyEditor({ apikey, onClose, onSaved, onPlaintext }) {
     setBusy(true);
     try {
       if (isNew) {
-        const created = await api.post("/v1/api_keys", { name, scopes, enabled, expires_at: expiresIso, allowed_cidrs: cidrList, rate_limit_per_min: ratePerMin });
+        const created = await api.post("/v1/api_keys", { name, scopes, enabled, expires_at: expiresIso, allowed_cidrs: cidrList, rate_limit_per_min: ratePerMin, allowed_types: typeList });
         draft.clear();
         onPlaintext({ name: created.name, key: created.key });
       } else {
-        await api.patch(`/v1/api_keys/${apikey.id}`, { scopes, enabled, expires_at: expiresIso, allowed_cidrs: cidrList, rate_limit_per_min: ratePerMin });
+        await api.patch(`/v1/api_keys/${apikey.id}`, { scopes, enabled, expires_at: expiresIso, allowed_cidrs: cidrList, rate_limit_per_min: ratePerMin, allowed_types: typeList });
         toast.ok(t("apikeys.keyUpdated")); draft.clear(); onSaved();
       }
     } catch (e) { if (!fe.show(e)) toast.error(e); } finally { setBusy(false); }
@@ -157,7 +162,7 @@ function KeyEditor({ apikey, onClose, onSaved, onPlaintext }) {
   return html`<${Drawer} open=${true} width=${560} title=${isNew ? t("apikeys.newKeyTitle") : apikey.name} onClose=${closeDraft} dirty=${dirty}>
     ${draft.recovered ? html`<${DraftBanner} onRestore=${restoreDraft} onDiscard=${draft.dismiss} />` : null}
     <${FieldErrorSummary} errors=${fe.errors}
-      idFor=${(f) => ({ name: "k-name", expires_at: "k-expires", allowed_cidrs: "k-cidrs", rate_limit_per_min: "k-rate" }[f.split(".").pop()] || "k-name")} />
+      idFor=${(f) => ({ name: "k-name", expires_at: "k-expires", allowed_cidrs: "k-cidrs", rate_limit_per_min: "k-rate", allowed_types: "k-types" }[f.split(".").pop()] || "k-name")} />
     <div class="editor">
       ${isNew ? html`<div class="field"><label for="k-name">${t("apikeys.fieldName")} <span class="req">*</span></label>
         <input id="k-name" value=${name} onInput=${(e) => setName(e.target.value)}
@@ -193,6 +198,16 @@ function KeyEditor({ apikey, onClose, onSaved, onPlaintext }) {
           aria-describedby=${"k-rate-help" + (fe.msgFor("rate_limit_per_min") ? " " + fieldErrorId("rate_limit_per_min") : "")} />
         <div id="k-rate-help" class="hint">${t("apikeys.rateHelp")}</div>
         ${fe.msgFor("rate_limit_per_min") ? html`<div id=${fieldErrorId("rate_limit_per_min")} class="error small" role="alert">${fe.msgFor("rate_limit_per_min")}</div>` : null}
+      </div>
+
+      <div class=${"field" + (fe.msgFor("allowed_types") ? " has-error" : "")}>
+        <label for="k-types">${t("apikeys.fieldTypes")}</label>
+        <textarea id="k-types" rows="2" class="mono" value=${types} onInput=${(e) => setTypes(e.target.value)}
+          placeholder=${t("apikeys.typesPlaceholder")}
+          aria-invalid=${fe.msgFor("allowed_types") ? "true" : undefined}
+          aria-describedby=${"k-types-help" + (fe.msgFor("allowed_types") ? " " + fieldErrorId("allowed_types") : "")}></textarea>
+        <div id="k-types-help" class="hint">${t("apikeys.typesHelp")}</div>
+        ${fe.msgFor("allowed_types") ? html`<div id=${fieldErrorId("allowed_types")} class="error small" role="alert">${fe.msgFor("allowed_types")}</div>` : null}
       </div>
 
       <div class="row2">

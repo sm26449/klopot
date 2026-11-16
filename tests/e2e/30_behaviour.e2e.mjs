@@ -260,7 +260,7 @@ test("activity rules: rows are numbered 1, 2 … and the plural reads right", as
   assert.ok(!(await page.locator(".tbl").innerText()).includes("(s)"), "no day(s)");
 });
 
-test("api keys: a key limited to my address and a rate, labelled and accessible", async () => {
+test("api keys: a key limited to my address, a rate and alert types, labelled and accessible", async () => {
   await go(page, "api-keys");
   await page.getByRole("button", { name: /new key/i }).first().click();
   const drawer = page.locator(".drawer");
@@ -274,6 +274,7 @@ test("api keys: a key limited to my address and a rate, labelled and accessible"
   assert.match(typed, /^[0-9a-f.:]+$/i, "my address was filled in");
   assert.equal(await mine.isDisabled(), true, "it is not offered twice");
   await drawer.getByLabel("Requests per minute").fill("120");
+  await drawer.getByLabel("Allowed alert types").fill("backup_*\ndisk_filling");
   assert.deepEqual(await axe(page, ".drawer"), [], "drawer axe");
   await drawer.locator("#k-name").fill("e2e_allowlisted");
   await drawer.getByRole("button", { name: /create/i }).click();
@@ -284,8 +285,9 @@ test("api keys: a key limited to my address and a rate, labelled and accessible"
   assert.equal(made.allowed_cidrs.length, 1);
   assert.ok(made.allowed_cidrs[0].startsWith(typed.split("/")[0]), made.allowed_cidrs[0]);
   assert.equal(made.rate_limit_per_min, 120);
+  assert.deepEqual(made.allowed_types, ["backup_*", "disk_filling"]);
   await shown.getByRole("checkbox").check();          // "I have saved it" — the key is shown once
   await shown.getByRole("button", { name: /done/i }).click();
-  const cell = page.getByRole("cell", { name: "1 allowed 120/min" });
-  assert.ok(await until(async () => (await cell.count()) > 0), "the list shows both restrictions");
+  const cell = page.getByRole("cell", { name: "1 allowed 120/min types: backup_* +1" });
+  assert.ok(await until(async () => (await cell.count()) > 0), "the list shows the three restrictions");
 });

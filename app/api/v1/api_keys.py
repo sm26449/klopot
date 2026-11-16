@@ -113,6 +113,7 @@ async def create_key(
         expires_at=to_naive_utc(body.expires_at),
         allowed_cidrs=body.allowed_cidrs or None,
         rate_limit_per_min=body.rate_limit_per_min,
+        allowed_types=body.allowed_types or None,
     )
     session.add(obj)
     await flush_or_409(session, "API key create")
@@ -153,8 +154,8 @@ async def update_key(
         _validate_scopes(body.scopes)
     before = model_to_dict(obj)
     for k, v in body.model_dump(exclude_unset=True).items():
-        if k == "allowed_cidrs":
-            v = v or None           # empty = any address, stored as NULL like a new key
+        if k in ("allowed_cidrs", "allowed_types"):
+            v = v or None           # empty = any address / type, stored as NULL like a new key
         setattr(obj, k, v)
     await flush_or_409(session, "API key update")
     await session.refresh(obj)
@@ -225,6 +226,7 @@ async def rotate_key(
         # The successor keeps the source allowlist: rotating must not lift it.
         allowed_cidrs=list(old.allowed_cidrs) if old.allowed_cidrs else None,
         rate_limit_per_min=old.rate_limit_per_min,
+        allowed_types=list(old.allowed_types) if old.allowed_types else None,
         rotated_from_id=old.id,
     )
     if grace_sec > 0:

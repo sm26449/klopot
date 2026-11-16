@@ -51,6 +51,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Allowed alert types per API key** (review F10): `allowed_types`, template
+  types or patterns (`backup_*`) the key may fire — API keys → the key →
+  *Allowed alert types*, or on `/v1/api_keys`. `POST /v1/fire` with another
+  `type`, or naming another as `resolved_type`, gets `403` `TYPE_NOT_ALLOWED`.
+  Empty = every type, as for every existing key (migration `0044`); rotation
+  keeps it, a change applies at once.
 - **Packs for the companion projects**, built from a production
   configuration and rewritten against each project's own contract:
   `seplos-bms` (seplos-modbus-mqtt), `fronius-inverter` (fronius-modbus-mqtt,

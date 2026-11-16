@@ -43,6 +43,15 @@ async def post_fire(
     session: AsyncSession = Depends(get_session),
     actor: Actor = Depends(require_scope("fire")),
 ) -> FireResponse:
+    # A key limited to some alert types (api_keys.allowed_types) cannot fire
+    # another — nor name one as the episode's recovery message.
+    for alert_type in (body.type, body.resolved_type):
+        if alert_type is not None and not actor.may_fire(alert_type):
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                detail={"code": "TYPE_NOT_ALLOWED",
+                        "message": f"This API key may not fire alert type {alert_type!r}"},
+            )
     source = body.source or actor.name
     if body.idempotency_key is None or body.test:
         if body.status == "resolved":

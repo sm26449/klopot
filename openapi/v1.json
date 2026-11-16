@@ -370,6 +370,14 @@
             "title": "Allowed Cidrs",
             "type": "array"
           },
+          "allowed_types": {
+            "description": "Alert types the key may fire through POST /v1/fire: template types or patterns like backup_*. Empty = every type. Another type (or resolved_type) gets 403.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Types",
+            "type": "array"
+          },
           "enabled": {
             "default": true,
             "title": "Enabled",
@@ -431,6 +439,14 @@
               "type": "string"
             },
             "title": "Allowed Cidrs",
+            "type": "array"
+          },
+          "allowed_types": {
+            "description": "Alert types the key may fire through POST /v1/fire: template types or patterns like backup_*. Empty = every type. Another type (or resolved_type) gets 403.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Types",
             "type": "array"
           },
           "created_at": {
@@ -551,6 +567,14 @@
             "title": "Allowed Cidrs",
             "type": "array"
           },
+          "allowed_types": {
+            "description": "Alert types the key may fire through POST /v1/fire: template types or patterns like backup_*. Empty = every type. Another type (or resolved_type) gets 403.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Types",
+            "type": "array"
+          },
           "created_at": {
             "anyOf": [
               {
@@ -669,6 +693,21 @@
             ],
             "description": "Addresses the key may be used from: IPs or CIDRs (IPv4 and IPv6). Empty = any address. A request from elsewhere gets 403 and counts as a wrong key for that address.",
             "title": "Allowed Cidrs"
+          },
+          "allowed_types": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Alert types the key may fire through POST /v1/fire: template types or patterns like backup_*. Empty = every type. Another type (or resolved_type) gets 403.",
+            "title": "Allowed Types"
           },
           "enabled": {
             "anyOf": [

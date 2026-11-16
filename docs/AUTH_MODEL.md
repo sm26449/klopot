@@ -47,6 +47,7 @@ CREATE TABLE api_keys (
     last_used_ip VARCHAR(45),
     allowed_cidrs JSON NULL,                  -- source allowlist; NULL / [] = any address (0042)
     rate_limit_per_min INT NULL,              -- requests a minute; NULL = no limit (0043)
+    allowed_types JSON NULL,                  -- alert types it may fire; NULL / [] = every type (0044)
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     rotated_from_id BIGINT NULL                -- chain rotated keys for audit
 );
@@ -180,6 +181,23 @@ in the admin UI (API keys → the key → Requests per minute) or on `POST` /
 Size the limit from the caller's normal rate with room for bursts: a
 script that fires once a minute needs about 5, a UI that polls every few
 seconds 60 or more.
+
+### Allowed alert types
+
+A key may be limited to the alert types it fires: `allowed_types`, template
+types or patterns (`backup_*`, `disk_?`; at most 64; empty = every type,
+which every key has unless you set it). Set it in the admin UI (API keys →
+the key → Allowed alert types) or on `POST` / `PATCH /v1/api_keys`.
+
+- **Checked on `POST /v1/fire`** only — against `type` and, for an episode,
+  `resolved_type`, so a key cannot name another template as its recovery
+  message. Another type gets **`403`** `TYPE_NOT_ALLOWED`; it is not a wrong
+  key and spends no budget.
+- Without it, any `fire` key reaches every template — including the ones
+  that page by SMS. Give a script's key exactly the types it sends (review
+  F10).
+- A pattern that matches everything (`*`) is refused: leave the list empty
+  for that. A change applies to the next request; rotation keeps the list.
 
 ### Rotation
 

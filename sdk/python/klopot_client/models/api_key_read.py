@@ -33,6 +33,8 @@ class ApiKeyRead:
             scopes (list[str]):
             allowed_cidrs (list[str] | Unset): Addresses the key may be used from: IPs or CIDRs (IPv4 and IPv6). Empty = any
                 address. A request from elsewhere gets 403 and counts as a wrong key for that address.
+            allowed_types (list[str] | Unset): Alert types the key may fire through POST /v1/fire: template types or
+                patterns like backup_*. Empty = every type. Another type (or resolved_type) gets 403.
             expires_at (None | str | Unset):
             last_used_at (None | str | Unset):
             last_used_ip (None | str | Unset):
@@ -48,6 +50,7 @@ class ApiKeyRead:
     name: str
     scopes: list[str]
     allowed_cidrs: list[str] | Unset = UNSET
+    allowed_types: list[str] | Unset = UNSET
     expires_at: None | str | Unset = UNSET
     last_used_at: None | str | Unset = UNSET
     last_used_ip: None | str | Unset = UNSET
@@ -78,6 +81,12 @@ class ApiKeyRead:
         allowed_cidrs: list[str] | Unset = UNSET
         if not isinstance(self.allowed_cidrs, Unset):
             allowed_cidrs = self.allowed_cidrs
+
+
+
+        allowed_types: list[str] | Unset = UNSET
+        if not isinstance(self.allowed_types, Unset):
+            allowed_types = self.allowed_types
 
 
 
@@ -124,6 +133,8 @@ class ApiKeyRead:
         })
         if allowed_cidrs is not UNSET:
             field_dict["allowed_cidrs"] = allowed_cidrs
+        if allowed_types is not UNSET:
+            field_dict["allowed_types"] = allowed_types
         if expires_at is not UNSET:
             field_dict["expires_at"] = expires_at
         if last_used_at is not UNSET:
@@ -162,6 +173,9 @@ class ApiKeyRead:
 
 
         allowed_cidrs = cast(list[str], d.pop("allowed_cidrs", UNSET))
+
+
+        allowed_types = cast(list[str], d.pop("allowed_types", UNSET))
 
 
         def _parse_expires_at(data: object) -> None | str | Unset:
@@ -222,6 +236,7 @@ class ApiKeyRead:
             name=name,
             scopes=scopes,
             allowed_cidrs=allowed_cidrs,
+            allowed_types=allowed_types,
             expires_at=expires_at,
             last_used_at=last_used_at,
             last_used_ip=last_used_ip,
