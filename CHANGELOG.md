@@ -86,6 +86,10 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+- Live streams were unbounded: one caller could open any number, each with
+  its queue and an encode per update. Now at most 10 per session or API key
+  and 500 in all; one past either is closed (`1013`) before it is accepted,
+  and a stream's place is released however it ends.
 - Login lockout could be used to lock the admin out: five failed tries from
   anywhere locked the username everywhere, and an IPv6 client got a fresh
   per-address budget for each /128. A username is now locked from the

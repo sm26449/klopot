@@ -14,6 +14,7 @@ import asyncio
 import json
 import logging
 import time
+from collections.abc import Callable
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, status
@@ -30,7 +31,7 @@ from ...auth import (
 )
 from ...core.manager import get_manager
 from ...core.state_cache import VarSnapshot
-from ...core.ws_registry import get_ws_registry
+from ...core.ws_registry import StreamLimitReached, get_ws_registry
 from ...db import get_session
 from ...schemas.variable import StateResponse, VarState
 from ...utils.time import utc_now
@@ -46,13 +47,31 @@ _REVALIDATE_SEC = 30
 
 def _register_stream(websocket: WebSocket, actor: Actor) -> int:
     """Track this open stream by its auth identity so a revoke can close
-    it immediately (audit A07)."""
+    it immediately (audit A07). Raises ``StreamLimitReached`` when the
+    caller (or the process) holds the most streams allowed (review F14)."""
     reg = get_ws_registry()
     if actor.kind == "user":
         return reg.register(websocket, session_id=actor.session_id, user_id=actor.id)
     if actor.kind == "api_key":
         return reg.register(websocket, key_id=actor.id)
     return reg.register(websocket)
+
+
+async def _accept_registered(websocket: WebSocket, actor: Actor) -> int | None:
+    """Reserve the stream's place, then accept it: the registry handle, or
+    ``None`` after closing a stream there is no room for (1013, try again
+    later — before it is accepted, so it is never served)."""
+    try:
+        handle = _register_stream(websocket, actor)
+    except StreamLimitReached as e:
+        await websocket.close(code=status.WS_1013_TRY_AGAIN_LATER, reason=str(e)[:120])
+        return None
+    try:
+        await websocket.accept()
+    except BaseException:
+        get_ws_registry().unregister(handle)       # the place is not held by a stream that never opened
+        raise
+    return handle
 
 
 async def _still_valid(actor: Actor) -> bool:
@@ -195,25 +214,27 @@ async def stream_notifications(websocket: WebSocket) -> None:
     actor = await _ws_authenticate(websocket)
     if actor is None:
         return
-
-    await websocket.accept()
-    await websocket.send_text(json.dumps({"type": "hello"}))
+    reg = get_ws_registry()
+    reg_handle = await _accept_registered(websocket, actor)
+    if reg_handle is None:
+        return
 
     from ...channels.ui import get_broadcaster
 
     broadcaster = get_broadcaster()
-    handle = await broadcaster.register(websocket)
-    reg = get_ws_registry()
-    reg_handle = _register_stream(websocket, actor)
-    # Close the handshake/registration race (A-11): a revoke that committed
-    # between authentication and registration would have found no stream to
-    # close, so re-check against the DB now that we are registered.
-    if not await _still_valid(actor):
-        reg.unregister(reg_handle)
-        await broadcaster.unregister(handle)
-        await _close_revoked(websocket)
-        return
+    handle: int | None = None
+    # From the reservation on, everything is released however the stream
+    # ends — a failed greeting included — so a place is never held by a
+    # stream that is gone (MAX_PER_IDENTITY would lock the caller out).
     try:
+        await websocket.send_text(json.dumps({"type": "hello"}))
+        handle = await broadcaster.register(websocket)
+        # Close the handshake/registration race (A-11): a revoke that committed
+        # between authentication and registration would have found no stream to
+        # close, so re-check against the DB now that we are registered.
+        if not await _still_valid(actor):
+            await _close_revoked(websocket)
+            return
         # Block until disconnect — the broadcaster pumps for us. Re-validate
         # auth on an ABSOLUTE deadline, not only on an idle timeout: a client
         # that sends frames more often than _REVALIDATE_SEC would otherwise
@@ -233,7 +254,8 @@ async def stream_notifications(websocket: WebSocket) -> None:
                 next_check = time.monotonic() + _REVALIDATE_SEC
     finally:
         reg.unregister(reg_handle)
-        await broadcaster.unregister(handle)
+        if handle is not None:
+            await broadcaster.unregister(handle)
 
 
 @router.websocket("/stream/state")
@@ -253,15 +275,11 @@ async def stream_state(websocket: WebSocket) -> None:
     actor = await _ws_authenticate(websocket)
     if actor is None:
         return
-
-    await websocket.accept()
+    reg = get_ws_registry()
+    reg_handle = await _accept_registered(websocket, actor)
+    if reg_handle is None:
+        return
     cache = get_manager().cache
-
-    # Greeting
-    await websocket.send_text(json.dumps({
-        "type": "hello", "cache_size": len(cache.snapshot()),
-    }))
-
     queue: asyncio.Queue[tuple[str, VarSnapshot]] = asyncio.Queue(maxsize=100)
 
     async def _on_update(name: str, snap: VarSnapshot) -> None:
@@ -278,18 +296,16 @@ async def stream_state(websocket: WebSocket) -> None:
             except asyncio.QueueFull:
                 pass
 
-    cancel = cache.subscribe(_on_update)
-    reg = get_ws_registry()
-    reg_handle = _register_stream(websocket, actor)
-    # Close the handshake/registration race (A-11): re-check validity now that
-    # we are registered, in case a revoke committed before registration.
-    if not await _still_valid(actor):
-        reg.unregister(reg_handle)
-        cancel()
-        await _close_revoked(websocket)
-        return
-
+    cancel: Callable[[], None] | None = None
+    # From the reservation on, everything is released however the stream ends.
     try:
+        await websocket.send_text(json.dumps({"type": "hello", "cache_size": len(cache.snapshot())}))
+        cancel = cache.subscribe(_on_update)
+        # Close the handshake/registration race (A-11): re-check validity now
+        # that we are registered, in case a revoke committed before registration.
+        if not await _still_valid(actor):
+            await _close_revoked(websocket)
+            return
         # Absolute revalidation deadline (F06): a continuously-updating stream
         # never hits the idle timeout, so check the clock on every wakeup.
         next_check = time.monotonic() + _REVALIDATE_SEC
@@ -322,7 +338,8 @@ async def stream_state(websocket: WebSocket) -> None:
         pass
     finally:
         reg.unregister(reg_handle)
-        cancel()
+        if cancel is not None:
+            cancel()
         try:
             await websocket.close()
         except Exception:

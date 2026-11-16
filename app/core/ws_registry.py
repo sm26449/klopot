@@ -10,6 +10,12 @@ process holds every connection and this registry is authoritative. The
 stream handlers add a periodic re-validation as a backstop for idle
 *expiry* (which fires no revoke event) — see ``app/api/v1/state.py``.
 
+It also bounds them (review F14): each stream holds a queue and costs a
+JSON encode per update, and nothing capped how many one caller opened.
+``register`` refuses past ``MAX_PER_IDENTITY`` for one session or API key and
+past ``MAX_TOTAL`` altogether; the handlers register before accepting, so a
+refused stream is closed (1013, try again later) without being served.
+
 Dependency-free on purpose (no app imports) so ``auth`` can call it
 without an import cycle.
 """
@@ -23,6 +29,15 @@ from dataclasses import dataclass
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# Open streams one session or API key may hold (a few tabs, each with its
+# notification and state streams), and the process altogether.
+MAX_PER_IDENTITY = 10
+MAX_TOTAL = 500
+
+
+class StreamLimitReached(Exception):
+    """No room for another stream; the message says which limit."""
 
 
 @dataclass
@@ -53,6 +68,16 @@ class WSRegistry:
         user_id: int | None = None,
         key_id: int | None = None,
     ) -> int:
+        """Track ``ws``; raise ``StreamLimitReached`` when its session or key
+        already holds ``MAX_PER_IDENTITY`` streams, or the process ``MAX_TOTAL``."""
+        if len(self._conns) >= MAX_TOTAL:
+            raise StreamLimitReached(f"at most {MAX_TOTAL} live streams")
+        if session_id is not None or key_id is not None:
+            mine = sum(1 for e in self._conns.values()
+                       if (session_id is not None and e.session_id == session_id)
+                       or (key_id is not None and e.key_id == key_id))
+            if mine >= MAX_PER_IDENTITY:
+                raise StreamLimitReached(f"at most {MAX_PER_IDENTITY} live streams per session or key")
         handle = next(self._ids)
         self._conns[handle] = _Entry(ws, session_id, user_id, key_id)
         return handle

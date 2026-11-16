@@ -385,6 +385,12 @@ const ws = new WebSocket("wss://host/v1/stream/notifications?api_key=" + key);
 ws.onmessage = (e) => console.log(JSON.parse(e.data));
 ```
 
+Streams are bounded: at most 10 open at once per session or API key, and
+500 in all. One past either limit is closed with code `1013` (try again
+later) before it is accepted; close a stream you no longer read. The key in
+`?api_key=` ends up in proxies' access logs: use a `read`-only key for
+streams, never an admin one.
+
 ---
 
 ## Configuration (bulk / disaster recovery)

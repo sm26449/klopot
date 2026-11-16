@@ -391,6 +391,12 @@ const ws = new WebSocket("wss://host/v1/stream/notifications?api_key=" + key);
 ws.onmessage = (e) => console.log(JSON.parse(e.data));
 ```
 
+Fluxurile sunt limitate: cel mult 10 deschise simultan per sesiune sau cheie
+API și 500 în total. Unul peste oricare limită e închis cu codul `1013` (try
+again later) înainte să fie acceptat; închide un flux pe care nu-l mai
+citești. Cheia din `?api_key=` ajunge în logurile de acces ale proxy-urilor:
+folosește pentru fluxuri o cheie doar `read`, niciodată una de admin.
+
 ---
 
 ## Configurare (bulk / disaster recovery)
