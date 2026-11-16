@@ -94,6 +94,13 @@ async function seed() {
     ],
   };
   await api("POST", "/v1/config/import?apply=true", JSON.stringify(pack), { yaml: true });
+  // Catalog packs for the companion projects that alert through the API
+  // (the MQTT ones — seplos-bms, fronius-inverter — need a broker this stack
+  // does not run, and would only show rules waiting for data).
+  for (const packId of ["openvigil-nvr", "multi-bus-gateway"]) {
+    const r = await api("POST", "/v1/packs/apply", { pack_id: packId, params: { alert_channel: "ui_default" } });
+    if (!r.applied) throw new Error(`pack ${packId}: ${JSON.stringify(r.errors)}`);
+  }
 
   const post = (body) => fetch(`${BASE}/v1/inputs/${input.id}/webhook`, {
     method: "POST", headers: { "Content-Type": "application/json", "X-Input-Token": TOKEN }, body: JSON.stringify(body),
@@ -124,6 +131,15 @@ async function seed() {
     status: "resolved", context: { host: "db-02", job: "mysqldump nightly", error: "retried at 03:20 — completed" } });
   await api("POST", "/v1/fire", { type: "disk_filling", source: "node-exporter", idempotency_key: "disk-web-03",
     context: { host: "web-03", mount: "/var/log", pct: 93, free_gb: 3 } });
+  // What OpenVigil and Multi-Bus Gateway send, as an English installation would.
+  await api("POST", "/v1/fire", { type: "nvr_camera_cazuta", source: "openvigil", idempotency_key: "openvigil:cam-3",
+    resolved_type: "nvr_camera_revenita",
+    context: { text: "⚠️ Camera OFFLINE: Gate (10.0.0.3)", link: "", cam: "Gate", ip: "10.0.0.3" } });
+  await api("POST", "/v1/fire", { type: "nvr_intrus", source: "openvigil",
+    context: { text: "🚨 Back yard: person (02:14)", link: "", cam: "Back yard", ora: "02:14" } });
+  await api("POST", "/v1/fire", { type: "mbg_device", source: "multi-bus-gateway",
+    context: { source: "Grid meter UMG 512", message: "not responding for 45 s", key: "dev:umg512:down",
+      host: "mbg-01", severity: "critical", device_id: "umg512" } });
   for (const [svc, ver, hosts, dur] of [["api", "v4.12.0", 6, "3m 41s"], ["web", "v2.8.3", 3, "1m 12s"]]) {
     await api("POST", "/v1/fire", { type: "deploy_finished", source: "ci", context: { service: svc, version: ver, hosts, duration: dur } });
   }
