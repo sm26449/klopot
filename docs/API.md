@@ -71,9 +71,11 @@ one address the next ones get `429` with `Retry-After: 60` (a key that already v
 Errors are JSON. Handled errors use FastAPI's `detail`; a structured
 error carries a `code`/`message`. Unexpected server errors return a
 generic body plus an `X-Trace-Id` header for correlation (no internal
-details are leaked). A `409` on a duplicate name currently includes the
-database's own message (the constraint name); treat `detail` as text for
-people, not as a contract. A `422` lists where each problem is (`loc`, `msg`,
+details are leaked); the `X-Trace-Id` you sent is used when it is a token of
+up to 40 letters, digits, `-` or `_`, else Klopot mints one. A `409` says
+what happened in plain words (a duplicate name or key, or something missing
+or still in use) — the database's own message goes to the log; treat
+`detail` as text for people, not as a contract. A `422` lists where each problem is (`loc`, `msg`,
 `type`) and never echoes the rejected value.
 
 ```json

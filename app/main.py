@@ -264,7 +264,12 @@ def create_app() -> FastAPI:
     # Logging — JSON or console depending on ALERTD_LOG_FORMAT.
     # Replaces the prior basicConfig call; configure_logging() also
     # wires the trace_id contextvar formatter.
-    from .logging_setup import configure_logging, request_trace_middleware
+    from .logging_setup import (
+        SECURITY_HEADERS,
+        accept_trace,
+        configure_logging,
+        request_trace_middleware,
+    )
 
     configure_logging()
 
@@ -344,11 +349,11 @@ def create_app() -> FastAPI:
     async def _unhandled(request, exc):
         # Audit A20: never return str(exc) — it leaks SQL text, bound
         # parameters and internal detail to the client. Log the full
-        # traceback (redacted-safe server side) under a short trace id,
-        # and hand the client only that id to quote in a report.
-        import uuid
-
-        trace_id = request.headers.get("X-Trace-Id") or uuid.uuid4().hex[:16]
+        # traceback (redacted-safe server side) under the request's trace id,
+        # and hand the client only that id to quote in a report. This runs
+        # outside every middleware: the id comes from request.state (or a
+        # validated header), and the security headers are set here (F12).
+        trace_id = getattr(request.state, "trace_id", None) or accept_trace(request.headers.get("x-trace-id"))
         logger.exception(
             "Unhandled exception [trace=%s] on %s %s",
             trace_id, request.method, request.url.path,
@@ -362,18 +367,18 @@ def create_app() -> FastAPI:
                     "trace_id": trace_id,
                 }
             },
-            headers={"X-Trace-Id": trace_id},
+            headers={"X-Trace-Id": trace_id, **SECURITY_HEADERS},
         )
 
-    # Baseline hardening headers on every API response. The admin SPA
-    # adds its own strict CSP in app/admin_ui (Swagger UI at /docs
-    # loads from a CDN, so no CSP here; /docs is login-gated unless public).
+    # Baseline hardening headers on every API response (logging_setup
+    # SECURITY_HEADERS). The admin SPA adds its own strict CSP in
+    # app/admin_ui (Swagger UI at /docs loads from a CDN, so no CSP here;
+    # /docs is login-gated unless public).
     @app.middleware("http")
     async def _security_headers(request, call_next):
         response = await call_next(request)
-        response.headers.setdefault("X-Content-Type-Options", "nosniff")
-        response.headers.setdefault("X-Frame-Options", "DENY")
-        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        for name, value in SECURITY_HEADERS.items():
+            response.headers.setdefault(name, value)
         return response
 
     app.include_router(v1_router, prefix="/v1")

@@ -10,6 +10,7 @@ counting + slicing.
 """
 from __future__ import annotations
 
+import logging
 from typing import Any, TypeVar
 
 from fastapi import HTTPException, status
@@ -19,6 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import DeclarativeBase
 
 from ...schemas.common import Page
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=DeclarativeBase)
 
@@ -102,18 +105,30 @@ async def enforce_create_cap(
         )
 
 
+def _conflict(action: str, e: IntegrityError) -> HTTPException:
+    """A 409 that says what went wrong in the operator's terms. The driver's
+    text (``(1062, "Duplicate entry 'x' for key 'uq_…'")``) names tables,
+    keys and values; it goes to the log, not the response (review F12)."""
+    raw = str(e.orig) if e.orig else str(e)
+    logger.info("%s refused by the database: %s", action, raw[:500])
+    code = e.orig.args[0] if e.orig is not None and getattr(e.orig, "args", None) else None
+    text = raw.lower()
+    if code == 1062 or "unique constraint" in text or "duplicate" in text:
+        reason = "one with the same name or key already exists"
+    elif code in (1451, 1452) or "foreign key" in text:
+        reason = "it refers to something that does not exist, or something still uses it"
+    else:
+        reason = "the database refused the change"
+    return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"{action} failed: {reason}")
+
+
 async def commit_or_409(session: AsyncSession, action: str = "operation") -> None:
     """Commit and translate IntegrityError to 409 Conflict."""
     try:
         await session.commit()
     except IntegrityError as e:
         await session.rollback()
-        # Strip pymysql noise; surface the cause
-        msg = str(e.orig) if e.orig else str(e)
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"{action} failed: {msg[:200]}",
-        ) from e
+        raise _conflict(action, e) from e
 
 
 async def flush_or_409(session: AsyncSession, action: str = "operation") -> None:
@@ -127,11 +142,7 @@ async def flush_or_409(session: AsyncSession, action: str = "operation") -> None
         await session.flush()
     except IntegrityError as e:
         await session.rollback()
-        msg = str(e.orig) if e.orig else str(e)
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"{action} failed: {msg[:200]}",
-        ) from e
+        raise _conflict(action, e) from e
 
 
 __all__ = [

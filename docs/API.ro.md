@@ -71,9 +71,11 @@ cu `Retry-After: 1` înseamnă că prea multe chei așteaptă verificarea — re
 Erorile sunt JSON. Erorile tratate folosesc `detail` (FastAPI); o eroare
 structurată poartă `code`/`message`. Erorile neașteptate de server
 întorc un corp generic + un header `X-Trace-Id` pentru corelare (fără a
-scurge detalii interne). Un `409` la un nume duplicat include deocamdată
-mesajul bazei de date (numele constrângerii); tratează `detail` ca text
-pentru oameni, nu ca pe un contract. Un `422` spune unde e fiecare problemă
+scurge detalii interne); `X-Trace-Id` trimis de tine e folosit dacă e un
+token de cel mult 40 de litere, cifre, `-` sau `_`, altfel Klopot generează
+unul. Un `409` spune pe înțeles ce s-a întâmplat (nume sau cheie duplicat,
+ori ceva care lipsește sau e încă folosit) — mesajul bazei de date ajunge în
+log; tratează `detail` ca text pentru oameni, nu ca pe un contract. Un `422` spune unde e fiecare problemă
 (`loc`, `msg`, `type`) și nu repetă niciodată valoarea respinsă.
 
 ```json

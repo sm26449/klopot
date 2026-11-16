@@ -81,6 +81,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+- Errors say less: the 500 response reuses the request's trace id (a sent
+  `X-Trace-Id` only when it is a safe token — it was echoed unvalidated)
+  and carries the security headers it lacked; a `409` explains the conflict
+  instead of quoting the database driver. Every response also sends
+  `Permissions-Policy` (camera, microphone, geolocation, payment, USB off).
 - `test: true` turned any `fire` key into an unthrottled pager (it skipped
   throttle, quiet hours, the delivery gate, the duplicate claim and the
   per-type cooldown). The test flag is now only a tag: test fires are

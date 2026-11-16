@@ -197,7 +197,7 @@ def configure_logging() -> None:
 _TRACE_RE = re.compile(r"^[A-Za-z0-9_-]{1,40}$")
 
 
-def _accept_trace(incoming: str | None) -> str:
+def accept_trace(incoming: str | None) -> str:
     """Use a well-formed, bounded incoming trace id; otherwise mint our own."""
     if incoming and _TRACE_RE.match(incoming):
         return incoming
@@ -209,7 +209,10 @@ async def request_trace_middleware(request, call_next):
     ``X-Trace-Id`` header when it is a safe, bounded token, else generates a
     UUID4. Echoes the effective trace id back to the caller so they can
     correlate."""
-    trace = _accept_trace(request.headers.get("x-trace-id"))
+    trace = accept_trace(request.headers.get("x-trace-id"))
+    # Also on the request: the 500 handler runs outside this middleware, after
+    # the contextvar is reset, and must report the same id the logs carry.
+    request.state.trace_id = trace
     token = trace_id_var.set(trace)
     try:
         response = await call_next(request)
@@ -217,3 +220,14 @@ async def request_trace_middleware(request, call_next):
         trace_id_var.reset(token)
     response.headers["X-Trace-Id"] = trace
     return response
+
+
+# Baseline hardening headers for every response, the 500 too (it is built
+# outside the middleware stack). Permissions-Policy turns off browser
+# features the admin UI never uses, for it and anything it might embed.
+SECURITY_HEADERS: dict[str, str] = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+}
