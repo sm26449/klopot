@@ -222,11 +222,12 @@
           "required": false,
           "secret": false,
           "default": "http",
-          "help": "http = any gateway with an HTTP API; twilio = Twilio; teltonika = a Teltonika RUT router (RutOS).",
+          "help": "http = any gateway with an HTTP API; twilio = Twilio; teltonika = a Teltonika RUT router (RutOS); kurier = the Kurier SMS gateway.",
           "options": [
             "http",
             "twilio",
-            "teltonika"
+            "teltonika",
+            "kurier"
           ]
         },
         {
@@ -482,6 +483,72 @@
           "show_if": {
             "provider": [
               "teltonika"
+            ]
+          }
+        },
+        {
+          "name": "kurier_url",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": null,
+          "help": "Kurier's address, e.g. http://kurier:5080 — Klopot adds /api/sms/send.",
+          "show_if": {
+            "provider": [
+              "kurier"
+            ]
+          }
+        },
+        {
+          "name": "api_key",
+          "type": "string",
+          "required": false,
+          "secret": true,
+          "default": null,
+          "help": "Kurier's SMS_API_KEY (write-only).",
+          "show_if": {
+            "provider": [
+              "kurier"
+            ]
+          },
+          "ref_field": "api_key_ref"
+        },
+        {
+          "name": "watchdog",
+          "type": "bool",
+          "required": false,
+          "secret": false,
+          "default": false,
+          "help": "Kurier watches this Klopot: Klopot checks in every minute, and Kurier sends an SMS if it stops, or says it is stuck. Klopot alerts you if Kurier or its modem stops answering.",
+          "show_if": {
+            "provider": [
+              "kurier"
+            ]
+          }
+        },
+        {
+          "name": "watchdog_timeout_sec",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 180,
+          "help": "Silence after which Kurier sends the SMS (60–604800 s).",
+          "show_if": {
+            "provider": [
+              "kurier"
+            ]
+          }
+        },
+        {
+          "name": "watchdog_to",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": "",
+          "help": "Who gets the watchdog SMS, E.164, comma-separated. Empty = Kurier's SMS_WATCHDOG_TO.",
+          "show_if": {
+            "provider": [
+              "kurier"
             ]
           }
         },

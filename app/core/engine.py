@@ -97,6 +97,12 @@ class RuleEngine:
     # burn 26 commits/sec under full rule load.
     _TOUCH_FLUSH_SEC: float = 10.0
 
+    # A loop that has not come round for this long is stuck, even though its
+    # task is alive: a rule fire waits for its first delivery attempt (up to
+    # outbox.FIRST_ATTEMPT_BUDGET_SEC), so a few slow sends in one tick are
+    # normal; four budgets are not. Health reports the engine down past it.
+    STALL_SEC: float = 180.0
+
     def __init__(self, *, base_tick_sec: float = 1.0) -> None:
         self._base_tick = base_tick_sec
         self._task: asyncio.Task[None] | None = None
@@ -114,6 +120,8 @@ class RuleEngine:
         # flushed in batch by _flush_touches() every _TOUCH_FLUSH_SEC.
         self._pending_touches: dict[int, datetime] = {}
         self._last_flush: float = 0.0
+        # When the tick loop last came round (monotonic); None before start.
+        self._last_turn: float | None = None
 
     # ── Lifecycle ─────────────────────────────────────────────────
 
@@ -122,6 +130,7 @@ class RuleEngine:
             return
         self._stop_evt.clear()
         await self.reload_rules()
+        self._last_turn = _time.monotonic()
         self._task = asyncio.create_task(self._run(), name="rule-engine")
 
     async def stop(self) -> None:
@@ -137,6 +146,12 @@ class RuleEngine:
     def is_alive(self) -> bool:
         """True if the ticker task started and is still running (audit F32)."""
         return self._task is not None and not self._task.done()
+
+    def stalled_for(self) -> float:
+        """Seconds since the tick loop last came round (0 before start).
+        Above ``STALL_SEC`` the engine is stuck although its task is alive
+        (2026-11-17 improvements review, IP-01)."""
+        return 0.0 if self._last_turn is None else max(0.0, _time.monotonic() - self._last_turn)
 
     async def reload_rules(self) -> None:
         """Re-read rules from DB and rebuild the in-memory schedule.
@@ -284,6 +299,7 @@ class RuleEngine:
                 raise
             except Exception:
                 logger.exception("engine tick failed")
+            self._last_turn = _time.monotonic()
             try:
                 await asyncio.wait_for(
                     self._stop_evt.wait(), timeout=self._base_tick

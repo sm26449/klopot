@@ -123,7 +123,7 @@ Shipped in the image under `app/packs/`:
 
 | Pack | What it sets up |
 |------|-----------------|
-| `self-monitoring` | Klopot's own alerts (rule auto-disabled, daily digest, restore drill). Installed automatically on first start. |
+| `self-monitoring` | Klopot's own alerts (rule auto-disabled, daily digest, restore drill, Kurier or its modem not answering). Installed automatically on first start; templates a newer release adds appear at the next start. |
 | `service-heartbeat` | MQTT heartbeat → critical alert when it goes stale. |
 | `sensor-threshold` | MQTT numeric sensor → alert above a threshold for N checks. |
 | `alertmanager` | Alertmanager / Grafana receiver with templates per severity. |

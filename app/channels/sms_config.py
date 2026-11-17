@@ -12,7 +12,10 @@ from __future__ import annotations
 
 from typing import Any
 
-PROVIDERS = ("http", "twilio", "teltonika")
+PROVIDERS = ("http", "twilio", "teltonika", "kurier")
+# Kurier watchdog (ADR-0003, Kurier ADR-0001): how long Kurier waits for a ping.
+WATCHDOG_TIMEOUT_DEFAULT = 180
+WATCHDOG_TIMEOUT_RANGE = (60, 604800)
 LEGACY_BODY = '{"phone": "{phone | jsonstr}", "message": "{text | jsonstr}"}'
 
 # Non-secret fields each provider needs, and the secrets (literal or *_ref).
@@ -20,10 +23,12 @@ _REQUIRED: dict[str, tuple[str, ...]] = {
     "http": ("url",),
     "twilio": ("account_sid", "from_number"),
     "teltonika": ("router_url", "username"),
+    "kurier": ("kurier_url",),
 }
 _REQUIRED_SECRETS: dict[str, tuple[str, ...]] = {
     "twilio": ("auth_token",),
     "teltonika": ("password",),
+    "kurier": ("api_key",),
 }
 
 
@@ -78,3 +83,21 @@ def validate_config(config: dict[str, Any], *, require_secrets: bool = True) -> 
         raise ValueError("SMS success_statuses must be a list of HTTP status codes, e.g. [409]")
     if config.get("auth_kind") not in (None, "", "bearer", "basic", "header"):
         raise ValueError("SMS auth_kind must be bearer, basic or header")
+    if provider == "kurier" and config.get("watchdog"):
+        watchdog_timeout(config)   # raises on a bad value
+
+
+def watchdog_timeout(config: dict[str, Any]) -> int:
+    """The watchdog's ``timeout_sec`` for Kurier: an int in range, default 180."""
+    raw = config.get("watchdog_timeout_sec")
+    if raw in (None, ""):
+        return WATCHDOG_TIMEOUT_DEFAULT
+    low, high = WATCHDOG_TIMEOUT_RANGE
+    if not isinstance(raw, int) or isinstance(raw, bool) or not low <= raw <= high:
+        raise ValueError(f"SMS watchdog_timeout_sec must be a whole number of seconds, {low}–{high}")
+    return raw
+
+
+def kurier_base(config: dict[str, Any]) -> str:
+    """Kurier's base URL, without a trailing slash (``https://kurier.lan``)."""
+    return str(config.get("kurier_url") or "").strip().rstrip("/")

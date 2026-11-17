@@ -173,7 +173,13 @@ Some integrations are both inputs AND outputs:
 
 - **Outgoing**: `kind: sms` channel with a `provider`: `http` (any gateway
   with an HTTP API — URL, method, body template with `{phone}` / `{text}`,
-  optional auth), `twilio`, or `teltonika` (a RUT router's REST API).
+  optional auth), `twilio`, `teltonika` (a RUT router's REST API), or
+  `kurier` (the Kurier SMS gateway's own API — severity, a per-recipient
+  idempotency key; queued and duplicate count as delivered). A `kurier`
+  channel can also turn on Kurier's **watchdog**: `app/core/kurier_watchdog.py`
+  pings Kurier every minute with Klopot's health, so Kurier sends an SMS when
+  Klopot dies or is stuck, and Klopot alerts when Kurier or its modem stops
+  answering ([ADR-0003](adr/0003-kurier-watchdog.md), [OPERATIONS](OPERATIONS.md#kurier-watchdog)).
   Delivery semantics for the `http` provider: `{idempotency_key}` in the body
   template is the same on every retry of a delivery (append `:{phone}` when
   there are several recipients, since each gets its own request); 429 / 503

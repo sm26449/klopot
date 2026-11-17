@@ -137,6 +137,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     except Exception:
         logger.exception("Provider lifecycle service failed to start")
 
+    # Kurier watchdog ping (ADR-0003) — idle unless a kurier channel has it on.
+    try:
+        from .core.kurier_watchdog import get_kurier_watchdog
+
+        await get_kurier_watchdog().start()
+    except Exception:
+        logger.exception("Kurier watchdog failed to start")
+
     # 6b. Activity log writer — batches request / attempt / event rows
     try:
         from .core.activity import get_activity_writer
@@ -187,6 +195,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await get_provider_lifecycle_service().stop()
     except Exception:
         logger.exception("Provider lifecycle stop failed")
+    try:
+        from .core.kurier_watchdog import get_kurier_watchdog
+
+        await get_kurier_watchdog().stop()
+    except Exception:
+        logger.exception("Kurier watchdog stop failed")
     try:
         from .core.telegram_service import get_telegram_service
 

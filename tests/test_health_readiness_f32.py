@@ -63,3 +63,31 @@ async def test_readiness_503_when_essential_down(client: AsyncClient, read_clien
 def _essential_down_from_body(body) -> list[str]:
     return [n for n, c in body["components"].items()
             if n in {"database", "engine", "delivery"} and c["status"] == "down"]
+
+
+def test_a_stuck_engine_is_down_although_its_task_is_alive(monkeypatch):
+    # IP-01: the task is alive but its loop has not come round — no rule is
+    # evaluated. Readiness must see it (and so must Kurier's watchdog ping).
+    from app.api.v1 import health
+    from app.core.engine import RuleEngine
+
+    class Stuck:
+        def is_alive(self):
+            return True
+
+        def stalled_for(self):
+            return RuleEngine.STALL_SEC + 5
+
+    monkeypatch.setattr("app.core.engine.get_engine", lambda: Stuck())
+    comp = health._engine_component()
+    assert comp.status == "down" and comp.code == "engine_stalled"
+    assert _essential_down({"engine": comp}) == ["engine"]
+
+
+async def test_a_turning_engine_reports_its_last_round():
+    from app.core.engine import RuleEngine
+
+    engine = RuleEngine()
+    assert engine.stalled_for() == 0.0
+    engine._last_turn = __import__("time").monotonic() - 7
+    assert 6.5 < engine.stalled_for() < 60

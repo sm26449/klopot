@@ -106,8 +106,9 @@ _CHANNELS: dict[str, list[dict[str, Any]]] = {
         _f("timeout_sec", "int", default=10),
     ],
     "sms": [
-        _f("provider", "select", default="http", options=["http", "twilio", "teltonika"],
-           help="http = any gateway with an HTTP API; twilio = Twilio; teltonika = a Teltonika RUT router (RutOS)."),
+        _f("provider", "select", default="http", options=["http", "twilio", "teltonika", "kurier"],
+           help="http = any gateway with an HTTP API; twilio = Twilio; teltonika = a Teltonika RUT router (RutOS); "
+                "kurier = the Kurier SMS gateway."),
         _f("phone", "string", required=True, help="Destination E.164 number; several separated by commas."),
         _f("max_chars", "int", default=320, help="Longer text is cut (160 = one SMS segment)."),
         # provider = http
@@ -144,6 +145,17 @@ _CHANNELS: dict[str, list[dict[str, Any]]] = {
         _f("username", "string", show_if={"provider": ["teltonika"]}),
         _f("password", "string", show_if={"provider": ["teltonika"]}, help="Router password (write-only)."),
         _f("modem", "string", default="1-1", show_if={"provider": ["teltonika"]}, help="Modem id on the router."),
+        # provider = kurier (ADR-0003)
+        _f("kurier_url", "string", show_if={"provider": ["kurier"]},
+           help="Kurier's address, e.g. http://kurier:5080 — Klopot adds /api/sms/send."),
+        _f("api_key", "string", show_if={"provider": ["kurier"]}, help="Kurier's SMS_API_KEY (write-only)."),
+        _f("watchdog", "bool", default=False, show_if={"provider": ["kurier"]},
+           help="Kurier watches this Klopot: Klopot checks in every minute, and Kurier sends an SMS if it "
+                "stops, or says it is stuck. Klopot alerts you if Kurier or its modem stops answering."),
+        _f("watchdog_timeout_sec", "int", default=180, show_if={"provider": ["kurier"]},
+           help="Silence after which Kurier sends the SMS (60–604800 s)."),
+        _f("watchdog_to", "string", default="", show_if={"provider": ["kurier"]},
+           help="Who gets the watchdog SMS, E.164, comma-separated. Empty = Kurier's SMS_WATCHDOG_TO."),
         _f("timeout_sec", "int", default=15, help="Seconds to wait for the gateway, Twilio or the router."),
     ],
     "email": [

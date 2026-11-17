@@ -116,7 +116,9 @@ key with `read`, or a signed-in user) also gets the `version`, the
 `components` map and `docs_enabled` — the components name hosts, inputs and
 error texts, so an anonymous caller does not see them. `/v1/health/ready`
 returns the same body for the same caller, with HTTP 503 on an essential
-outage — use it as a readiness probe. Use `/v1/version` for a cheap liveness
+outage — use it as a readiness probe. The rule engine counts as down both
+when its task has died and when it is alive but stuck: its loop has not come
+round for 180 s (`code: engine_stalled`), so no rule is being evaluated. Use `/v1/version` for a cheap liveness
 probe that never touches MySQL/MQTT.
 
 ```json

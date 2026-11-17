@@ -91,6 +91,7 @@ export default {
       db_error: "eroare: {error}",
       task_running: "rulează",
       task_stopped: "nu rulează",
+      engine_stalled: "blocat de {seconds} s — nicio regulă nu este evaluată",
       outbox_clear: "nimic întârziat",
       outbox_overdue: "{count} livrări întârziate cu peste {seconds}s",
       outbox_probe_unavailable: "verificarea cozii nu e disponibilă",

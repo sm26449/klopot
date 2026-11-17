@@ -12,6 +12,11 @@
 - ``teltonika`` — a Teltonika RUT router's REST API (RutOS): ``router_url``,
   ``username``, ``password``, ``modem`` (default ``1-1``). Logs in on every
   send (``POST /api/login``), then ``POST /api/messages/actions/send``.
+- ``kurier`` — Kurier (sm26449/kurier), the SMS gateway in front of such a
+  router: ``kurier_url``, ``api_key``. ``POST {kurier_url}/api/sms/send`` with
+  the severity and a per-recipient idempotency key; queued (202) and
+  duplicate (409) count as delivered. With ``watchdog`` on, Kurier also
+  watches this Klopot (``app/core/kurier_watchdog.py``, ADR-0003).
 
 ``phone`` is one E.164 number or several separated by commas; the delivery
 succeeds only when every recipient was accepted. Text is ``title`` + newline
@@ -40,7 +45,7 @@ from ..utils.safe_http import EgressBlocked, ResponseTooLarge, safe_request
 from ._secrets import resolve_secret
 from .base import HEALTHCHECK_TIMEOUT_SEC, BaseChannel, Notification, SendResult
 from .sms_config import LEGACY_BODY as DEFAULT_BODY
-from .sms_config import PROVIDERS, success_statuses
+from .sms_config import PROVIDERS, kurier_base, success_statuses
 from .webhook import _build_template_ctx
 
 logger = logging.getLogger(__name__)
@@ -68,6 +73,23 @@ class _SendError(Exception):
         super().__init__(message)
         self.retry_after = retry_after
         self.permanent = permanent
+
+
+# The channel's secrets (literal or *_ref): scrubbed out of every error text —
+# a gateway may echo its key or token in an error body, and the error is
+# stored on the delivery row that read-scoped keys see.
+_SECRET_FIELDS = ("auth_value", "auth_token", "password", "api_key", "gateway_api_key")
+
+
+def _scrub(config: dict[str, Any], text: str) -> str:
+    for field in _SECRET_FIELDS:
+        try:
+            value = resolve_secret(config, field, f"{field}_ref")
+        except Exception:
+            value = None
+        if value and len(value) >= 4:
+            text = text.replace(value, "***")
+    return text
 
 
 def recipients(config: dict[str, Any]) -> list[str]:
@@ -143,20 +165,22 @@ class SMSChannel(BaseChannel):
                     responses.append(await _send_http(notif, config, phone, text, block, idempotency_key))
                 elif provider == "twilio":
                     responses.append(await _send_twilio(config, phone, text, block))
+                elif provider == "kurier":
+                    responses.append(await _send_kurier(notif, config, phone, text, block, idempotency_key))
                 else:
                     responses.append(await _send_teltonika(config, token or "", phone, text, block))
         except _SendError as e:
             # With several recipients, the ones before the refusal were sent; a
             # retry sends them again unless the gateway deduplicates on
             # idempotency_key (put "{idempotency_key}:{phone}" in the body).
-            return SendResult(ok=False, error=str(e), response={"sent": len(responses)},
+            return SendResult(ok=False, error=_scrub(config, str(e)), response={"sent": len(responses)},
                               retry_after=e.retry_after, permanent=e.permanent)
         except (EgressBlocked, ResponseTooLarge) as e:
             return SendResult(ok=False, error=e.reason)
         except httpx.TimeoutException:
             return SendResult(ok=False, error=f"SMS {provider} timeout")
         except httpx.HTTPError as e:
-            return SendResult(ok=False, error=f"HTTP error: {transport_error_text(e)}")
+            return SendResult(ok=False, error=_scrub(config, f"HTTP error: {transport_error_text(e)}"))
         return SendResult(ok=True, response={"provider": provider, "sent": len(phones),
                                              "responses": responses[:5]})
 
@@ -166,6 +190,7 @@ class SMSChannel(BaseChannel):
             "http": config.get("health_url"),
             "twilio": _twilio_api(config) + "/",
             "teltonika": (config.get("router_url") or "").rstrip("/") + "/api/login" if config.get("router_url") else None,
+            "kurier": kurier_base(config) + "/api/health" if kurier_base(config) else None,
         }.get(provider)
         if not url:
             return {"reachable": None, "note": "no health_url configured"}
@@ -204,6 +229,31 @@ async def _send_http(notif: Notification, config: dict[str, Any], phone: str, te
     r = await safe_request((config.get("method") or "POST").upper(), url, content=body, headers=headers,
                            timeout=_timeout(config), block_private=block)
     return _check(r, success_statuses(config))
+
+
+# Kurier answers 409 to a duplicate it already sent (its dedup window): the
+# message is out, so it counts as delivered; 202 = queued in its outbox.
+_KURIER_DELIVERED = frozenset({409})
+
+
+def kurier_headers(config: dict[str, Any]) -> dict[str, str]:
+    key = resolve_secret(config, "api_key", "api_key_ref")
+    if not key:
+        raise _SendError("no Kurier api_key resolved")
+    return {"X-API-Key": key}
+
+
+async def _send_kurier(notif: Notification, config: dict[str, Any], phone: str, text: str, block: bool,
+                       idempotency_key: str | None = None) -> Any:
+    base = kurier_base(config)
+    if not base:
+        raise _SendError("Missing kurier_url")
+    body = {"number": phone, "message": text, "severity": notif.severity,
+            # Per recipient: a retry after a partial send repeats nothing.
+            "idempotency_key": f"{idempotency_key or notif.id}:{phone}"[:128]}
+    r = await safe_request("POST", f"{base}/api/sms/send", json=body, headers=kurier_headers(config),
+                           timeout=_timeout(config), block_private=block)
+    return _check(r, _KURIER_DELIVERED)
 
 
 async def _send_twilio(config: dict[str, Any], phone: str, text: str, block: bool) -> Any:

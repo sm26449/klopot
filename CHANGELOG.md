@@ -69,6 +69,18 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Kurier watches Klopot** ([ADR-0003](docs/adr/0003-kurier-watchdog.md)).
+  A new SMS provider, `kurier`, speaks the Kurier gateway's own API (severity,
+  a per-recipient idempotency key; queued and duplicate count as delivered).
+  With its **Watchdog** on, Klopot pings Kurier every minute with its own
+  health, and Kurier (1.15+) sends an SMS when Klopot stops or reports itself
+  stuck — over LTE, so an internet outage is covered too. The answer tells
+  Klopot about Kurier and its modem: new built-in templates
+  `kurier_unreachable` / `kurier_reachable` and `kurier_modem_down` /
+  `kurier_modem_up` (added to existing installs at the next start, routed to
+  `ui_default` — route them to Telegram / push). See docs/OPERATIONS.md,
+  "Kurier watchdog". Added in rc.3, an explicit exception to the
+  release-candidate rule (docs/RELEASING.md).
 - **Allowed alert types per API key** (review F10): `allowed_types`, template
   types or patterns (`backup_*`) the key may fire — API keys → the key →
   *Allowed alert types*, or on `/v1/api_keys`. `POST /v1/fire` with another
@@ -86,6 +98,9 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+- An SMS error never carries the channel's secret: a gateway that echoed its
+  key or token in an error body put it on the delivery row, which read-scoped
+  keys see. Every provider's errors are scrubbed of the channel's secrets.
 - Behind a TLS proxy a redirect (a trailing slash) sent the client to
   `http://`: Klopot saw the proxy's plain-HTTP connection. It now takes the
   scheme from `X-Forwarded-Proto` — only from `ALERTD_TRUSTED_PROXY_CIDRS`,
@@ -96,6 +111,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A stuck rule engine counts as down.** Health checked only that the
+  engine's task existed; a task alive but stuck (a tick waiting on slow
+  sends) kept `/v1/health/ready` green while no rule was evaluated. Now the
+  engine is `down` (`engine_stalled`) when its loop has not come round for
+  180 s — readiness fails and Kurier's watchdog is told (improvements review
+  IP-01, detection; taking sends out of the engine loop is planned).
 - **Installing a pack no longer adds its channel to templates you already
   have.** A pack routes every template to the channel its parameter names;
   over an existing configuration that added the channel to templates whose

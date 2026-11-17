@@ -235,3 +235,90 @@ async def test_twilio_api_url_and_timeout_are_settings_of_the_channel():
         assert (await SMSChannel().send(_notif(), cfg)).ok
     assert mock.call_args.args[1] == "https://twilio-proxy.example/2010-04-01/Accounts/AC1/Messages.json"
     assert mock.call_args.kwargs["timeout"] == 4.0
+
+
+# ── kurier (ADR-0003) ───────────────────────────────────────────────
+
+KURIER = {"provider": "kurier", "phone": "+40700,+40701", "kurier_url": "http://kurier:5080/", "api_key": "k-s3cret"}
+
+
+async def test_kurier_speaks_its_own_api_with_a_key_per_recipient(monkeypatch):
+    from app.channels import sms
+    from tests.channels._kit import FakeHTTP, notification, reply
+
+    http = FakeHTTP.install(monkeypatch, sms).will(reply(200, [{"success": True}]))
+    r = await SMSChannel().send(notification(severity="critical", title="Down", message="nas"), KURIER,
+                                idempotency_key="dlv-9")
+    assert r.ok and r.response["sent"] == 2
+    first, second = http.calls
+    assert first["url"] == "http://kurier:5080/api/sms/send"
+    assert first["headers"] == {"X-API-Key": "k-s3cret"}
+    assert first["json"] == {"number": "+40700", "message": "Down\nnas", "severity": "critical",
+                             "idempotency_key": "dlv-9:+40700"}
+    assert second["json"]["idempotency_key"] == "dlv-9:+40701", "a retry repeats no recipient"
+
+
+@pytest.mark.parametrize("status", [202, 409])
+async def test_kurier_queued_or_already_sent_counts_as_delivered(monkeypatch, status):
+    from app.channels import sms
+    from tests.channels._kit import FakeHTTP, notification, reply
+
+    FakeHTTP.install(monkeypatch, sms).will(reply(status, [{"success": True, "queued": status == 202}]))
+    assert (await SMSChannel().send(notification(), {**KURIER, "phone": "+40700"})).ok
+
+
+async def test_kurier_contract_and_backpressure(monkeypatch):
+    from app.channels import sms
+    from tests.channels._kit import FakeHTTP, assert_http_contract, notification, reply
+
+    http = FakeHTTP.install(monkeypatch, sms)
+    await assert_http_contract(SMSChannel(), {**KURIER, "phone": "+40700"}, http, secrets=["k-s3cret"])
+    http.will(reply(429, {}, text="budget"))
+    r = await SMSChannel().send(notification(), {**KURIER, "phone": "+40700"})
+    assert not r.ok and r.retry_after is not None
+
+
+async def test_kurier_without_a_key_fails_without_sending(monkeypatch):
+    from app.channels import sms
+    from tests.channels._kit import FakeHTTP, notification
+
+    http = FakeHTTP.install(monkeypatch, sms)
+    r = await SMSChannel().send(notification(), {k: v for k, v in KURIER.items() if k != "api_key"})
+    assert not r.ok and "api_key" in r.error and http.calls == []
+
+
+async def test_kurier_healthcheck_probes_its_health_endpoint():
+    patcher, mock = _patch_send(status=200)
+    with patcher:
+        h = await SMSChannel().healthcheck(KURIER)
+    assert h["reachable"] is True and mock.call_args.args == ("GET", "http://kurier:5080/api/health")
+
+
+@pytest.mark.parametrize(("cfg", "message"), [
+    ({"provider": "kurier", "phone": "+1", "api_key": "k"}, "kurier_url"),
+    ({"provider": "kurier", "phone": "+1", "kurier_url": "http://k"}, "api_key"),
+    ({**KURIER, "watchdog": True, "watchdog_timeout_sec": 30}, "watchdog_timeout_sec"),
+    ({**KURIER, "watchdog": True, "watchdog_timeout_sec": "180"}, "watchdog_timeout_sec"),
+])
+def test_kurier_validation(cfg, message):
+    with pytest.raises(ValueError, match=message):
+        validate_config(cfg)
+
+
+def test_kurier_watchdog_settings_are_optional():
+    validate_config({**KURIER, "watchdog": True})                       # default 180
+    validate_config({**KURIER, "watchdog": True, "watchdog_timeout_sec": 600})
+    validate_config({**KURIER, "watchdog_timeout_sec": 5})              # off: not checked
+
+
+async def test_an_error_never_carries_the_channel_secret(monkeypatch):
+    # A gateway that echoes its key in an error body must not put it on the
+    # delivery row (read scope) — every provider, not only kurier.
+    from app.channels import sms
+    from tests.channels._kit import FakeHTTP, notification, reply
+
+    http = FakeHTTP.install(monkeypatch, sms)
+    cfg = {**HTTP, "auth_kind": "header", "auth_header": "X-API-Key", "auth_value": "gw-s3cret-key"}
+    http.will(reply(400, {}, text="bad key gw-s3cret-key"))
+    r = await SMSChannel().send(notification(), cfg)
+    assert not r.ok and "gw-s3cret-key" not in r.error and "***" in r.error

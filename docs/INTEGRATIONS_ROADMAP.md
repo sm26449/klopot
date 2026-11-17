@@ -16,7 +16,7 @@ Status: Active · Original proposal: 2026-11-08 · Reviewed: 2026-11-15
 | Gotify, Pushover (emergency opt-in, receipts) | Released in 1.1.0; migration `0029` | [API](API.md), [incidents](INCIDENTS.md) |
 | Generic provider lifecycle (§5) | `lifecycle_commands` + `inbound_events`, `intrusive` channel flag, adapter test kit | [architecture](ARCHITECTURE.md), [extensibility](EXTENSIBILITY.md) |
 | Generated SDKs (§4.2) | Python `klopot-client` and TypeScript `@klopot/client` in `sdk/`, drift-checked; not published | [sdk/README.md](../sdk/README.md) |
-| SMS providers | `http`, `twilio`, `teltonika` on the `sms` channel; migration `0031` | [API](API.md) |
+| SMS providers | `http`, `twilio`, `teltonika`, `kurier` (+ Kurier's watchdog on Klopot, ADR-0003) on the `sms` channel; migration `0031` | [API](API.md), [OPERATIONS](OPERATIONS.md#kurier-watchdog) |
 | Web Push | Released in 1.1.0: installable admin UI, per-device subscriptions (`push_subscriptions`, migration `0033`), per-device minimum severity / pause. Action buttons in the notification are a later phase | [Web Push](WEB_PUSH.md) |
 
 The 1.0.1 baseline ships schema `0027`; 1.1.0 ships schema `0039`.
@@ -81,7 +81,7 @@ Conventions used below:
 
 | Shape | Kinds | Notes |
 |-------|-------|-------|
-| Channels | `ui`, `banner`, `telegram` (+ ack / snooze buttons), `sms` (`http` / `twilio` / `teltonika`), `email`, `push` (per-device Web Push), `webhook`, `mqtt`, `ntfy`, `gotify`, `pushover` | Webhook presets: Discord, Slack, Teams, Mattermost, Home Assistant, ntfy, generic |
+| Channels | `ui`, `banner`, `telegram` (+ ack / snooze buttons), `sms` (`http` / `twilio` / `teltonika` / `kurier`), `email`, `push` (per-device Web Push), `webhook`, `mqtt`, `ntfy`, `gotify`, `pushover` | Webhook presets: Discord, Slack, Teams, Mattermost, Home Assistant, ntfy, generic |
 | Inputs | `mqtt`, `http_poll`, `webhook`, `schedule`, `sms_inbox`, `alertmanager` | `email_imap` exists in the enum only; no adapter |
 | Platform | `X-API-Key` scopes, browser sessions, OpenAPI at `/docs` (login-gated, with required scopes), Prometheus `/v1/metrics`, Grafana dashboard + rules in `contrib/`, generated SDKs in `sdk/`, packs, activity log | No SSO; SDKs not published to PyPI / npm |
 

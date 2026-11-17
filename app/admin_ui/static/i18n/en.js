@@ -94,6 +94,7 @@ export default {
       db_error: "error: {error}",
       task_running: "running",
       task_stopped: "not running",
+      engine_stalled: "stuck for {seconds} s — no rule is being evaluated",
       outbox_clear: "nothing overdue",
       outbox_overdue: "{count} deliveries overdue by more than {seconds}s",
       outbox_probe_unavailable: "queue check unavailable",

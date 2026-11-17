@@ -36,7 +36,7 @@ SECRET_FIELDS: dict[str, dict[str, frozenset[str]]] = {
         "mqtt": frozenset({"username", "password"}),
         "telegram": frozenset({"bot_token"}),
         # gateway_api_key: pre-0031 shape, still masked if an old config arrives.
-        "sms": frozenset({"auth_value", "auth_token", "password", "gateway_api_key"}),
+        "sms": frozenset({"auth_value", "auth_token", "password", "gateway_api_key", "api_key"}),
         "email": frozenset({"password"}),
         "webhook": frozenset({"auth_value"}),
         # The topic name is the credential on ntfy: whoever knows it can

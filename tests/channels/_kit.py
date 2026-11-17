@@ -35,10 +35,11 @@ def notification(**overrides: Any) -> Notification:
 
 
 class _Reply:
-    def __init__(self, status_code: int, payload: Any, text: str) -> None:
+    def __init__(self, status_code: int, payload: Any, text: str, headers: dict[str, str] | None = None) -> None:
         self.status_code = status_code
         self._payload = payload
         self.text = text
+        self.headers = httpx.Headers(headers or {})
 
     def json(self) -> Any:
         if self._payload is None:
@@ -46,8 +47,8 @@ class _Reply:
         return self._payload
 
 
-def reply(status_code: int = 200, json: Any = None, text: str = "") -> _Reply:
-    return _Reply(status_code, json, text)
+def reply(status_code: int = 200, json: Any = None, text: str = "", headers: dict[str, str] | None = None) -> _Reply:
+    return _Reply(status_code, json, text, headers)
 
 
 class FakeHTTP:

@@ -4,9 +4,9 @@ pack:
   id: self-monitoring
   name: {en: "Klopot self-monitoring", ro: "Auto-monitorizare Klopot"}
   description:
-    en: "Alerts Klopot raises about itself: a rule switched off after repeated evaluation errors, the daily digest of suppressed alerts, and the backup restore drill."
-    ro: "Alertele pe care Klopot le trimite despre el însuși: o regulă oprită după erori repetate de evaluare, rezumatul zilnic al alertelor suprimate și testul de restaurare a backup-ului."
-  version: 1.0.0
+    en: "Alerts Klopot raises about itself: a rule switched off after repeated evaluation errors, the daily digest of suppressed alerts, the backup restore drill, and Kurier (the SMS gateway) or its modem not answering."
+    ro: "Alertele pe care Klopot le trimite despre el însuși: o regulă oprită după erori repetate de evaluare, rezumatul zilnic al alertelor suprimate, testul de restaurare a backup-ului și Kurier (gateway-ul SMS) sau modemul lui care nu răspunde."
+  version: 1.1.0
   tags: [klopot, built-in]
   parameters:
     - name: alert_channel
@@ -56,8 +56,51 @@ templates:
       investigate before you need them.
     description: "The restore drill could not restore or verify the latest backup (scripts/restore_drill.sh)."
     min_repeat_min: 0
+  # Kurier watchdog (ADR-0003): fired by app/core/kurier_watchdog.py when a
+  # `kurier` SMS channel has its watchdog on. Route them to Telegram / push
+  # too — not only to SMS, the path they report broken.
+  - type: kurier_unreachable
+    severity: critical
+    icon: "📵"
+    category: Self-monitoring
+    title_template: "Kurier is not answering ({channel})"
+    message_template: >-
+      Klopot has not reached Kurier for {failed_pings} pings in a row: {error}.
+      SMS alerts and Kurier's watchdog SMS are down until it answers.
+    description: "Klopot's watchdog ping to Kurier failed three times in a row (ADR-0003)."
+    min_repeat_min: 0
+  - type: kurier_reachable
+    severity: info
+    icon: "✅"
+    category: Self-monitoring
+    title_template: "Kurier answers again ({channel})"
+    message_template: "Kurier answers Klopot's watchdog ping again; SMS alerts can go out."
+    description: "Recovery of kurier_unreachable."
+    min_repeat_min: 0
+  - type: kurier_modem_down
+    severity: critical
+    icon: "📶"
+    category: Self-monitoring
+    title_template: "Kurier's modem is off the network ({channel})"
+    message_template: >-
+      Kurier answers, but its modem is not registered (SIM: {sim_state},
+      signal: {signal_strength} dBm, operator: {operator}). No SMS can go out.
+    description: "Kurier reports its modem unregistered in the watchdog answer (ADR-0003)."
+    min_repeat_min: 0
+  - type: kurier_modem_up
+    severity: info
+    icon: "✅"
+    category: Self-monitoring
+    title_template: "Kurier's modem is back on the network ({channel})"
+    message_template: "Modem registered again (operator: {operator}, signal: {signal_strength} dBm)."
+    description: "Recovery of kurier_modem_down."
+    min_repeat_min: 0
 routes:
   - {template: rule_auto_disabled, channel: "${alert_channel}", severity_min: info}
   - {template: restore_drill_ok, channel: "${alert_channel}", severity_min: info}
   - {template: daily_suppressed_digest, channel: "${alert_channel}", severity_min: info}
   - {template: restore_drill_failed, channel: "${alert_channel}", severity_min: info}
+  - {template: kurier_unreachable, channel: "${alert_channel}", severity_min: info}
+  - {template: kurier_reachable, channel: "${alert_channel}", severity_min: info}
+  - {template: kurier_modem_down, channel: "${alert_channel}", severity_min: info}
+  - {template: kurier_modem_up, channel: "${alert_channel}", severity_min: info}

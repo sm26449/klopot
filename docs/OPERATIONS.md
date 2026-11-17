@@ -74,3 +74,34 @@ database and survive restarts. Connection labels disappear when a channel is
 disabled or removed. MQTT availability reports broker connectivity; its
 heartbeat carries the engine tick timestamp separately. No availability
 message proves that the evaluator is healthy by itself.
+
+## Kurier watchdog
+
+Klopot cannot report its own outage through itself. With a `kurier` SMS
+channel ([Kurier](https://github.com/sm26449/kurier), the SMS gateway) whose
+**Watchdog** is on, Kurier does it ([ADR-0003](adr/0003-kurier-watchdog.md);
+the contract is Kurier's ADR-0001, Kurier 1.15+):
+
+- Every 60 s Klopot pings `POST {kurier_url}/api/watchdogs/klopot-<channel>/ping`
+  with `status: ok`, or `fail` and the reason when an essential component is
+  down — the database, the delivery worker, the rule engine (also when it is
+  stuck, `engine_stalled`) — or the outbox is not draining. The ping runs in
+  its own task, never in the rule engine.
+- Kurier sends an SMS when the pings stop for `watchdog_timeout_sec` (default
+  180 — a deploy's restart fits in it) or say `fail`, and one when Klopot is
+  back. Recipients: `watchdog_to`, else Kurier's `SMS_WATCHDOG_TO`, else its
+  `SMS_DEFAULT_RECIPIENTS`. It works over LTE, so it also covers an internet
+  outage.
+- The answer carries Kurier's modem state. Klopot raises
+  `kurier_unreachable` after three failed pings in a row (the error says why:
+  `HTTP 401` wrong key, `HTTP 422` a bad setting, `HTTP 404` a Kurier without
+  watchdogs) and `kurier_modem_down` when the modem is not registered — or
+  when Kurier has not reached the router for three minutes. Both are episodes
+  with a recovery (`kurier_reachable`, `kurier_modem_up`), in the built-in
+  self-monitoring templates, routed to `ui_default` on install. **Route them
+  to Telegram or push too** — not only to SMS, the path they report broken.
+- Klopot does not unregister when it stops: a stopped Klopot should alert. To
+  silence it on purpose (maintenance), turn the watchdog off on the channel
+  and `DELETE {kurier_url}/api/watchdogs/klopot-<channel>`.
+- Not covered: the host itself going down takes Klopot and Kurier with it —
+  that needs a watcher outside the host.
