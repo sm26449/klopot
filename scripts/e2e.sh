@@ -43,7 +43,9 @@ npx --no-install playwright install chromium >/dev/null 2>&1 || npx --no-install
 
 if [ "$BUILD" = 1 ]; then
   echo "== building $IMAGE from the checkout"
-  docker build -q -t "$IMAGE" . >/dev/null
+  # shellcheck source=scripts/_docker_build.sh
+  . "$(dirname "$0")/_docker_build.sh"
+  BUILD_QUIET=1 build_or_explain docker build -q -t "$IMAGE" . || exit 1
 fi
 
 port=""
@@ -59,14 +61,16 @@ export E2E_ADMIN_KEY="alertd_e2e_bootstrap_key_$$_0123456789"
 
 echo "== starting a fresh install on $E2E_URL"
 docker network create "$NET" >/dev/null
-docker run -d --rm --name "$DB" --network "$NET" \
+# No --rm on either container: cleanup() removes them once (and --keep keeps
+# them); two removals racing broke BuildKit's cache (scripts/_docker_build.sh).
+docker run -d --name "$DB" --network "$NET" \
   -e MYSQL_ROOT_PASSWORD=e2e-root -e MYSQL_DATABASE=alertd -e MYSQL_USER=alertd -e MYSQL_PASSWORD=e2e-db \
   mysql:8.0 --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci >/dev/null
 for _ in $(seq 1 60); do
   docker exec "$DB" mysql -ualertd -pe2e-db -e 'SELECT 1' alertd >/dev/null 2>&1 && break
   sleep 2
 done
-docker run -d --rm --name "$APP" --network "$NET" -p "127.0.0.1:$port:5090" \
+docker run -d --name "$APP" --network "$NET" -p "127.0.0.1:$port:5090" \
   -e ALERTD_DATABASE_URL="mysql+aiomysql://alertd:e2e-db@$DB:3306/alertd" \
   -e ALERTD_MQTT_HOST="" -e ALERTD_COOKIE_SECURE=false -e ALERTD_ADMIN_UI_ENABLED=true \
   -e ALERTD_ADMIN_BOOTSTRAP_PASSWORD="$E2E_BOOTSTRAP_PASSWORD" \

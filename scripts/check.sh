@@ -69,7 +69,10 @@ gitleaks_scan() {
 
 mysql_gate() {
   local name="alertd-check-mysql-$$" port
-  docker run -d --rm --name "$name" -p 127.0.0.1::3306 --tmpfs /var/lib/mysql \
+  # No --rm: the trap removes it, once and synchronously. --rm too meant two
+  # removals racing, and an image build right after (e2e.sh) broke BuildKit's
+  # cache on this host (scripts/_docker_build.sh).
+  docker run -d --name "$name" -p 127.0.0.1::3306 --tmpfs /var/lib/mysql \
     -e MYSQL_ROOT_PASSWORD=test -e MYSQL_DATABASE=alertd \
     -e MYSQL_USER=alertd -e MYSQL_PASSWORD=alertd \
     mysql:8.0 --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci >/dev/null || return 1

@@ -75,6 +75,8 @@ APP="${ALERTD_CONTAINER:-$(docker compose ps -q alertd 2>/dev/null || true)}"
 DB="${ALERTD_MYSQL_CONTAINER:-$(docker compose ps -q mysql 2>/dev/null || true)}"
 # shellcheck source=scripts/_klopot_url.sh
 . "$SRC/scripts/_klopot_url.sh"
+# shellcheck source=scripts/_docker_build.sh
+. "$SRC/scripts/_docker_build.sh"
 URL="$(klopot_url)"   # the port of the install in $PWD, from its .env
 READY_TIMEOUT_SEC="${READY_TIMEOUT_SEC:-180}"
 
@@ -160,12 +162,12 @@ rollback_help() {
 # ── 4. Build ──────────────────────────────────────────────────────
 say "Build"
 if [ -n "$RT" ]; then
-  docker build -t "$NEW_IMAGE" "$SRC" 2>&1 | tail -5 || die "build failed — the running service was not touched"
+  build_or_explain docker build -t "$NEW_IMAGE" "$SRC" || die "build failed — the running service was not touched"
   cp -p .env "backups/env-predeploy-$LABEL-$TS"
   sed -i "s|^KLOPOT_IMAGE=.*|KLOPOT_IMAGE=$NEW_IMAGE|" .env
   echo "KLOPOT_IMAGE: $OLD_REF → $NEW_IMAGE (old .env: $PWD/backups/env-predeploy-$LABEL-$TS)"
 else
-  docker compose build alertd 2>&1 | tail -5 || die "build failed — the running service was not touched"
+  build_or_explain docker compose build alertd || die "build failed — the running service was not touched"
 fi
 
 # ── 5. Recreate ───────────────────────────────────────────────────
