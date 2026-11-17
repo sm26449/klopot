@@ -477,7 +477,9 @@ jobs:
   # After EVERY gate is green. The image is built and loaded locally,
   # scanned by trivy (fail on fixable HIGH/CRITICAL), and only then pushed.
   #   - a release tag v<version>: :v<version> and :latest (+ :sha-…); the tag
-  #     must equal "v" + the version in pyproject.toml, or nothing is pushed;
+  #     must equal `scripts/version.py tag`, or nothing is pushed. A release
+  #     candidate (v1.3.0-rc.1) gets :v<version> but never :latest
+  #     (docs/RELEASING.md);
   #   - main: :edge and :sha-… only. A versioned tag is never re-pushed from
   #     main, so :v1.2.3 always names one build (second review, P40).
   publish:
@@ -507,10 +509,13 @@ jobs:
           IMAGE: ghcr.io/${{ github.repository }}
           SHA: ${{ github.sha }}
         run: |
-          v=$(grep -m1 '^version' pyproject.toml | cut -d'"' -f2)
+          python3 scripts/version.py check
+          v=$(python3 scripts/version.py)
           if [[ "$REF" == refs/tags/v* ]]; then
-            [ "$REF_NAME" = "v$v" ] || { echo "tag $REF_NAME does not match pyproject version $v" >&2; exit 1; }
-            tags="$IMAGE:v$v,$IMAGE:latest,$IMAGE:sha-$SHA"
+            [ "$REF_NAME" = "v$v" ] || { echo "tag $REF_NAME does not match the version $v" >&2; exit 1; }
+            tags="$IMAGE:v$v,$IMAGE:sha-$SHA"
+            # A release candidate never becomes :latest.
+            python3 scripts/version.py prerelease || tags="$tags,$IMAGE:latest"
           else
             tags="$IMAGE:edge,$IMAGE:sha-$SHA"
           fi

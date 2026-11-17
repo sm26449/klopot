@@ -31,6 +31,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Release candidates.** A release cycle starts with `X.Y.Z-rc.N` (a GitHub
+  pre-release and the image `:vX.Y.Z-rc.N`, never `:latest`), which runs in
+  production for about a week and takes only fixes; the final is the last
+  candidate, renamed. `scripts/version.py` writes and checks the version in
+  every file (the Python packages carry it as `1.3.0rc1`). Policy and
+  commands: `docs/RELEASING.md`.
 - Dependencies: SQLAlchemy 2.1 (installed as `sqlalchemy[asyncio]` — 2.1 no
   longer brings `greenlet`, which the async engine needs), uvicorn 0.54,
   gunicorn 27, bcrypt 5, argon2-cffi 25, croniter 7, structlog 26,

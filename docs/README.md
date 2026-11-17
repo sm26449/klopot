@@ -41,6 +41,7 @@ layout of the code are in the repository-root `CONTRIBUTING.md`;
 | Document | Answers |
 |----------|---------|
 | [DEPLOY.md](DEPLOY.md) | How is alertd deployed, migrated, backed up and rolled back? (upgrade = `scripts/deploy.sh`) |
+| [RELEASING.md](RELEASING.md) | When is there a release, what is a release candidate, and which commands make one? (`scripts/version.py`) |
 
 ## Project
 

@@ -221,10 +221,10 @@ overrides any attribution footer a tool suggests.
 
 ## Releasing
 
-1. Bump version in `pyproject.toml` and `app/__init__.py`.
-2. Update `CHANGELOG.md` with the new heading.
-3. `git tag vX.Y.Z && git push --tags`.
-4. Verify `GET /v1/version` (or `/v1/health`) reports the new version after redeploy.
+Maintainers only. Every cycle starts with a release candidate
+(`X.Y.Z-rc.N`) that runs in production before the final; the version is set
+with `scripts/version.py set <version>`, never by hand. Policy and commands:
+[docs/RELEASING.md](docs/RELEASING.md).
 
 ## License
 

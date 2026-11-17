@@ -636,8 +636,10 @@ silently ignored.
 
 The manual equivalents, if you prefer them. CI publishes prebuilt images to
 GHCR (`ghcr.io/sm26449/klopot`): a release tag publishes `:v<version>` and
-`:latest`; every green `main` build publishes `:edge`; each also gets
-`:sha-<commit>`. Pin `:v<version>` in production — it always names one build:
+`:latest`; a release candidate (`v1.3.0-rc.1`) publishes `:v<version>` only —
+never `:latest` ([RELEASING.md](RELEASING.md)); every green `main` build
+publishes `:edge`; each also gets `:sha-<commit>`. Pin `:v<version>` in
+production — it always names one build:
 
 ```bash
 git pull                      # keep compose/env/scripts in sync
