@@ -514,6 +514,45 @@
           "ref_field": "api_key_ref"
         },
         {
+          "name": "dedup_key",
+          "type": "string",
+          "required": false,
+          "secret": false,
+          "default": "",
+          "help": "Optional: at most one SMS per number and key in Kurier's dedup window, even if the text changes — a template, e.g. {type}:{rule_id}. Empty = Kurier dedups on the text. Critical alerts always go out.",
+          "show_if": {
+            "provider": [
+              "kurier"
+            ]
+          }
+        },
+        {
+          "name": "ttl_seconds",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 0,
+          "help": "Optional: drop a message still queued in Kurier's outbox after this long (60–86400 s). 0 = Kurier's default.",
+          "show_if": {
+            "provider": [
+              "kurier"
+            ]
+          }
+        },
+        {
+          "name": "max_segments",
+          "type": "int",
+          "required": false,
+          "secret": false,
+          "default": 0,
+          "help": "Optional: at most this many SMS segments per message. 0 = Kurier's default.",
+          "show_if": {
+            "provider": [
+              "kurier"
+            ]
+          }
+        },
+        {
           "name": "watchdog",
           "type": "bool",
           "required": false,

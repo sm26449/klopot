@@ -254,7 +254,7 @@ async def test_kurier_speaks_its_own_api_with_a_key_per_recipient(monkeypatch):
     assert first["url"] == "http://kurier:5080/api/sms/send"
     assert first["headers"] == {"X-API-Key": "k-s3cret"}
     assert first["json"] == {"number": "+40700", "message": "Down\nnas", "severity": "critical",
-                             "idempotency_key": "dlv-9:+40700"}
+                             "idempotency_key": "dlv-9:+40700", "source": "klopot", "type": "kit_test"}
     assert second["json"]["idempotency_key"] == "dlv-9:+40701", "a retry repeats no recipient"
 
 
@@ -322,3 +322,20 @@ async def test_an_error_never_carries_the_channel_secret(monkeypatch):
     http.will(reply(400, {}, text="bad key gw-s3cret-key"))
     r = await SMSChannel().send(notification(), cfg)
     assert not r.ok and "gw-s3cret-key" not in r.error and "***" in r.error
+
+
+async def test_kurier_sends_its_own_knobs_only_when_set(monkeypatch):
+    # The production channel set dedup_key {type}:{rule_id}, ttl_seconds and
+    # max_segments in its http body: the kurier provider must carry them too.
+    from app.channels import sms
+    from tests.channels._kit import FakeHTTP, notification, reply
+
+    http = FakeHTTP.install(monkeypatch, sms).will(reply(200, [{"success": True}]))
+    cfg = {**KURIER, "phone": "+40700", "dedup_key": "{type}:{rule_id}", "ttl_seconds": 21600, "max_segments": 3}
+    assert (await SMSChannel().send(notification(type="disk_full", rule_id=7), cfg)).ok
+    body = http.calls[-1]["json"]
+    assert body["dedup_key"] == "disk_full:7"
+    assert (body["ttl_seconds"], body["max_segments"]) == (21600, 3)
+    assert (body["source"], body["type"]) == ("klopot", "disk_full")
+    await SMSChannel().send(notification(), {**KURIER, "phone": "+40700"})
+    assert not {"dedup_key", "ttl_seconds", "max_segments"} & set(http.calls[-1]["json"]), "Kurier's defaults"

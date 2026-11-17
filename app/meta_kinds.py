@@ -149,6 +149,14 @@ _CHANNELS: dict[str, list[dict[str, Any]]] = {
         _f("kurier_url", "string", show_if={"provider": ["kurier"]},
            help="Kurier's address, e.g. http://kurier:5080 — Klopot adds /api/sms/send."),
         _f("api_key", "string", show_if={"provider": ["kurier"]}, help="Kurier's SMS_API_KEY (write-only)."),
+        _f("dedup_key", "string", default="", show_if={"provider": ["kurier"]},
+           help="Optional: at most one SMS per number and key in Kurier's dedup window, even if the text "
+                "changes — a template, e.g. {type}:{rule_id}. Empty = Kurier dedups on the text. "
+                "Critical alerts always go out."),
+        _f("ttl_seconds", "int", default=0, show_if={"provider": ["kurier"]},
+           help="Optional: drop a message still queued in Kurier's outbox after this long (60–86400 s). 0 = Kurier's default."),
+        _f("max_segments", "int", default=0, show_if={"provider": ["kurier"]},
+           help="Optional: at most this many SMS segments per message. 0 = Kurier's default."),
         _f("watchdog", "bool", default=False, show_if={"provider": ["kurier"]},
            help="Kurier watches this Klopot: Klopot checks in every minute, and Kurier sends an SMS if it "
                 "stops, or says it is stuck. Klopot alerts you if Kurier or its modem stops answering."),

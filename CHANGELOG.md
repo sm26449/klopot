@@ -71,7 +71,9 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 - **Kurier watches Klopot** ([ADR-0003](docs/adr/0003-kurier-watchdog.md)).
   A new SMS provider, `kurier`, speaks the Kurier gateway's own API (severity,
-  a per-recipient idempotency key; queued and duplicate count as delivered).
+  a per-recipient idempotency key, and optionally a `dedup_key` template such
+  as `{type}:{rule_id}`, `ttl_seconds`, `max_segments`; queued and duplicate
+  count as delivered).
   With its **Watchdog** on, Klopot pings Kurier every minute with its own
   health, and Kurier (1.15+) sends an SMS when Klopot stops or reports itself
   stuck — over LTE, so an internet outage is covered too. The answer tells

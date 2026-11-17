@@ -248,9 +248,26 @@ async def _send_kurier(notif: Notification, config: dict[str, Any], phone: str, 
     base = kurier_base(config)
     if not base:
         raise _SendError("Missing kurier_url")
-    body = {"number": phone, "message": text, "severity": notif.severity,
-            # Per recipient: a retry after a partial send repeats nothing.
-            "idempotency_key": f"{idempotency_key or notif.id}:{phone}"[:128]}
+    body: dict[str, Any] = {
+        "number": phone, "message": text, "severity": notif.severity,
+        # Per recipient: a retry after a partial send repeats nothing.
+        "idempotency_key": f"{idempotency_key or notif.id}:{phone}"[:128],
+        # Labels in Kurier's history (unknown fields never refuse a send).
+        "source": "klopot", "type": notif.type,
+    }
+    # Kurier's own knobs, each sent only when the channel sets it: one SMS per
+    # number + key per dedup window (a template, e.g. "{type}:{rule_id}"), how
+    # long a message may wait in Kurier's outbox, and the segment cap.
+    template = str(config.get("dedup_key") or "").strip()
+    if template:
+        try:
+            body["dedup_key"] = rendering.render(template, _build_template_ctx(notif))[:128]
+        except Exception as e:
+            raise _SendError(f"dedup_key template error: {e}") from None
+    for field in ("ttl_seconds", "max_segments"):
+        value = config.get(field)
+        if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+            body[field] = value
     r = await safe_request("POST", f"{base}/api/sms/send", json=body, headers=kurier_headers(config),
                            timeout=_timeout(config), block_private=block)
     return _check(r, _KURIER_DELIVERED)

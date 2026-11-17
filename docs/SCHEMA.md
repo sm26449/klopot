@@ -264,8 +264,9 @@ CREATE TABLE channels (
         --          auth_header, auth_value_ref, health_url}
         --   twilio: {account_sid, auth_token_ref, from_number}
         --   teltonika: {router_url, username, password_ref, modem}
-        --   kurier: {kurier_url, api_key_ref, watchdog, watchdog_timeout_sec,
-        --            watchdog_to} (ADR-0003; no migration — config JSON)
+        --   kurier: {kurier_url, api_key_ref, dedup_key, ttl_seconds, max_segments,
+        --            watchdog, watchdog_timeout_sec, watchdog_to}
+        --            (ADR-0003; no migration — config JSON)
         --   (pre-0031 {gateway_url, gateway_api_key_ref} is converted on write)
         -- email: {smtp_host, smtp_port, username, password_ref,
         --         from, to: [...], use_tls}
