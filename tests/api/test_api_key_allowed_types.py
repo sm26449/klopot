@@ -34,6 +34,7 @@ def test_entries_are_trimmed_and_deduplicated_in_order():
 
 @pytest.mark.parametrize(("entries", "message"), [
     (["*"], "leave the list empty"), (["**?"], "leave the list empty"),
+    (["[a-z]*"], "names no type"), (["[!0]*"], "names no type"), (["?[a-z0-9_]*"], "names no type"),
     (["Backup"], "not a template type"), (["a b"], "not a template type"),
     (["x" * 65], "not a template type"), ([f"t{i}" for i in range(65)], "at most 64"),
 ])
@@ -95,3 +96,7 @@ def test_may_fire_matches_names_and_patterns():
     assert actor.may_fire("backup_failed") and actor.may_fire("disk_filling")
     assert not actor.may_fire("disk_filling_fast") and not actor.may_fire("server_down")
     assert auth.Actor(kind="user", id=1, name="u", scopes=frozenset({"admin"})).may_fire("anything")
+
+
+def test_patterns_with_a_literal_part_stay_allowed():
+    assert normalize_allowed_types(["backup_*", "disk_[a-z]*", "nas-0?"]) == ["backup_*", "disk_[a-z]*", "nas-0?"]

@@ -143,11 +143,19 @@ class RetentionService:
                 unhandled_feedback = select(ChannelProviderMessage.id).join(
                     Delivery, ChannelProviderMessage.delivery_id == Delivery.id,
                 ).where(Delivery.notification_id == NotificationLog.id, has_tokens, ~materialized).exists()
+                # Never prune the notifications of an episode still open: its
+                # firing notice is what proves the episode was announced, so
+                # without it the recovery notice would never go out (2026-11-17
+                # changes review, CR-01) — and the operator still needs it.
+                open_episode = select(Incident.id).where(
+                    Incident.id == NotificationLog.incident_id, Incident.resolved_at.is_(None),
+                ).exists()
                 r1 = await session.execute(
                     delete(NotificationLog).where(
                         NotificationLog.fired_at < log_cutoff,
                         ~has_pending,
                         ~has_action, ~has_feedback, ~unhandled_feedback,
+                        ~open_episode,
                     )
                 )
                 await session.execute(delete(ChannelEvent).where(

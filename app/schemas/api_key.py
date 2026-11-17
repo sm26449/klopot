@@ -48,10 +48,16 @@ def normalize_allowed_cidrs(entries: list[str]) -> list[str]:
     return list(dict.fromkeys(str(n) for n in nets))
 
 
+# A bracket class (``[a-z]``, ``[!0]``): no literal character of the type.
+_CLASS = re.compile(r"\[[^\]]*\]")
+
+
 def normalize_allowed_types(entries: list[str]) -> list[str]:
     """Trimmed, lowercase-only, de-duplicated in the order given. A pattern
-    matching every type (``*``) is refused: empty already means every type,
-    and an explicit catch-all hides that the key is open."""
+    with no literal character — only ``*``, ``?`` and ``[…]`` classes, such
+    as ``*`` or ``[a-z]*`` — is refused: it names no type, matches every
+    type (or nearly), and would show the key as restricted while it is open
+    (2026-11-17 changes review, CR-05). Empty already means every type."""
     if len(entries) > MAX_ALLOWED_TYPES:
         raise ValueError(f"at most {MAX_ALLOWED_TYPES} types or patterns")
     out = []
@@ -59,8 +65,8 @@ def normalize_allowed_types(entries: list[str]) -> list[str]:
         entry = raw.strip()
         if not _TYPE_PATTERN.match(entry):
             raise ValueError(f"{raw!r} is not a template type or a pattern like backup_*")
-        if not entry.strip("*?"):
-            raise ValueError(f"{raw!r} allows every type; leave the list empty for that")
+        if not _CLASS.sub("", entry).strip("*?"):
+            raise ValueError(f"{raw!r} names no type (only wildcards); leave the list empty to allow every type")
         out.append(entry)
     return list(dict.fromkeys(out))
 

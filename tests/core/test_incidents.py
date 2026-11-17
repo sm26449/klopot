@@ -429,3 +429,22 @@ async def test_resolution_racing_an_inflight_delivery_has_no_lock_inversion(scen
     assert (await read_all(Incident))[0].state == "resolved"
     firing = [r for r in await read_all(NotificationLog) if r.incident_event == "firing"][0]
     assert firing.delivery_status == DeliveryStatus.sent
+
+
+async def test_an_episode_open_longer_than_retention_still_announces_its_end(scenario):
+    # CR-01: retention deleted the firing notice of a long-open episode (and
+    # its deliveries with it), so the recovery looked unannounced and was
+    # never sent. The notices of an open episode are kept.
+    from app.core.retention import RetentionService
+
+    engine, rule_id = scenario
+    original = await open_problem(scenario)
+    await delivered()
+    async with get_session_factory()() as session:
+        for log in (await session.execute(select(NotificationLog))).scalars():
+            log.fired_at = utc_now() - timedelta(days=400)
+        await session.commit()
+    await RetentionService()._sweep()
+    assert [log.incident_id for log in await read_all(NotificationLog)] == [original.id], "kept while open"
+    await recover(engine, rule_id)
+    assert {r.incident_event for r in await read_all(NotificationLog)} == {"firing", "resolved"}

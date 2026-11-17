@@ -42,10 +42,12 @@ echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] backup start → $out"
 # failed (server down, wrong password, disk full) still produced a tiny valid
 # .sql.gz, "backup done" and exit 0 — and rotation went on deleting the good
 # ones.
-if ! mysqldump \
+# The password goes through MYSQL_PWD (this process's environment), never as
+# --password=: an argument is visible to every user of the host in `ps`
+# (2026-11-17 improvements review, IP-11) — as in the compose healthcheck.
+if ! MYSQL_PWD="$MYSQL_PASSWORD" mysqldump \
     --host="$MYSQL_HOST" \
     --user="$MYSQL_USER" \
-    --password="$MYSQL_PASSWORD" \
     --single-transaction \
     --routines \
     --triggers \

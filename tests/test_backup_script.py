@@ -120,3 +120,15 @@ def test_the_image_runs_the_tested_scheduler():
     dockerfile = (SCHEDULER.parent.parent / "Dockerfile.backup").read_text()
     assert "scripts/backup_scheduler.sh /usr/local/bin/entrypoint.sh" in dockerfile
     assert "10#" not in dockerfile
+
+
+def test_the_password_is_never_an_argument(tmp_path):
+    # IP-11: `ps` shows every argument to every user of the host; the
+    # password goes through MYSQL_PWD instead.
+    spy = tmp_path / "seen"
+    done, _ = _run(tmp_path, GOOD.replace('echo "-- MySQL dump"', f'echo "$* | $MYSQL_PWD" > {spy}\necho "-- MySQL dump"', 1))
+    assert done.returncode == 0, done.stderr
+    args, pwd = spy.read_text().strip().split(" | ")
+    assert pwd == "x"
+    assert "--password" not in args
+    assert "-p" not in args.split()
