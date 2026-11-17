@@ -21,6 +21,10 @@ the release candidate before every final, and the commands.
   release `X.Y.Z+1` straight away, with or without a candidate — say why in
   its changelog entry.
 - If a cycle needs more than three candidates, stop and ask why before rc.4.
+- **Reopening a cycle for a feature** is an exception the owner decides
+  explicitly, never a default: the next candidate carries the feature, the
+  week in production restarts from it, and the release notes say so. Used
+  once: 1.3.0-rc.3 (Kurier watchdog, ADR-0003), decided 2026-11-17.
 
 The public sees finals: the GitHub release marked *Latest*, the image
 `:latest`, the README and klopot.dev. A candidate is a GitHub **pre-release**

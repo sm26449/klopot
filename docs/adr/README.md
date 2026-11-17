@@ -10,6 +10,7 @@ decision that changes course gets a new ADR that supersedes the old one.
 |-----|-------|--------|
 | [0001](0001-brand-identity-klopot.md) | Product name, visual identity and where each colour is used | Accepted |
 | [0002](0002-os-native-theme-families.md) | Optional OS-native theme families (macOS/Windows/GNOME/KDE) | Accepted |
+| [0003](0003-kurier-watchdog.md) | Kurier watches Klopot: the `kurier` SMS provider and its watchdog ping | Accepted |
 
 ## Format
 
