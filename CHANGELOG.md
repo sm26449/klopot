@@ -43,7 +43,7 @@ adheres to [Semantic Versioning](https://semver.org/).
   prometheus-client 0.26. Dev: ruff 0.17, mypy 2, black 26, pytest 9,
   pytest-asyncio 1.5, pytest-cov 7, aiosqlite 0.22; openapi-typescript
   7.13. Held back, with the reason in Dependabot's config:
-  `openapi-python-client` 0.29.1 and jsdom 26.
+  `openapi-python-client` 0.29.1.
 - Tests: one async plugin (pytest-asyncio, auto mode) instead of AnyIO's
   for 84 files and pytest-asyncio for their fixtures, and the WebSocket
   tests drive the app in the test's own loop (`tests/_ws.py`) instead of
@@ -81,8 +81,8 @@ adheres to [Semantic Versioning](https://semver.org/).
   installed once per inverter), `openvigil-nvr` (every OpenVigil 2.2 alert,
   with its recovery templates) and `multi-bus-gateway` (MBG's own template
   set, with the `_ok` recovery templates of its paired alerts, which MBG
-  sends as episodes — MBG ADR-0053). `tests/packs/test_catalog_rules.py` runs every catalog rule against
-  scenarios. The README screenshots show the OpenVigil and MBG packs in use.
+  sends as episodes — MBG ADR-0053). `tests/packs/test_catalog_rules.py`
+  runs every catalog rule against scenarios. The README screenshots show the OpenVigil and MBG packs in use.
 
 ### Security
 

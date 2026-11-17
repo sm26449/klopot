@@ -28,11 +28,11 @@ class VersionResponse:
 
         Attributes:
             service (str | Unset):  Default: 'alertd'.
-            version (str | Unset):  Default: '1.2.0'.
+            version (str | Unset):  Default: '1.3.0-rc.1'.
      """
 
     service: str | Unset = 'alertd'
-    version: str | Unset = '1.2.0'
+    version: str | Unset = '1.3.0-rc.1'
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
 
