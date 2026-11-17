@@ -45,7 +45,9 @@ before touching `app/admin_ui/static/`.
 | `lib/icons.js`, `lib/icon_picker.js` | Emoji dictionary + validity rule, the icon field with palette |
 | `lib/categories.js` | Case-insensitive template categories (`canonicalCategories`, `categoryLabels`) |
 | `lib/a11y.js` | `clickable()` row helper, skip link |
-| `lib/transfer.js` | `TransferMenu` ("Actions": per-section export + import) and `ImportWizard` |
+| `lib/transfer.js` | `TransferMenu` ("Actions": per-section export + import), `ImportWizard`, and the pieces the Packs page reuses: `downloadPack`, `useDecisions`, `planOf`, `ImportReview`, `ImportDone` |
+| `lib/lookup.js` | `lookup(promise, fallback)` for secondary requests (pickers, autocomplete, counts): a failure shows one toast instead of passing for an empty list |
+| `lib/stack_tables.js` | Phone tables: `stackTables` / `labelTable` turn a list table into one card per row, labelled from its `<thead>`, keeping table roles |
 | `lib/h.js` | The one place that binds htm to Preact (`html`, hooks) |
 | `lib/toast.js` | Toast bus (`toast.ok`, `toast.error`, ApiError-aware leads) |
 | `lib/json_field.js` | Pure JSON-field validation for the form's JSON inputs |
@@ -58,7 +60,7 @@ before touching `app/admin_ui/static/`.
 
 | Route | View | Purpose | Main API |
 |-------|------|---------|----------|
-| `#/dashboard` | `dashboard.js` | Health, inventory counts, recent alerts, links into filtered lists | `/v1/health/ready`, `/v1/log/stats`, list totals |
+| `#/dashboard` | `dashboard.js` | Health, inventory counts, recent alerts, links into filtered lists | `/v1/health` (polled by the shell, `lib/api.js`), `/v1/log/stats`, list totals |
 | `#/log` | `log.js` | Notification history, detail drawer, ack, live tail | `/v1/log`, `/v1/stream/notifications` |
 | `#/incidents` | `incidents.js` | Active / resolved episodes — from rules, `/v1/fire` idempotency keys and Alertmanager (the drawer shows the source instead of a rule link); ack, resolve | `/v1/incidents` |
 | `#/snooze` | `snooze.js` | Mutes and maintenance windows | `/v1/snooze` |
@@ -70,7 +72,7 @@ before touching `app/admin_ui/static/`.
 | `#/schedules` | `schedules.js` | Cron fires with preview | `/v1/schedules` |
 | `#/operations` | `operations.js` | Queues, workers, connections, terminal failures | `/v1/operations` |
 | `#/state` | `state.js` | Raw state cache + firehose | `/v1/state`, `/v1/stream/state` |
-| `#/api-keys` | `apikeys.js` | Machine keys (plaintext shown once) | `/v1/api_keys` |
+| `#/api-keys` | `apikeys.js` | Machine keys (plaintext shown once) and their restrictions: allowed addresses, requests per minute, allowed alert types | `/v1/api_keys` |
 | `#/api` | `api.js` | API reference: every operation, its scope, fields, a curl example | `/openapi.json` |
 | `#/audit` | `audit.js` | Who changed what | `/v1/audit` |
 | `#/config` | `config.js` | Whole-config YAML export / validate / import | `/v1/config/*` |
@@ -169,8 +171,11 @@ Templates, Rules and Variables have an **Actions** menu (`lib/transfer.js`):
      template you already have", with a note above the table; its default is
      the server's (`default`): Import for a config import, **Skip** for a
      pack install (docs/PACKS.md). Only choices that differ from the server's
-     default are sent. "Nothing is saved until you press Apply / Install"
-     stands under the counts;
+     default are sent ([PACKS.md, "Your routing stays yours"](PACKS.md)).
+     "Nothing is saved until you press Apply / Install" stands under the
+     counts, and the review ends with what the button will do with the
+     current choices — "Apply will: create · overwrite · copy · skip", with
+     a count for each (`planOf`);
   4. **Apply** (`POST /v1/config/import/apply`) runs one transaction. Editing
      the text after a preview disables Apply until you preview again.
 - Exports are masked (secrets → `env:UNKNOWN_*`, URLs shortened with `…`).
@@ -224,7 +229,11 @@ Templates, Rules and Variables have an **Actions** menu (`lib/transfer.js`):
   drawer: one field per pack parameter (by type — a channel parameter is a
   select of existing channels, `env` takes a variable name) → **Preview** →
   the same per-item review as config import (`ImportReview` +
-  `useDecisions` from `lib/transfer.js`) → **Install**. Parameter errors from
+  `useDecisions` from `lib/transfer.js`) → **Install**. A route that would
+  add a channel to a template you already have is marked and **skipped by
+  default** (a config import imports it by default) — see
+  [PACKS.md, "Your routing stays yours"](PACKS.md);
+  the review ends with "Install will: create · overwrite · copy · skip". Parameter errors from
   the server (`parameter <name>: …`) are shown on that field.
 - **Install from a file…** inspects the pasted / uploaded pack, then the same
   drawer. **Create a pack…** downloads a selection (sections, optional names,

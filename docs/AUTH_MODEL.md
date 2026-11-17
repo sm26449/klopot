@@ -196,8 +196,12 @@ the key → Allowed alert types) or on `POST` / `PATCH /v1/api_keys`.
 - Without it, any `fire` key reaches every template — including the ones
   that page by SMS. Give a script's key exactly the types it sends (review
   F10).
-- A pattern that matches everything (`*`) is refused: leave the list empty
-  for that. A change applies to the next request; rotation keeps the list.
+- A pattern with no literal character — only `*`, `?` and `[…]` classes,
+  such as `*` or `[a-z]*` — is refused: it names no type and would show the
+  key as restricted while it is open. Leave the list empty for that.
+- A change applies to the next request; rotation keeps the list. Narrowing
+  the list does not reach episodes the key already opened: closing one still
+  sends the `resolved_type` stored when it opened.
 
 ### Rotation
 

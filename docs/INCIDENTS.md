@@ -46,6 +46,9 @@ incident. A failure nobody heard of (snoozed, in quiet hours, throttled,
 failed on every channel, or still queued when it cleared — that queued page is
 cancelled) closes without a recovery notice: "back to normal" would be news
 about nothing. The incident row still records the resolution.
+Retention never deletes the notifications of an episode that is still open,
+so an episode that stays open longer than the notification retention period
+still announces its end.
 A separate info template is usually appropriate. Its context contains current
 values plus `_incident.id`, `_incident.rule_name`, `_incident.event` (`resolved`),
 `_incident.opened_at` (UTC), and `_incident.duration_sec`. Firing notifications

@@ -1,4 +1,4 @@
-# alertd — Getting Started
+# Klopot — Getting Started
 
 **Languages:** **English** · [Română](GETTING_STARTED.ro.md) ·
 [← Back to README](../README.md)
@@ -151,7 +151,8 @@ The pages:
 1. **Channels** → *New channel* → pick a kind, fill the fields (secrets
    go in via "Use env ref").
 2. **Templates** → *New template* → type, severity, title/message
-   templates, cooldown.
+   templates, cooldown — and tick the channel(s) under **Routing —
+   channels**: a template with no channel ticked delivers nothing.
 3. **Rules** → *New rule* → template type, condition, persist count.
 4. **Inputs / Variables** → declare your sources and the values pulled
    from them.

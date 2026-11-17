@@ -98,6 +98,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+- **API keys: a wildcard-only alert type is refused.** `allowed_types`
+  refused `*` but accepted `[a-z]*` or `[!0]*`, which match every type and
+  showed the key as restricted while it was open. A pattern with no literal
+  character is refused now (2026-11-17 review, CR-05).
+- `scripts/backup.sh` passes the database password through `MYSQL_PWD`, not
+  as an argument every user of the host sees in `ps` (IP-11).
 - An SMS error never carries the channel's secret: a gateway that echoed its
   key or token in an error body put it on the delivery row, which read-scoped
   keys see. Every provider's errors are scrubbed of the channel's secrets.
@@ -111,6 +117,20 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A recovery notice no longer goes missing for a long episode.** Retention
+  deleted the firing notice of an episode open longer than
+  `ALERTD_LOG_RETENTION_DAYS`; its end then looked unannounced and no recovery
+  was sent. The notices of an open episode are kept (2026-11-17 review, CR-01).
+- Admin UI (2026-11-17 UI review): a key's *Allowed alert types* is part of
+  the unsaved-changes guard and the recovered draft (it was lost silently);
+  an unreachable server shows "unreachable" and an error with a retry instead
+  of loading forever; *Test fire* is offered only for a saved template, once
+  at a time (it sent the saved version, and a double tap sent twice); "not
+  found" only for a 404; an unknown snooze count shows "—", not 0; Romanian:
+  counts without broken plurals ("regulă(i)"), section names after a number,
+  one word for templates ("șabloane"); accessibility: the sign-in lock
+  countdown is no longer announced every second, the Firehose switch keeps
+  its name, the Config import fields have labels.
 - **A stuck rule engine shows.** Health checked only that the engine's task
   existed; a task alive but stuck (a tick waiting on slow sends) looked fine
   while no rule was evaluated. Now the engine is `degraded`

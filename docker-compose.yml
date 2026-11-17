@@ -17,8 +17,10 @@ name: ${KLOPOT_PROJECT_NAME:-klopot}
 
 services:
   alertd:
-    # CI publishes this image on every green main build. With both image: and
-    # build: present, `docker compose pull` fetches the prebuilt image and
+    # CI publishes this image: every green main build as :edge, a release as
+    # :vX.Y.Z and :latest, a release candidate as :vX.Y.Z-rc.N only (never
+    # :latest); each also as :sha-<commit>. With both image: and build:
+    # present, `docker compose pull` fetches the prebuilt image and
     # `docker compose build` still works as the local fallback.
     image: ${KLOPOT_IMAGE:-ghcr.io/sm26449/klopot:latest}
     build:

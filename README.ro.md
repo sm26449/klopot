@@ -118,6 +118,11 @@ docker compose -f compose.demo.yml down -v
 testele rapide, separat de testele pe MySQL real; nu este un fallback în runtime.
 Vezi [testarea](CONTRIBUTING.md#tests).
 
+**Cerințe:** Docker cu Compose v2 (`docker compose`), MySQL 8 (containerul
+inclus sau serverul tău) și o gazdă x86-64 — imaginea publicată este doar
+`linux/amd64` (pe alte platforme o construiești din surse). Klopot folosește
+de obicei ~150 MB de RAM; vezi [limitele de resurse](docs/DEPLOY.md#resource-limits).
+
 ```bash
 cp .env.example .env        # parole DB, broker MQTT, parolă admin, secrete canale
 docker compose up -d        # Klopot + MySQL + backup zilnic, port 127.0.0.1:5090

@@ -187,9 +187,12 @@ Other knobs, all documented in `app/config.py`:
 
 ### Secrets for channels, inputs and packs (`secrets.env`)
 
-A channel, input or pack never stores a token: it stores the **name** of an
-environment variable (`*_ref`), and Klopot reads the value at send time. For
-every secret beyond the built-in ones above, use one file:
+A secret field of a channel, input or pack takes either a literal value or
+the **name** of an environment variable (`*_ref`), whose value Klopot reads
+at send time. A literal typed into the admin UI or the API **is stored in the
+database** — and so in every database backup and dump. A ref keeps the
+secret out of both; use refs in production. For every secret beyond the
+built-in ones above, use one file:
 
 ```bash
 cp secrets.env.example secrets.env && chmod 600 secrets.env
@@ -603,6 +606,14 @@ git pull
 scripts/deploy.sh <label> --dry-run   # preflight + plan, changes nothing
 scripts/deploy.sh <label>             # asks before it changes anything
 ```
+
+**Skipping releases and rolling back.** You may jump several releases in one
+deploy, but read the upgrade notes of **each** release you skip, not only the
+newest. A release that runs a migration cannot be rolled back by redeploying
+the older image alone: the old code may refuse the newer schema, so a rollback
+past it also needs the pre-deploy database backup restored. `deploy.sh` takes
+that backup and prints its path and the rollback command; keep both until the
+new release has proved itself.
 
 It takes a gzip-verified full dump to `backups/alertd-predeploy-<label>-<UTC>.sql.gz`,
 tags the image the running container uses as `rollback-pre-<label>`, builds,

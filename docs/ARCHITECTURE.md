@@ -108,8 +108,8 @@ the dispatcher.
 │  │      - quiet hours? (strip channels in window)          │ │
 │  │   3. render title + message (Pydantic-validated)        │ │
 │  │   4. persist row to notifications_log                   │ │
-│  │   5. submit one async DispatchTask per allowed channel  │ │
-│  │   6. return DispatchResult immediately (async dispatch) │ │
+│  │   5. first attempt inline, all channels in parallel,    │ │
+│  │      ≤ 45 s; unfinished ones go to the delivery worker  │ │
 │  └────────────┬────────────────────────────────────────────┘ │
 │               │                                               │
 │  ┌────────────▼────────────────────────────────────────────┐ │
@@ -337,6 +337,15 @@ Things that follow from this design:
   half-open breaker probe or let the worker re-send an in-flight delivery.
 - All of it assumes **one process** (see `docs/DEPLOY.md`): the breaker,
   rate limiter and rule engine are in-memory per process.
+- Dispatch is not asynchronous: `fire()` returns after the first attempt
+  (or its 45 s budget), and `POST /v1/fire` waits for it. Incident notices
+  (firing and recovery of an episode) pass `background_only` and leave the
+  send to the delivery worker, but a plain rule fire is sent inline from the
+  engine's loop, so a slow channel holds up every other rule for that long.
+  Health reports a loop that has not come round for 180 s as engine
+  `degraded` (`engine_stalled`, `app/core/health.py`); readiness deliberately
+  stays `200`, because an unhealthy container would drop out of the reverse
+  proxy's routing and take `/v1/fire` and the admin UI with it.
 
 ### Durable escalation
 

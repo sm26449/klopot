@@ -11,7 +11,7 @@ layout of the code are in the repository-root `CONTRIBUTING.md`;
 
 | Document | Answers |
 |----------|---------|
-| [PROJECT_STATUS.md](PROJECT_STATUS.md) | What shipped in 1.0.1 and 1.1.0, how a deployment is verified, and what remains? |
+| [PROJECT_STATUS.md](PROJECT_STATUS.md) | What has shipped, how a deployment is verified, and what remains? |
 | [GETTING_STARTED.md](GETTING_STARTED.md) | How do I run alertd and fire my first alert, end to end? |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | What are the components, how does data flow, what is the schema? |
 | [API.md](API.md) | What is the REST + WebSocket surface, auth, error model? (live truth: `/openapi.json`) |

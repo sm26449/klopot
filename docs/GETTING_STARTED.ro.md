@@ -1,4 +1,4 @@
-# alertd — Ghid de început
+# Klopot — Ghid de început
 
 **Limbi:** [English](GETTING_STARTED.md) · **Română** ·
 [← Înapoi la README](../README.ro.md)
@@ -151,7 +151,8 @@ din engleză în paranteză):
 1. **Canale** (Channels) → *Canal nou* → alegi un kind, completezi
    câmpurile (secretele intră prin „Folosește ref env…").
 2. **Șabloane** (Templates) → *Șablon nou* → tip, severitate, template-uri
-   de titlu/mesaj, cooldown.
+   de titlu/mesaj, cooldown — și bifezi canalul (canalele) la **Rutare —
+   canale** (Routing): un șablon fără niciun canal bifat nu trimite nimic.
 3. **Reguli** (Rules) → *Regulă nouă* → tip de template, condiție, persist
    count.
 4. **Intrări / Variabile** (Inputs / Variables) → declari sursele și

@@ -248,8 +248,9 @@ class ImportApply(BaseModel):
     yaml: str = Field(min_length=1, description="The pack, as YAML text.")
     decisions: dict[str, config_merge.Action] = Field(
         default_factory=dict,
-        description='Per item, keyed "<section>:<key>" (e.g. "rules:soc_low"): overwrite, skip or copy. '
-        "New items are imported unless skipped; identical ones are left alone.",
+        description='Per item, keyed "<section>:<key>" (e.g. "rules:soc_low"): overwrite, skip or copy for an '
+        "existing item, import or skip for a new one (import on an existing item counts as skip). New items are "
+        "imported unless skipped; identical ones are left alone.",
     )
     default_existing: config_merge.ExistingAction = Field(
         default="skip", description="Action for an existing item that differs and has no decision.",

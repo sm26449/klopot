@@ -114,6 +114,11 @@ Production uses **MySQL 8 only**. SQLite is an in-memory test harness, with a
 separate real-MySQL test gate; it is not a runtime fallback. See
 [testing](CONTRIBUTING.md#tests).
 
+**Requirements:** Docker with Compose v2 (`docker compose`), MySQL 8 (the
+bundled container or your own server), and an x86-64 host — the published
+image is `linux/amd64` only (other platforms build from source). Klopot
+typically uses ~150 MB of RAM; see [resource limits](docs/DEPLOY.md#resource-limits).
+
 ```bash
 cp .env.example .env        # DB passwords, MQTT broker, admin password, channel secrets
 docker compose up -d        # Klopot + MySQL + nightly backups, port 127.0.0.1:5090

@@ -29,7 +29,8 @@ class ImportApply:
         Attributes:
             yaml (str): The pack, as YAML text.
             decisions (ImportApplyDecisions | Unset): Per item, keyed "<section>:<key>" (e.g. "rules:soc_low"): overwrite,
-                skip or copy. New items are imported unless skipped; identical ones are left alone.
+                skip or copy for an existing item, import or skip for a new one (import on an existing item counts as skip). New
+                items are imported unless skipped; identical ones are left alone.
             default_existing (ImportApplyDefaultExisting | Unset): Action for an existing item that differs and has no
                 decision. Default: ImportApplyDefaultExisting.SKIP.
      """

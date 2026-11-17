@@ -21,8 +21,9 @@ T = TypeVar("T", bound="ImportApplyDecisions")
 
 @_attrs_define
 class ImportApplyDecisions:
-    """ Per item, keyed "<section>:<key>" (e.g. "rules:soc_low"): overwrite, skip or copy. New items are imported unless
-    skipped; identical ones are left alone.
+    """ Per item, keyed "<section>:<key>" (e.g. "rules:soc_low"): overwrite, skip or copy for an existing item, import or
+    skip for a new one (import on an existing item counts as skip). New items are imported unless skipped; identical
+    ones are left alone.
 
      """
 

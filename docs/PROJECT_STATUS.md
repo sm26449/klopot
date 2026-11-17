@@ -1,11 +1,13 @@
 # Project status — 2026-11-16
 
-**1.2.0** (2026-11-16) is the current release; `pyproject.toml` and
-`GET /v1/version` say `1.2.0`. The [changelog](../CHANGELOG.md) has its
-upgrade notes (private-by-default proxy, inbound tokens required and at least
-32 characters, anonymous health reduced to the status), and builds of later
-commits are grouped there under **Unreleased** (they still report `1.2.0`
-until the next release). See
+**1.2.0** (2026-11-16) is the current release. The
+[changelog](../CHANGELOG.md) has its upgrade notes (private-by-default proxy,
+inbound tokens required and at least 32 characters, anonymous health reduced
+to the status). Work since then is grouped there under **Unreleased** and
+ships as release candidates of the next version: each candidate sets its
+version with `scripts/version.py` ([RELEASING.md](RELEASING.md)), so builds
+of `main` now report `1.3.0-rc.N` (`pyproject.toml` writes it `1.3.0rcN`),
+not `1.2.0`. This page gets its next section at the final release. See
 [INTEGRATIONS_ROADMAP.md](INTEGRATIONS_ROADMAP.md) for the remaining
 integrations.
 
@@ -69,8 +71,9 @@ migration keeps the existing behaviour of keys and inputs.
 This document makes no claim about what any particular installation runs.
 To see what a deployment actually serves, check all three:
 
-- `GET /v1/version` — the application version (stays `1.2.0` for builds of
-  later commits until the next release is cut);
+- `GET /v1/version` — the application version (the version last set with
+  `scripts/version.py`: `X.Y.Z` for a release, `X.Y.Z-rc.N` for a candidate
+  and for builds of `main` after it, until the next one is set);
 - `docker inspect <container>` — the image and its tag or digest;
 - `SELECT version_num FROM alembic_version` — the applied schema revision
   (compare with the highest file in `alembic/versions/`).

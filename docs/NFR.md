@@ -20,7 +20,7 @@ re-tune or escalate to a horizontally-scaled architecture (see
 |------|-----|-----|-----|
 | `POST /v1/fire` round-trip (idempotency-only path) | 5 ms | 30 ms | 80 ms |
 | `POST /v1/fire` with full dispatch (UI channel only) | 10 ms | 50 ms | 150 ms |
-| `POST /v1/fire` with Telegram + SMS dispatch (async) | 10 ms | 50 ms | 150 ms (returns before channel completes) |
+| `POST /v1/fire` with Telegram + SMS dispatch | upstream | upstream | ≤ 45 s (waits for the first attempt) |
 | Rule evaluation (one rule, one tick) | 1 ms | 5 ms | 30 ms |
 | `GET /v1/log?limit=50` | 20 ms | 100 ms | 500 ms |
 | MQTT msg → state cache update | 1 ms | 5 ms | 20 ms |
@@ -30,6 +30,16 @@ re-tune or escalate to a horizontally-scaled architecture (see
 p99 dispatch latencies for Telegram/SMS/email depend on upstream;
 budgets are alertd-internal only. `dispatch_latency_ms` in the log
 includes upstream wait.
+
+Dispatch is not asynchronous: the first attempt is sent inline, to all
+channels in parallel, bounded by `FIRST_ATTEMPT_BUDGET_SEC` (45 s,
+`app/core/outbox.py`); what does not finish in time is left to the delivery
+worker. `POST /v1/fire` returns only after that attempt. Incident notices
+(`background_only`) skip it, but a plain rule fire runs it inside the rule
+engine's loop, so a slow channel delays every other rule for that long.
+After 180 s without a turn, health reports engine `degraded`
+(`engine_stalled`); readiness deliberately stays `200` (see
+`ARCHITECTURE.md`, Delivery path).
 
 ## Storage
 
@@ -104,7 +114,11 @@ Health probe wait: 20 s start_period in Dockerfile, 30 s interval.
 
 ## Security
 
-- All secrets via env vars; never in DB rows or git.
+- Secrets: a `*_ref` field (an environment variable name, e.g.
+  `KLOPOT_SECRET_*`) keeps the secret out of the database and git. A secret
+  typed into the admin UI or API as a literal value **is** stored in the
+  database, and so in its backups; use refs in production (`DEPLOY.md`,
+  Secrets).
 - TLS via reverse proxy (traefik overlay, Caddy, nginx); alertd serves
   plain HTTP internally.
 - API keys: bcrypt hashed (cost=12); a generated key is also found by an
