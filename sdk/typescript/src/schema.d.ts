@@ -2281,7 +2281,7 @@ export interface components {
             status: "ok" | "degraded" | "down";
             /**
              * Version
-             * @default 1.3.0-rc.1
+             * @default 1.3.0-rc.2
              */
             version: string;
         };
@@ -3941,7 +3941,7 @@ export interface components {
             service: string;
             /**
              * Version
-             * @default 1.3.0-rc.1
+             * @default 1.3.0-rc.2
              */
             version: string;
         };
