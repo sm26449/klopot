@@ -22,8 +22,9 @@ Two shapes:
   * a firing with a newer ``started_at`` closes the old episode
     (``superseded``) and opens a new one;
   * a resolution closes it (stopping pending escalation) and sends the
-    episode's ``resolved_template_type`` notice if it has one; a resolution
-    for an older ``started_at`` than the open episode is ignored.
+    episode's ``resolved_template_type`` notice if it has one and the
+    episode was announced (``incidents.resolve``); a resolution for an older
+    ``started_at`` than the open episode is ignored.
 
 Acknowledgement stays a human action (``POST /v1/incidents/{id}/ack``,
 Telegram buttons); a source never acknowledges.

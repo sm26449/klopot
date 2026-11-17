@@ -8,16 +8,23 @@ import pytest
 from sqlalchemy import func, select
 
 from app.core import fire_service
-from app.db.models import Incident, NotificationLog, Severity, Template
+from app.db.models import Incident, NotificationLog, Severity, Template, TemplateChannel
 from tests._db import fresh
 
 
 @pytest.fixture
-async def templates(db_session):
-    db_session.add_all([
+async def templates(db_session, make_channel):
+    """Both templates routed to a UI channel: a recovery notice goes out only
+    for an episode someone was told about."""
+    rows = [
         Template(type="disk_full", severity=Severity.critical, title_template="Disk full on {host}", min_repeat_min=0),
         Template(type="disk_ok", severity=Severity.info, title_template="Disk OK on {host}", min_repeat_min=0),
-    ])
+    ]
+    channel = make_channel(name="episodes_ui", rate_limit_per_min=1000)
+    db_session.add_all([*rows, channel])
+    await db_session.flush()
+    db_session.add_all(TemplateChannel(template_id=t.id, channel_id=channel.id, enabled=True,
+                                       severity_min=Severity.info) for t in rows)
     await db_session.commit()
 
 
@@ -66,6 +73,22 @@ async def test_resolve_without_episode_and_without_key(db_client, admin_key, tem
     bad = await db_client.post("/v1/fire", json={"type": "disk_full", "status": "resolved"},
                                headers={"X-API-Key": admin_key})
     assert bad.status_code == 422
+
+
+async def test_an_episode_nobody_was_told_about_closes_without_a_recovery_notice(
+        db_client, db_session, admin_key, templates):
+    # The failure reached no channel (here: no route; equally snoozed, quiet
+    # hours, throttled, failed everywhere): its end is not news.
+    db_session.add(Template(type="nas_fan", severity=Severity.warning, title_template="Fan {host}", min_repeat_min=0))
+    await db_session.commit()
+    opened = await _fire(db_client, admin_key, type="nas_fan", context={"host": "nas"},
+                         idempotency_key="nas-fan", resolved_type="disk_ok")
+    assert opened["episode"] == "opened" and opened["dispatched"] is False
+    done = await _fire(db_client, admin_key, type="nas_fan", context={"host": "nas"},
+                       idempotency_key="nas-fan", status="resolved")
+    assert done["episode"] == "resolved" and done["dispatched"] is False and done["title"] == ""
+    assert await _count(db_session, NotificationLog, NotificationLog.type == "disk_ok") == 0
+    assert await _count(db_session, Incident, Incident.resolved_at.is_not(None)) == 1
 
 
 async def test_test_fires_ignore_the_key_and_unknown_types_open_nothing(db_client, db_session, admin_key, templates):

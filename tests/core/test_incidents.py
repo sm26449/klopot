@@ -79,22 +79,35 @@ async def test_open_requires_persistence_and_never_sends_before_commit(scenario)
     assert delivery.lease_until is None
 
 
-async def test_hysteresis_recovery_is_separate_from_ack_and_cancels_old_pages(scenario):
-    engine, rule_id = scenario
-    original = await open_problem(scenario)
+async def delivered():
+    """The firing notice reached its channel (what the delivery worker records)."""
+    async with get_session_factory()() as session:
+        for delivery in (await session.execute(select(Delivery))).scalars():
+            delivery.state = DeliveryState.sent
+        await session.commit()
+
+
+async def recover(engine, rule_id):
     await evaluate(engine, rule_id, 78)  # inside hysteresis band
     assert (await read_all(Incident))[0].state == "active"
-    assert engine._last_truthy[original.rule_name] is not None
     await evaluate(engine, rule_id, 70)
     assert (await read_all(Incident))[0].state == "active"
     await evaluate(engine, rule_id, 70)
     [incident] = await read_all(Incident)
     assert incident.state == "resolved"
     assert incident.resolution_reason == "recovered"
-    assert incident.acknowledged_at is None
     assert incident.active_rule_id is None
+    return incident
+
+
+async def test_hysteresis_recovery_is_separate_from_ack_and_announces_the_end(scenario):
+    engine, rule_id = scenario
+    original = await open_problem(scenario)
+    assert engine._last_truthy[original.rule_name] is not None
+    await delivered()
+    incident = await recover(engine, rule_id)
+    assert incident.acknowledged_at is None
     logs = {r.incident_event: r for r in await read_all(NotificationLog)}
-    assert logs["firing"].delivery_status == DeliveryStatus.cancelled
     assert logs["resolved"].delivery_status == DeliveryStatus.pending
     assert logs["resolved"].title == "Normal: 70"
     assert logs["resolved"].vars_payload["_incident"]["id"] == incident.id
@@ -103,6 +116,28 @@ async def test_hysteresis_recovery_is_separate_from_ack_and_cancels_old_pages(sc
     await evaluate(engine, rule_id, 70)
     await evaluate(engine, rule_id, 70)
     assert len(await read_all(NotificationLog)) == 2
+
+
+async def test_a_recovery_nobody_heard_the_start_of_cancels_the_page_and_sends_nothing(scenario):
+    # The firing notice is still queued (channel down, quiet hours …) when the
+    # condition clears: the page is cancelled, and "back to normal" would be
+    # news about nothing.
+    engine, rule_id = scenario
+    await open_problem(scenario)
+    await recover(engine, rule_id)
+    [log] = await read_all(NotificationLog)
+    assert log.incident_event == "firing" and log.delivery_status == DeliveryStatus.cancelled
+
+
+async def test_an_acknowledged_episode_announces_its_end(scenario):
+    # Someone saw it (in the UI) even though no channel delivered it.
+    engine, rule_id = scenario
+    original = await open_problem(scenario)
+    async with get_session_factory()() as session:
+        await incidents.acknowledge(session, await session.get(Incident, original.id), "admin")
+        await session.commit()
+    await recover(engine, rule_id)
+    assert {r.incident_event for r in await read_all(NotificationLog)} == {"firing", "resolved"}
 
 
 async def test_unknown_and_stale_data_never_resolve_and_break_recovery_streak(scenario):
@@ -204,6 +239,7 @@ async def test_open_and_notification_rollback_together(scenario):
 async def test_resolution_and_recovery_notice_roll_back_together(scenario):
     engine, rule_id = scenario
     original = await open_problem(scenario)
+    await delivered()
     with patch("app.core.dispatcher.fire", side_effect=RuntimeError("before recovery commit")):
         async with get_session_factory()() as session:
             with pytest.raises(RuntimeError):
@@ -212,7 +248,7 @@ async def test_resolution_and_recovery_notice_roll_back_together(scenario):
     assert incident.id == original.id
     assert incident.state == "active"
     [delivery] = await read_all(Delivery)
-    assert delivery.state == DeliveryState.pending
+    assert delivery.state == DeliveryState.sent
     assert len(await read_all(NotificationLog)) == 1
 
 

@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy import func, select
 
 from app.api.v1 import inputs as inputs_api
-from app.db.models import Incident, Input, InputKind, NotificationLog, Severity, Template
+from app.db.models import Incident, Input, InputKind, NotificationLog, Severity, Template, TemplateChannel
 from app.inputs.alertmanager import AlertmanagerInput, choose_type, parse_group, parse_time
 from tests._db import fresh
 
@@ -68,15 +68,21 @@ def test_choose_type_order():
 
 
 @pytest.fixture
-async def am_input(db_session, monkeypatch):
-    db_session.add_all([
+async def am_input(db_session, monkeypatch, make_channel):
+    templates = [
         Template(type="am_critical", severity=Severity.critical, min_repeat_min=0,
                  title_template="{labels.alertname} on {labels.instance}: {annotations.summary}"),
         Template(type="am_default", severity=Severity.warning, min_repeat_min=0,
                  title_template="{labels.alertname}: {annotations.summary}"),
         Template(type="am_resolved", severity=Severity.info, min_repeat_min=0,
                  title_template="Resolved: {labels.alertname}"),
-    ])
+    ]
+    # Routed: a resolution is announced only if its firing was.
+    channel = make_channel(name="am_ui", rate_limit_per_min=1000)
+    db_session.add_all([*templates, channel])
+    await db_session.flush()
+    db_session.add_all(TemplateChannel(template_id=t.id, channel_id=channel.id, enabled=True,
+                                       severity_min=Severity.info) for t in templates)
     config = {"default_type": "am_default", "type_by_severity": {"critical": "am_critical"},
               "resolved_type": "am_resolved", "auth_token": "s3cret"}
     row = Input(id=5, name="prom", kind=InputKind.alertmanager, config=config, enabled=True)

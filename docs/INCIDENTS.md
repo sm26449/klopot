@@ -39,7 +39,13 @@ restart. In the hysteresis band a live incident remains an active inhibitor.
 ## Recovery notifications
 
 Null `resolved_template_type` resolves silently. Otherwise the chosen template
-uses its own severity, routing, snoozes, quiet hours and repeat throttle.
+uses its own severity, routing, snoozes, quiet hours and repeat throttle —
+and is sent only if the episode was **announced**: a firing notice reached a
+channel (or is being sent at that moment), or someone acknowledged the
+incident. A failure nobody heard of (snoozed, in quiet hours, throttled,
+failed on every channel, or still queued when it cleared — that queued page is
+cancelled) closes without a recovery notice: "back to normal" would be news
+about nothing. The incident row still records the resolution.
 A separate info template is usually appropriate. Its context contains current
 values plus `_incident.id`, `_incident.rule_name`, `_incident.event` (`resolved`),
 `_incident.opened_at` (UTC), and `_incident.duration_sec`. Firing notifications
@@ -102,7 +108,8 @@ All go through the shared fire service (`app/core/fire_service.py`):
   episode acknowledged meanwhile is not announced (someone has it), and two
   repeats arriving at once announce it once.
 - A resolution from the source closes it with reason `recovered`, cancels
-  pending escalation and sends `resolved_template_type` if set. It is not an
+  pending escalation and sends `resolved_template_type` if set and the
+  episode was announced (see Recovery notifications). It is not an
   acknowledgement.
 - A firing with a newer source start time (Alertmanager `startsAt`) closes the
   previous episode as `superseded` and opens a new one; a resolution for an

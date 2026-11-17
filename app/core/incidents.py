@@ -164,9 +164,30 @@ async def acknowledge(session: AsyncSession, incident: Incident, actor: str) -> 
     await enqueue_cancellations(session, incident_id=incident.id)
 
 
+async def _announced(session: AsyncSession, incident: Incident) -> bool:
+    """Whether anyone heard of the episode: a firing notice reached a channel,
+    or is being sent now, or someone acknowledged it.
+
+    Called after ``stop_pending``: what is still ``pending`` then is a send
+    in flight (leased), not one that was just cancelled — this transaction's
+    own cancellations are visible to it, so a plain read is exact."""
+    if incident.acknowledged_at is not None:
+        return True
+    return (await session.execute(select(Delivery.id).join(
+        NotificationLog, Delivery.notification_id == NotificationLog.id,
+    ).where(
+        NotificationLog.incident_id == incident.id, NotificationLog.incident_event == "firing",
+        Delivery.state.in_((DeliveryState.sent, DeliveryState.pending)),
+    ).limit(1))).scalar_one_or_none() is not None
+
+
 async def resolve(
     session: AsyncSession, incident: Incident, context: dict[str, Any], *, reason: str,
 ) -> bool:
+    """Close the episode. On recovery the ``resolved_template_type`` notice
+    goes out only if the episode was announced: a recovery of a failure
+    nobody heard of (snoozed, quiet hours, throttled, failed everywhere)
+    would be news about nothing. The episode closes the same either way."""
     if incident.resolved_at is not None:
         return False
     incident.resolved_at = utc_now().replace(microsecond=0)
@@ -176,7 +197,8 @@ async def resolve(
     incident.resolution_context = dispatcher._json_safe(context)
     await session.flush()
     await stop_pending(session, incident.id)
-    if reason == "recovered" and incident.resolved_template_type:
+    if (reason == "recovered" and incident.resolved_template_type
+            and await _announced(session, incident)):
         await dispatcher.fire(dispatcher.FireEnvelope(
             type=incident.resolved_template_type,
             context=_context(incident, context, "resolved"),

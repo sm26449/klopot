@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Behaviour changes
+
+- **A recovery notice goes out only for an episode someone was told
+  about.** Before, closing an incident (a rule's recovery, or `status:
+  "resolved"` on `/v1/fire` and Alertmanager) always sent its
+  `resolved_template_type`, even when the failure itself was never
+  delivered — snoozed, in quiet hours, throttled, failed everywhere, or still
+  queued when it cleared. Now the notice is sent only if a firing notice
+  reached a channel (or is being sent) or someone acknowledged the incident;
+  otherwise the incident closes quietly and the still-queued page is
+  cancelled, as before. Raised by Multi-Bus Gateway's paired episodes.
+
 ### Upgrade notes
 
 - **`ALERTD_BOOTSTRAP_ADMIN_KEY` longer than 72 bytes is ignored** (logged as

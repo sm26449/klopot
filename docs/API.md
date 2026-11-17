@@ -223,7 +223,7 @@ curl -X POST https://host/v1/fire -H "X-API-Key: $KEY" -H "Content-Type: applica
 |------|---------------------------|--------|
 | first `firing` | `opened` | Opens an incident (`source_kind=fire`) and notifies. |
 | `firing` while open | `repeat` | Nothing is sent; the response describes the episode's notification. Escalation keeps running until someone acknowledges. **Exception:** while no firing notice of the episode has gone out (the first was snoozed, in quiet hours, throttled, or failed on every channel), a repeat goes through the gates again and is sent once nothing mutes it. The announcement happens on a repeat, not by itself: a caller that fires once and never repeats is not announced later. |
-| `resolved` | `resolved` | Closes the incident, cancels pending escalation, sends `resolved_type` if the opening fire named one. |
+| `resolved` | `resolved` | Closes the incident, cancels pending escalation, sends `resolved_type` if the opening fire named one and the episode was announced (a firing notice reached a channel, or someone acknowledged it); otherwise `dispatched: false` and no notice. |
 | `resolved`, nothing open | `not_found` | No-op (safe to repeat). |
 
 The response also carries `incident_id`. When no notification describes the

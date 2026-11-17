@@ -224,7 +224,7 @@ curl -X POST https://host/v1/fire -H "X-API-Key: $KEY" -H "Content-Type: applica
 |------|----------------------|-------|
 | primul `firing` | `opened` | Deschide un incident (`source_kind=fire`) și notifică. |
 | `firing` cât e deschis | `repeat` | Nu se trimite nimic; răspunsul descrie notificarea episodului. Escaladarea continuă până la confirmare. **Excepție:** cât timp nicio notificare `firing` a episodului nu a plecat (prima a fost în snooze, în orele de liniște, limitată de cooldown sau a eșuat pe toate canalele), o repetare trece din nou prin porți și este trimisă de îndată ce nimic nu o mai oprește. Anunțul se face la o repetare, nu de la sine: un apelant care declanșează o singură dată și nu repetă nu mai este anunțat ulterior. |
-| `resolved` | `resolved` | Închide incidentul, anulează escaladarea în așteptare, trimite `resolved_type` dacă fire-ul de deschidere l-a numit. |
+| `resolved` | `resolved` | Închide incidentul, anulează escaladarea în așteptare, trimite `resolved_type` dacă fire-ul de deschidere l-a numit și episodul a fost anunțat (o notificare de declanșare a ajuns pe un canal sau cineva a confirmat incidentul); altfel `dispatched: false` și nicio notificare. |
 | `resolved`, nimic deschis | `not_found` | Fără efect (se poate repeta). |
 
 Răspunsul conține și `incident_id`. Când nicio notificare nu descrie apelul
