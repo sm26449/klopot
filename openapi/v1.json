@@ -1902,7 +1902,8 @@
               "enum": [
                 "overwrite",
                 "skip",
-                "copy"
+                "copy",
+                "import"
               ],
               "type": "string"
             },
@@ -3041,11 +3042,12 @@
               "enum": [
                 "overwrite",
                 "skip",
-                "copy"
+                "copy",
+                "import"
               ],
               "type": "string"
             },
-            "description": "Per item \"<section>:<key>\": overwrite, skip or copy (as /v1/config/import/apply).",
+            "description": "Per item \"<section>:<key>\": overwrite, skip or copy (as /v1/config/import/apply), or import for a new item. A new route to a template that already exists is skipped unless its decision is import (its preview item has existing_template: true).",
             "title": "Decisions",
             "type": "object"
           },
@@ -10556,7 +10558,7 @@
     },
     "/v1/packs/preview": {
       "post": {
-        "description": "Substitutes the parameters, then classifies every item as `new`, `identical` or `differs` against the live configuration, like /v1/config/import/preview. Writes nothing.",
+        "description": "Substitutes the parameters, then classifies every item as `new`, `identical` or `differs` against the live configuration, like /v1/config/import/preview. Writes nothing. A new route to a template that already exists has `existing_template: true` and `default: skip` \u2014 the install adds it only when its decision is `import`.",
         "operationId": "preview_pack_v1_packs_preview_post",
         "requestBody": {
           "content": {

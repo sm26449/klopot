@@ -8,7 +8,9 @@
 // (POST /v1/config/import/preview: new / identical / differs + changed fields)
 // and choose overwrite / skip / copy → apply (POST /v1/config/import/apply).
 // Existing items that differ default to "skip": nothing is overwritten without
-// an explicit choice.
+// an explicit choice. A new route to a template that already exists
+// (`existing_template`) adds a channel to the user's routing: the review says
+// so, and a pack install skips it unless chosen (the server's `default`).
 import { html, useState, useRef } from "./h.js";
 import { request, api } from "./api.js";
 import { useDialog } from "./dialog.js";
@@ -81,16 +83,18 @@ function fmtValue(v) {
   return typeof v === "object" ? JSON.stringify(v) : String(v);
 }
 
-// Per-item decisions over a preview: new items import, differing ones follow
-// the bulk choice unless set one by one. Shared by the import wizard and the
-// Packs page.
+// Per-item decisions over a preview: new items follow the server's default
+// (import — or skip, for a pack's route to an existing template), differing
+// ones the bulk choice, unless set one by one. Only decisions that differ from
+// what the server does by itself are sent. Shared by the import wizard and
+// the Packs page.
 export function useDecisions(preview) {
   const [choice, setChoice] = useState({});           // "<section>:<key>" → action
   const [bulk, setBulk] = useState("skip");           // default for existing items that differ
   const decisionOf = (item) => {
     const k = `${item.section}:${item.key}`;
     if (choice[k]) return choice[k];
-    if (item.status === "new") return "import";
+    if (item.status === "new") return item.default || "import";
     if (item.status === "differs") return NO_COPY.has(item.section) && bulk === "copy" ? "skip" : bulk;
     return null;
   };
@@ -98,23 +102,44 @@ export function useDecisions(preview) {
     const decisions = {};
     for (const item of preview?.items || []) {
       const d = decisionOf(item);
-      if (d && d !== "import") decisions[`${item.section}:${item.key}`] = d;
+      const serverDefault = item.status === "new" ? (item.default || "import") : null;
+      if (d && d !== serverDefault) decisions[`${item.section}:${item.key}`] = d;
     }
     return { decisions, default_existing: bulk === "copy" ? "skip" : bulk };
   };
   return { choice, setChoice, bulk, setBulk, decisionOf, payload, reset: () => setChoice({}) };
 }
 
+// What apply will do with the current choices — the preview's counts say how
+// the file differs from this instance, this says what Install / Apply changes.
+export function planOf(items, dec) {
+  const plan = { create: 0, overwrite: 0, copy: 0, skip: 0 };
+  for (const item of items) {
+    const d = dec.decisionOf(item);
+    if (!d) continue;                                   // identical: nothing to do
+    if (d === "import") plan.create++;
+    else if (d === "overwrite") plan.overwrite++;
+    else if (d === "copy") plan.copy++;
+    else plan.skip++;
+  }
+  return plan;
+}
+
 // The preview body: errors, warnings, counts, the bulk choice and one table
 // per section with each item's status, changed fields and action.
-export function ImportReview({ preview, dec }) {
+// `applyLabel` names the button that writes (nothing is saved before it).
+export function ImportReview({ preview, dec, applyLabel }) {
   const items = preview.items || [];
   const sections = [...new Set(items.map((i) => i.section))];
+  const onExisting = items.filter((i) => i.existing_template);
+  const skippedByDefault = onExisting.some((i) => i.default === "skip");
   return html`
     ${preview.errors.length ? html`<div class="alert crit"><b>${t("transfer.errors")}</b><ul>${preview.errors.map((e, i) => html`<li key=${i}>${e}</li>`)}</ul>
       <p class="small">${t("transfer.errorsHint")}</p></div>` : null}
     ${preview.warnings.length ? html`<div class="alert warn"><b>${t("transfer.warnings")}</b><ul>${preview.warnings.map((w, i) => html`<li key=${i}>${w}</li>`)}</ul></div>` : null}
     <p class="muted">${t("transfer.counts", preview.counts)}</p>
+    <p class="small muted">${t("transfer.previewOnly", { button: applyLabel || t("transfer.apply") })}</p>
+    ${onExisting.length ? html`<div class="alert" role="note">${t(skippedByDefault ? "transfer.existingRoutesSkipped" : "transfer.existingRoutesAdded", { count: onExisting.length })}</div>` : null}
     ${preview.counts.differs ? html`<div class="field"><label for="imp-bulk">${t("transfer.bulkLabel")}</label>
       <select id="imp-bulk" value=${dec.bulk} onChange=${(e) => dec.setBulk(e.target.value)}>
         ${["skip", "overwrite", "copy"].map((a) => html`<option key=${a} value=${a}>${t(`transfer.action.${a}`)}</option>`)}</select>
@@ -123,7 +148,7 @@ export function ImportReview({ preview, dec }) {
       <h3>${t(`transfer.section.${s}`)}</h3>
       <div class="scroll-x" tabindex="0"><table class="tbl compact"><thead><tr><th>${t("transfer.colItem")}</th><th>${t("transfer.colStatus")}</th><th>${t("transfer.colChanges")}</th><th>${t("transfer.colAction")}</th></tr></thead>
       <tbody>${items.filter((i) => i.section === s).map((i) => html`<tr key=${i.key}>
-        <td class="mono small">${i.key}</td>
+        <td class="mono small">${i.key}${i.existing_template ? html`<div class="hint">${t("transfer.existingTemplate")}</div>` : null}</td>
         <td><span class=${"chip " + (i.status === "differs" ? "warn" : i.status === "new" ? "tag" : "")}>${t(`transfer.status.${i.status}`)}</span></td>
         <td class="small">${i.changes.length ? html`<details><summary>${t("transfer.changeCount", { count: i.changes.length })}</summary>
           <ul class="diff">${i.changes.map((c) => html`<li key=${c.field}><b>${c.field}</b>: <span class="mono">${fmtValue(c.current)}</span> → <span class="mono">${fmtValue(c.incoming)}</span></li>`)}</ul></details>` : "—"}</td>
@@ -131,7 +156,8 @@ export function ImportReview({ preview, dec }) {
             onChange=${(e) => dec.setChoice((c) => ({ ...c, [`${i.section}:${i.key}`]: e.target.value }))}>
             ${actionsFor(i).map((a) => html`<option key=${a} value=${a}>${t(`transfer.action.${a}`)}</option>`)}</select>`
           : html`<span class="muted small">${t("transfer.noChange")}</span>`}</td>
-      </tr>`)}</tbody></table></div></section>`)}`;
+      </tr>`)}</tbody></table></div></section>`)}
+    <p class="import-plan" role="status"><b>${t("transfer.planTitle", { button: applyLabel || t("transfer.apply") })}</b> ${t("transfer.plan", planOf(items, dec))}</p>`;
 }
 
 // What an apply returned, as a short summary (+ the renamed copies).

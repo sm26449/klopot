@@ -176,3 +176,21 @@ async def test_masked_url_echo_is_identical(db_client, db_session, admin_key, wo
     assert pack["inputs"][0]["config"]["url"] != "http://gateway:5080/api/health"   # really masked
     prev = await _preview(db_client, admin_key, yaml.safe_dump(pack))
     assert [i["status"] for i in prev["items"]] == ["identical"]
+
+
+async def test_a_config_import_adds_routes_to_existing_templates(db_client, db_session, admin_key, world):
+    # A config file describes a configuration — its routes are meant (unlike a
+    # pack's, which route everything to one channel): flagged, imported.
+    text = _pack(routes=[{"template": "soc_low", "channel": "tg", "severity_min": "critical"}])
+    prev = await _preview(db_client, admin_key, text)
+    [item] = prev["items"]
+    assert item["existing_template"] is True and item["default"] == "import"
+    out = await _apply(db_client, admin_key, text)
+    assert out["applied"] is True and out["created"] == ["routes:soc_low→tg"]
+
+
+async def test_a_route_set_to_copy_falls_back_to_the_bulk_choice(db_client, admin_key, world):
+    # Routes cannot be copied: "copy" on one takes the bulk choice — never a crash.
+    text = _pack(routes=[{"template": "grid_over", "channel": "tg", "severity_min": "warning"}])
+    out = await _apply(db_client, admin_key, text, decisions={"routes:grid_over→tg": "copy"})
+    assert out["applied"] is True and out["skipped"] == ["routes:grid_over→tg"]

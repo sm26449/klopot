@@ -965,7 +965,7 @@ export interface paths {
         put?: never;
         /**
          * Preview installing a pack
-         * @description Substitutes the parameters, then classifies every item as `new`, `identical` or `differs` against the live configuration, like /v1/config/import/preview. Writes nothing.
+         * @description Substitutes the parameters, then classifies every item as `new`, `identical` or `differs` against the live configuration, like /v1/config/import/preview. Writes nothing. A new route to a template that already exists has `existing_template: true` and `default: skip` — the install adds it only when its decision is `import`.
          */
         post: operations["preview_pack_v1_packs_preview_post"];
         delete?: never;
@@ -2328,7 +2328,7 @@ export interface components {
              * @description Per item, keyed "<section>:<key>" (e.g. "rules:soc_low"): overwrite, skip or copy. New items are imported unless skipped; identical ones are left alone.
              */
             decisions?: {
-                [key: string]: "overwrite" | "skip" | "copy";
+                [key: string]: "overwrite" | "skip" | "copy" | "import";
             };
             /**
              * Default Existing
@@ -2676,10 +2676,10 @@ export interface components {
         PackApply: {
             /**
              * Decisions
-             * @description Per item "<section>:<key>": overwrite, skip or copy (as /v1/config/import/apply).
+             * @description Per item "<section>:<key>": overwrite, skip or copy (as /v1/config/import/apply), or import for a new item. A new route to a template that already exists is skipped unless its decision is import (its preview item has existing_template: true).
              */
             decisions?: {
-                [key: string]: "overwrite" | "skip" | "copy";
+                [key: string]: "overwrite" | "skip" | "copy" | "import";
             };
             /**
              * Default Existing

@@ -164,7 +164,13 @@ Templates, Rules and Variables have an **Actions** menu (`lib/transfer.js`):
      import would store them — an omitted field counts as its default);
   3. choose per item — new: Import / Skip; different: **Skip (default)** /
      Overwrite / Import as copy (routes cannot be copied); identical: nothing
-     to do. A bulk choice sets the default for every differing item;
+     to do. A bulk choice sets the default for every differing item. A new
+     route to a template that already exists is marked "adds a channel to a
+     template you already have", with a note above the table; its default is
+     the server's (`default`): Import for a config import, **Skip** for a
+     pack install (docs/PACKS.md). Only choices that differ from the server's
+     default are sent. "Nothing is saved until you press Apply / Install"
+     stands under the counts;
   4. **Apply** (`POST /v1/config/import/apply`) runs one transaction. Editing
      the text after a preview disables Apply until you preview again.
 - Exports are masked (secrets → `env:UNKNOWN_*`, URLs shortened with `…`).

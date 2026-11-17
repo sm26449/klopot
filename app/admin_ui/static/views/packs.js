@@ -159,10 +159,10 @@ export function InstallDrawer({ source, summary, channels, onClose, onDone }) {
           ? (otherErrors.length ? html`<div class="alert crit"><b>${t("transfer.errors")}</b><ul>${otherErrors.map((e, i) => html`<li key=${i}>${e}</li>`)}</ul></div>` : null)
           : preview ? html`
             <${EnvStatus} env=${preview.env} />
-            <${ImportReview} preview=${preview} dec=${dec} />
+            <${ImportReview} preview=${preview} dec=${dec} applyLabel=${t("packs.install")} />
             ${result && !result.applied ? html`<div class="alert crit"><b>${t("transfer.notApplied")}</b><ul>${(result.errors || []).map((e, i) => html`<li key=${i}>${e}</li>`)}</ul></div>` : null}
             <div class="form-actions">
-              <button class="btn primary" disabled=${busy || stale || !preview.ok} onClick=${doApply}>${t("packs.install")}</button>
+              <button class="btn primary" disabled=${busy || stale || !(preview.items || []).length} onClick=${doApply}>${t("packs.install")}</button>
             </div>` : null}`}
     </div>
   </${Drawer}>`;

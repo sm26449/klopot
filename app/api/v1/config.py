@@ -251,7 +251,7 @@ class ImportApply(BaseModel):
         description='Per item, keyed "<section>:<key>" (e.g. "rules:soc_low"): overwrite, skip or copy. '
         "New items are imported unless skipped; identical ones are left alone.",
     )
-    default_existing: config_merge.Action = Field(
+    default_existing: config_merge.ExistingAction = Field(
         default="skip", description="Action for an existing item that differs and has no decision.",
     )
 

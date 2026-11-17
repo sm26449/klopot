@@ -442,7 +442,14 @@ against the live configuration — nothing is written:
 
 Items are compared as import would store them: a field the file omits takes
 its import default, so it shows up as a change when that differs. Route keys
-are `<template>→<channel>`.
+are `<template>→<channel>`. A new item carries `default` — what apply does
+without a decision (`import`, or `skip`, below) — and a new route to a
+template that already exists carries `existing_template: true`:
+
+```json
+{ "section": "routes", "key": "disk_full→phone", "status": "new", "changes": [],
+  "existing_template": true, "default": "import" }
+```
 
 `POST /v1/config/import/apply` (JSON, scope `admin`):
 
@@ -453,9 +460,13 @@ are `<template>→<channel>`.
   "default_existing": "skip" }
 ```
 
-New items are imported unless their decision is `skip`; identical items are
-left alone; an existing item that differs follows its decision, else
-`default_existing` (default `skip`). `copy` stores it as `<name>_copy`
+A decision is `import` or `skip` for a new item, `overwrite`, `skip` or
+`copy` for an existing one (`import` there counts as `skip`: it never
+overwrites). New items follow their decision, else their `default` (always
+`import` here; `skip` for a pack's route to an existing template — see
+[Packs](#packs)); identical items are left alone; an existing item that differs
+follows its decision, else `default_existing` (`overwrite`, `skip` or `copy`;
+default `skip`). `copy` stores it as `<name>_copy`
 (`_copy2`, …) — not for routes; a copied template takes the pack's rules,
 routes and schedules that reference it. The response adds `created`,
 `overwritten`, `skipped`, `copied` (`{"templates:x": "x_copy"}`) and `applied`
@@ -530,7 +541,7 @@ A pack is an import document with a `pack:` header and parameters
 | `GET /v1/packs/{id}` | read | One catalog pack, plus its YAML |
 | `POST /v1/packs/inspect` | admin | Header and parameters of your own pack (`{"yaml": …}`) |
 | `POST /v1/packs/preview` | admin | `{"pack_id" or "yaml", "params"}` → parameters checked, then the per-item preview of `/v1/config/import/preview` |
-| `POST /v1/packs/apply` | admin | Same body + `decisions` / `default_existing` → installs in one transaction, audited as `pack.install` |
+| `POST /v1/packs/apply` | admin | Same body + `decisions` / `default_existing` → installs in one transaction, audited as `pack.install`. A new route to a template that already exists (`existing_template: true`, `default: skip` in the preview) is installed only with the decision `import` — a pack does not add its channel to routing you already chose |
 
 ```bash
 curl -X POST https://host/v1/packs/apply -H "X-API-Key: $KEY" -H "Content-Type: application/json" \

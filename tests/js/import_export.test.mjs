@@ -120,3 +120,66 @@ test("editing the text after a preview blocks apply until previewed again", asyn
     assert.match(document.body.textContent, /preview again/);
   } finally { unmount(); }
 });
+
+test("a route that adds a channel to an existing template: flagged, skipped unless chosen", async () => {
+  // The review is generic; the server decides the default (a pack install
+  // skips such routes, a config import adds them).
+  setLang("en");
+  const calls = [];
+  serve(calls);
+  const routed = {
+    ok: true, errors: [], warnings: [], counts: { new: 2, identical: 0, differs: 0 },
+    items: [
+      { section: "routes", key: "mbg_device→phone", status: "new", changes: [], existing_template: true, default: "skip" },
+      { section: "routes", key: "mbg_device_ok→phone", status: "new", changes: [], existing_template: false, default: "import" },
+    ],
+  };
+  const base = globalThis.fetch;
+  globalThis.fetch = window.fetch = async (url, init = {}) =>
+    new URL(url, "http://testserver").pathname === "/v1/config/import/preview"
+      ? { ok: true, status: 200, headers: { get: () => "application/json" }, json: async () => routed, text: async () => JSON.stringify(routed) }
+      : base(url, init);
+  try {
+    mount(html`<${ImportWizard} onClose=${() => {}} onDone=${() => {}} />`);
+    await flush(80);
+    const ta = document.getElementById("imp-text");
+    ta.value = "routes: []\n";
+    ta.dispatchEvent(new window.Event("input", { bubbles: true }));
+    await flush(20);
+    button("Preview").click();
+    await flush(80);
+    const text = document.body.textContent;
+    assert.match(text, /nothing is saved until you press Apply/);
+    assert.match(text, /1 route\(s\) would add a channel to templates you already have/);
+    assert.match(text, /adds a channel to a template you already have/);
+    assert.match(text, /Apply will: create 1 · overwrite 0 · copy 0 · skip 1/, "what apply does, not how the file differs");
+    const sel = (key) => [...document.querySelectorAll("td select")].find((s) => s.getAttribute("aria-label") === `Action for ${key}`);
+    assert.equal(sel("mbg_device→phone").value, "skip", "the server's default");
+    assert.equal(sel("mbg_device_ok→phone").value, "import");
+    assert.deepEqual(await nameViolations(), []);
+
+    button("Apply").click();
+    await flush(80);
+    let body = JSON.parse(calls.filter((c) => c.path === "/v1/config/import/apply").at(-1).body);
+    assert.deepEqual(body.decisions, {}, "defaults are the server's: nothing to send");
+
+    unmount();
+    mount(html`<${ImportWizard} onClose=${() => {}} onDone=${() => {}} />`);
+    await flush(80);
+    const ta2 = document.getElementById("imp-text");
+    ta2.value = "routes: []\n";
+    ta2.dispatchEvent(new window.Event("input", { bubbles: true }));
+    await flush(20);
+    button("Preview").click();
+    await flush(80);
+    const flagged = sel("mbg_device→phone");
+    flagged.value = "import";
+    flagged.dispatchEvent(new window.Event("change", { bubbles: true }));
+    await flush(20);
+    assert.match(document.body.textContent, /Apply will: create 2 · overwrite 0 · copy 0 · skip 0/);
+    button("Apply").click();
+    await flush(80);
+    body = JSON.parse(calls.filter((c) => c.path === "/v1/config/import/apply").at(-1).body);
+    assert.deepEqual(body.decisions, { "routes:mbg_device→phone": "import" }, "an explicit import is sent");
+  } finally { unmount(); globalThis.fetch = window.fetch = base; }
+});

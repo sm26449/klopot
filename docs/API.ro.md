@@ -448,7 +448,14 @@ pachetului față de configurația live — nu scrie nimic:
 
 Elementele se compară așa cum le-ar salva importul: un câmp lipsă din fișier
 primește valoarea implicită a importului și apare ca modificare dacă diferă.
-Cheile rutelor sunt `<template>→<canal>`.
+Cheile rutelor sunt `<template>→<canal>`. Un element nou are `default` — ce
+face aplicarea fără o decizie (`import`, sau `skip`, mai jos) — iar o rută
+nouă către un template care există deja are `existing_template: true`:
+
+```json
+{ "section": "routes", "key": "disk_full→phone", "status": "new", "changes": [],
+  "existing_template": true, "default": "import" }
+```
 
 `POST /v1/config/import/apply` (JSON, scope `admin`):
 
@@ -459,9 +466,13 @@ Cheile rutelor sunt `<template>→<canal>`.
   "default_existing": "skip" }
 ```
 
-Elementele noi se importă dacă decizia lor nu e `skip`; cele identice nu se
-ating; un element existent care diferă urmează decizia lui, altfel
-`default_existing` (implicit `skip`). `copy` îl salvează ca `<nume>_copy`
+O decizie este `import` sau `skip` pentru un element nou, `overwrite`, `skip`
+sau `copy` pentru unul existent (`import` acolo înseamnă `skip`: nu
+suprascrie niciodată). Elementele noi urmează decizia lor, altfel `default`
+(aici mereu `import`; `skip` pentru o rută a unui pachet către un template
+existent — vezi Pachete); cele identice nu se ating; un element existent care
+diferă urmează decizia lui, altfel `default_existing` (`overwrite`, `skip` sau
+`copy`; implicit `skip`). `copy` îl salvează ca `<nume>_copy`
 (`_copy2`, …) — nu și pentru rute; un template copiat ia cu el regulile,
 rutele și programările din pachet care îl referă. Răspunsul adaugă `created`,
 `overwritten`, `skipped`, `copied` (`{"templates:x": "x_copy"}`) și `applied`
@@ -537,7 +548,7 @@ Un pachet e un document de import cu antetul `pack:` și parametri
 | `GET /v1/packs/{id}` | read | Un pachet din catalog, plus YAML-ul lui |
 | `POST /v1/packs/inspect` | admin | Antetul și parametrii unui pachet propriu (`{"yaml": …}`) |
 | `POST /v1/packs/preview` | admin | `{"pack_id" sau "yaml", "params"}` → parametri verificați, apoi previzualizarea element cu element de la `/v1/config/import/preview` |
-| `POST /v1/packs/apply` | admin | Același corp + `decisions` / `default_existing` → instalează într-o tranzacție, auditat ca `pack.install` |
+| `POST /v1/packs/apply` | admin | Același corp + `decisions` / `default_existing` → instalează într-o tranzacție, auditat ca `pack.install`. O rută nouă către un template care există deja (`existing_template: true`, `default: skip` în previzualizare) se instalează doar cu decizia `import` — un pachet nu adaugă canalul lui la rutarea pe care ai ales-o deja |
 
 ```bash
 curl -X POST https://host/v1/packs/apply -H "X-API-Key: $KEY" -H "Content-Type: application/json" \

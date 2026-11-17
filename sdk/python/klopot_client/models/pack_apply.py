@@ -29,7 +29,8 @@ class PackApply:
     """ 
         Attributes:
             decisions (PackApplyDecisions | Unset): Per item "<section>:<key>": overwrite, skip or copy (as
-                /v1/config/import/apply).
+                /v1/config/import/apply), or import for a new item. A new route to a template that already exists is skipped
+                unless its decision is import (its preview item has existing_template: true).
             default_existing (PackApplyDefaultExisting | Unset): Action for an existing item that differs. Default:
                 PackApplyDefaultExisting.SKIP.
             pack_id (None | str | Unset): A catalog pack (GET /v1/packs).

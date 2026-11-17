@@ -5,8 +5,9 @@ import pytest
 import yaml
 from sqlalchemy import select
 
-from app.db.models import AuditLog, Channel, ChannelKind, Input, Rule, Template, Variable
+from app.db.models import AuditLog, Channel, ChannelKind, Input, Rule, Template, TemplateChannel, Variable
 from app.services import packs
+from tests._db import fresh
 
 
 @pytest.fixture
@@ -171,3 +172,71 @@ async def test_preview_reports_whether_each_secret_is_ready(db_client, admin_key
     assert r["env"][0]["set"] is True and "s3cret-value" not in str(r)
     r = (await db_client.post("/v1/packs/preview", headers=h, json={"pack_id": "alertmanager", "params": {"token_env": "MY_TOKEN"}})).json()
     assert r["env"][0]["allowed"] is False  # not KLOPOT_SECRET_* and not allowlisted
+
+
+# ── Routes to templates you already have (1.3.0-rc.2) ────────────────
+
+
+@pytest.fixture
+async def mbg_already_configured(db_session, ui_channel):
+    """An instance where mbg_device exists and goes to the UI only, and a
+    second channel the pack will be pointed at."""
+    db_session.add_all([
+        Channel(name="phone", kind=ChannelKind.ui, config={}, enabled=True),
+        Template(type="mbg_device", severity="warning", title_template="{source}: {message}", min_repeat_min=15),
+    ])
+    await db_session.flush()
+    tmpl = (await db_session.execute(select(Template).where(Template.type == "mbg_device"))).scalar_one()
+    ui = (await db_session.execute(select(Channel).where(Channel.name == "ui_default"))).scalar_one()
+    db_session.add(TemplateChannel(template_id=tmpl.id, channel_id=ui.id, enabled=True, severity_min="info"))
+    await db_session.commit()
+
+
+async def _routes(db_session, template_type):
+    await fresh(db_session)
+    rows = await db_session.execute(select(Channel.name).join(TemplateChannel, TemplateChannel.channel_id == Channel.id)
+                                    .join(Template, Template.id == TemplateChannel.template_id)
+                                    .where(Template.type == template_type))
+    return set(rows.scalars())
+
+
+MBG_TO_PHONE = {"pack_id": "multi-bus-gateway", "params": {"alert_channel": "phone"}}
+
+
+async def test_a_pack_does_not_add_its_channel_to_a_template_you_already_route(
+        db_client, admin_key, db_session, mbg_already_configured):
+    preview = (await db_client.post("/v1/packs/preview", json=MBG_TO_PHONE, headers=_h(admin_key))).json()
+    items = {(i["section"], i["key"]): i for i in preview["items"]}
+    flagged = items[("routes", "mbg_device→phone")]
+    assert flagged["status"] == "new" and flagged["existing_template"] is True and flagged["default"] == "skip"
+    fresh_route = items[("routes", "mbg_device_ok→phone")]
+    assert fresh_route["existing_template"] is False and fresh_route["default"] == "import"
+
+    r = (await db_client.post("/v1/packs/apply", json=MBG_TO_PHONE, headers=_h(admin_key))).json()
+    assert r["applied"] and "routes:mbg_device→phone" in r["skipped"]
+    assert await _routes(db_session, "mbg_device") == {"ui_default"}, "the user's routing is untouched"
+    assert await _routes(db_session, "mbg_device_ok") == {"phone"}, "new templates go where the pack says"
+
+
+async def test_the_channel_is_added_to_an_existing_template_when_asked(
+        db_client, admin_key, db_session, mbg_already_configured):
+    body = {**MBG_TO_PHONE, "decisions": {"routes:mbg_device→phone": "import"}}
+    r = (await db_client.post("/v1/packs/apply", json=body, headers=_h(admin_key))).json()
+    assert r["applied"] and "routes:mbg_device→phone" in r["created"]
+    assert await _routes(db_session, "mbg_device") == {"ui_default", "phone"}
+
+
+async def test_import_never_overwrites_an_existing_item(db_client, admin_key, db_session, mbg_already_configured):
+    # "import" adds new items only: on a template that differs it is a skip.
+    body = {**MBG_TO_PHONE, "decisions": {"templates:mbg_device": "import"}}
+    r = (await db_client.post("/v1/packs/apply", json=body, headers=_h(admin_key))).json()
+    assert r["applied"] and "templates:mbg_device" in r["skipped"]
+    await fresh(db_session)
+    tmpl = (await db_session.execute(select(Template).where(Template.type == "mbg_device"))).scalar_one()
+    assert tmpl.min_repeat_min == 15
+
+
+async def test_default_existing_takes_only_existing_item_actions(db_client, admin_key, mbg_already_configured):
+    # "import" is a decision for a new item, not a bulk choice for existing ones.
+    body = {**MBG_TO_PHONE, "default_existing": "import"}
+    assert (await db_client.post("/v1/packs/apply", json=body, headers=_h(admin_key))).status_code == 422

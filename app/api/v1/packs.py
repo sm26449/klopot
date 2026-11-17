@@ -2,7 +2,10 @@
 
 A pack comes from the catalog (``pack_id``) or from the caller (``yaml``).
 Its parameters are checked and substituted, then the rendered document goes
-through the same preview / per-item apply as ``/v1/config/import/*``.
+through the same preview / per-item apply as ``/v1/config/import/*`` — with
+one difference: a pack's route to a template that already exists is not
+installed unless its decision is ``import`` (a pack routes every template to
+the channel its parameter names; the user's routing stays theirs).
 """
 from __future__ import annotations
 
@@ -71,9 +74,12 @@ class PackSource(BaseModel):
 
 class PackApply(PackSource):
     decisions: dict[str, config_merge.Action] = Field(
-        default_factory=dict, description='Per item "<section>:<key>": overwrite, skip or copy (as /v1/config/import/apply).',
+        default_factory=dict,
+        description='Per item "<section>:<key>": overwrite, skip or copy (as /v1/config/import/apply), or import '
+                    "for a new item. A new route to a template that already exists is skipped unless its decision "
+                    "is import (its preview item has existing_template: true).",
     )
-    default_existing: config_merge.Action = Field(default="skip", description="Action for an existing item that differs.")
+    default_existing: config_merge.ExistingAction = Field(default="skip", description="Action for an existing item that differs.")
 
 
 async def _load(source: PackSource) -> packs.Pack:
@@ -125,7 +131,9 @@ async def inspect_pack(body: PackSource, actor: Actor = Depends(require_scope("a
     summary="Preview installing a pack",
     description=(
         "Substitutes the parameters, then classifies every item as `new`, `identical` or "
-        "`differs` against the live configuration, like /v1/config/import/preview. Writes nothing."
+        "`differs` against the live configuration, like /v1/config/import/preview. Writes nothing. "
+        "A new route to a template that already exists has `existing_template: true` and "
+        "`default: skip` — the install adds it only when its decision is `import`."
     ),
 )
 async def preview_pack(
@@ -136,7 +144,7 @@ async def preview_pack(
     rendered = await _render(body)
     if isinstance(rendered, list):
         return {"ok": False, "errors": rendered, "warnings": [], "items": [], "counts": {}}
-    preview = await config_merge.preview_import(session, rendered.document)
+    preview = await config_merge.preview_import(session, rendered.document, routes_to_existing_templates="skip")
     await session.rollback()
     return {**preview.as_dict(), "pack": rendered.pack.summary(), "params": rendered.params,
             "env": _env_status(rendered)}
@@ -174,7 +182,8 @@ async def apply_pack(
     rendered = await _render(body)
     if isinstance(rendered, list):
         return {"ok": False, "errors": rendered, "applied": False}
-    result = await config_merge.apply_import(session, rendered.document, body.decisions, body.default_existing)
+    result = await config_merge.apply_import(session, rendered.document, body.decisions, body.default_existing,
+                                             routes_to_existing_templates="skip")
     summary = result.summary()
     if result.plan.ok:
         h = rendered.pack.header

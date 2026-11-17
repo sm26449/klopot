@@ -75,11 +75,25 @@ Template placeholders (`{name}`) and rule expressions are untouched — only
 
 - **Admin UI → Packs:** the catalog, or upload / paste a pack file. Fill the
   parameters → preview (every item: new / identical / differs) → choose
-  overwrite / skip / copy for items that already exist → install.
+  overwrite / skip / copy for items that already exist → install. The preview
+  writes nothing; only **Install** does.
 - **API:** `POST /v1/packs/preview` and `POST /v1/packs/apply`, each with
   either `pack_id` (catalog) or `yaml` (your file), plus `params`; apply also
   takes `decisions` and `default_existing`, exactly like
   `/v1/config/import/apply`. See `docs/API.md`.
+
+**Your routing stays yours.** A pack routes each of its templates to the
+channel its parameter names. For a template you already have, that route
+would add a channel to routing you chose (install the MBG pack with
+"Telegram" and every MBG warning you kept on the UI would start going to
+Telegram too). So a new route to an **existing** template is not installed:
+the preview marks it (`existing_template: true`, `default: skip`; in the UI
+"adds a channel to a template you already have") and the install skips it
+unless you choose **Import** for it (`decisions: {"routes:<template>→<channel>":
+"import"}`). Routes of the templates the pack creates are installed as usual,
+and an install never removes a route. `/v1/config/import` marks such routes
+too but imports them: a config file describes a configuration, routes
+included.
 
 A pack with parameters cannot go through `/v1/config/import` (its `${…}` would
 be imported literally); a pack without parameters can.

@@ -96,6 +96,22 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Installing a pack no longer adds its channel to templates you already
+  have.** A pack routes every template to the channel its parameter names;
+  over an existing configuration that added the channel to templates whose
+  routing you had chosen (installing the MBG pack with Telegram sent every MBG
+  warning to Telegram). Such a route is now marked in the preview ("adds a
+  channel to a template you already have", `existing_template` /
+  `default: skip`) and installed only if you choose Import for it; the
+  templates the pack creates are routed as before. `/v1/config/import` marks
+  them too and still imports them. The review also says that nothing is saved
+  until Install / Apply, and sums up what Install / Apply will do with the
+  current choices (create · overwrite · copy · skip). Decisions accept `import`
+  (add a new item; on an existing item it is a skip); `default_existing` stays
+  `overwrite` / `skip` / `copy`.
+- Packs: after a preview with validation errors, Install stayed disabled even
+  once the items involved were set to Skip, as the error message says to do
+  (the import wizard allowed it).
 - Admin UI: right after signing in, the dashboard's Service card showed the
   status alone — no version, no components — for up to 30 s, and the version
   next to the logo was missing. The UI read `/v1/health` when the page

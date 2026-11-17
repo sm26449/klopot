@@ -80,7 +80,9 @@ def sync_detailed(
     """ Preview installing a pack
 
      Substitutes the parameters, then classifies every item as `new`, `identical` or `differs` against
-    the live configuration, like /v1/config/import/preview. Writes nothing.
+    the live configuration, like /v1/config/import/preview. Writes nothing. A new route to a template
+    that already exists has `existing_template: true` and `default: skip` — the install adds it only
+    when its decision is `import`.
 
     Args:
         body (PackSource):
@@ -114,7 +116,9 @@ def sync(
     """ Preview installing a pack
 
      Substitutes the parameters, then classifies every item as `new`, `identical` or `differs` against
-    the live configuration, like /v1/config/import/preview. Writes nothing.
+    the live configuration, like /v1/config/import/preview. Writes nothing. A new route to a template
+    that already exists has `existing_template: true` and `default: skip` — the install adds it only
+    when its decision is `import`.
 
     Args:
         body (PackSource):
@@ -143,7 +147,9 @@ async def asyncio_detailed(
     """ Preview installing a pack
 
      Substitutes the parameters, then classifies every item as `new`, `identical` or `differs` against
-    the live configuration, like /v1/config/import/preview. Writes nothing.
+    the live configuration, like /v1/config/import/preview. Writes nothing. A new route to a template
+    that already exists has `existing_template: true` and `default: skip` — the install adds it only
+    when its decision is `import`.
 
     Args:
         body (PackSource):
@@ -177,7 +183,9 @@ async def asyncio(
     """ Preview installing a pack
 
      Substitutes the parameters, then classifies every item as `new`, `identical` or `differs` against
-    the live configuration, like /v1/config/import/preview. Writes nothing.
+    the live configuration, like /v1/config/import/preview. Writes nothing. A new route to a template
+    that already exists has `existing_template: true` and `default: skip` — the install adds it only
+    when its decision is `import`.
 
     Args:
         body (PackSource):

@@ -13,6 +13,12 @@ reference checks and the transactional upsert are all reused:
   skipped items removed, copies renamed) and hands it to
   ``config_io.import_config`` in one transaction.
 
+A new route to a template that already exists (``existing_template``) adds a
+channel to something the user already configured. Config import adds it by
+default — the file describes that configuration; a pack does not (it routes
+every template to the one channel its parameter names), so pack installs pass
+``routes_to_existing_templates="skip"`` and add such a route only when asked.
+
 Comparison happens on the *normalised* item: import fills an omitted field
 with its default (``locale`` → ``en``, ``persist_n`` → 1 …), so a field the
 file leaves out can still change the row on overwrite — the diff shows it.
@@ -29,7 +35,13 @@ from ..channels import sms_config
 from . import config_io
 from .references import expression_vars, vars_read
 
-Action = Literal["overwrite", "skip", "copy"]
+# "import": add a new item — the default for new items, except a pack's routes
+# to templates that already exist. On an existing item it means "skip"
+# (nothing is overwritten without "overwrite").
+Action = Literal["overwrite", "skip", "copy", "import"]
+# What happens to an existing item that differs and has no decision of its own.
+ExistingAction = Literal["overwrite", "skip", "copy"]
+NewRouteDefault = Literal["import", "skip"]
 Status = Literal["new", "identical", "differs"]
 
 # Sections in dependency order, and the field naming an item in each.
@@ -230,6 +242,13 @@ class PreviewItem:
     key: str
     status: Status
     changes: list[dict[str, Any]] = field(default_factory=list)
+    # A new route whose template already exists here: installing it adds a
+    # channel to a template the user configured.
+    existing_template: bool = False
+    # What happens without a decision: "import" / "skip" for a new item, the
+    # caller's default_existing for one that differs (None), nothing for an
+    # identical one (None).
+    default: Action | None = None
 
 
 @dataclass
@@ -247,7 +266,9 @@ class Preview:
         }
 
 
-async def preview_import(session: AsyncSession, pack: dict[str, Any]) -> Preview:
+async def preview_import(
+    session: AsyncSession, pack: dict[str, Any], *, routes_to_existing_templates: NewRouteDefault = "import",
+) -> Preview:
     plan = await config_io.import_config(session, copy.deepcopy(pack), apply=False)
     current = await config_io.export_config(session, mask_secrets=False)
     index = {s: {item_key(s, i): i for i in current.get(s) or []} for s in SECTIONS}
@@ -259,7 +280,9 @@ async def preview_import(session: AsyncSession, pack: dict[str, Any]) -> Preview
             key = item_key(section, item)
             cur = index[section].get(key)
             if cur is None:
-                items.append(PreviewItem(section, key, "new"))
+                existing = section == "routes" and item.get("template") in index["templates"]
+                items.append(PreviewItem(section, key, "new", existing_template=existing,
+                                         default=routes_to_existing_templates if existing else "import"))
                 continue
             changes = _diff(section, item, cur)
             items.append(PreviewItem(section, key, "differs" if changes else "identical", changes))
@@ -301,7 +324,9 @@ async def build_merged_pack(
     session: AsyncSession,
     pack: dict[str, Any],
     decisions: dict[str, Action],
-    default_existing: Action = "skip",
+    default_existing: ExistingAction = "skip",
+    *,
+    routes_to_existing_templates: NewRouteDefault = "import",
 ) -> tuple[dict[str, Any], MergeResult, Preview]:
     """The pack to import after applying the per-item decisions.
 
@@ -312,8 +337,8 @@ async def build_merged_pack(
     describe the incoming template. Copied variables / rules are renamed
     only; expressions that mention them are not rewritten.
     """
-    preview = await preview_import(session, pack)
-    status = {(i.section, i.key): i.status for i in preview.items}
+    preview = await preview_import(session, pack, routes_to_existing_templates=routes_to_existing_templates)
+    by_item = {(i.section, i.key): i for i in preview.items}
     current = await config_io.export_config(session, mask_secrets=False)
     taken = {s: {item_key(s, i) for i in current.get(s) or []} | {item_key(s, i) for i in pack.get(s) or [] if isinstance(i, dict)}
              for s in SECTIONS}
@@ -335,11 +360,12 @@ async def build_merged_pack(
                 continue
             key = item_key(section, item)
             label = f"{section}:{key}"
-            st = status.get((section, key), "new")
+            seen = by_item.get((section, key))
+            st = seen.status if seen else "new"
             if st == "new":
-                # New items are imported unless explicitly skipped (e.g. a
-                # route to a channel the target doesn't have).
-                if decisions.get(label) == "skip":
+                # New items follow their decision, else the preview's default:
+                # import — except a pack's route to an existing template.
+                if decisions.get(label, (seen.default if seen else None) or "import") == "skip":
                     result.skipped.append(label)
                 else:
                     kept.append(item)
@@ -349,8 +375,11 @@ async def build_merged_pack(
                 result.skipped.append(label)
                 continue
             action = decisions.get(label, default_existing)
+            if action == "import":
+                action = "skip"   # "import" adds new items; it never overwrites
             if action == "copy" and section not in COPYABLE:
-                action = default_existing if default_existing != "copy" else "skip"
+                # A route cannot be copied: the bulk choice, unless that is a copy too.
+                action = default_existing if default_existing in ("overwrite", "skip") else "skip"
             if action == "skip":
                 result.skipped.append(label)
             elif action == "overwrite":
@@ -383,9 +412,12 @@ async def apply_import(
     session: AsyncSession,
     pack: dict[str, Any],
     decisions: dict[str, Action],
-    default_existing: Action = "skip",
+    default_existing: ExistingAction = "skip",
+    *,
+    routes_to_existing_templates: NewRouteDefault = "import",
 ) -> MergeResult:
     """Apply the merged pack in one transaction (caller commits)."""
-    merged, result, _ = await build_merged_pack(session, pack, decisions, default_existing)
+    merged, result, _ = await build_merged_pack(session, pack, decisions, default_existing,
+                                                routes_to_existing_templates=routes_to_existing_templates)
     result.plan = await config_io.import_config(session, merged, apply=True)
     return result

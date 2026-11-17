@@ -2,6 +2,7 @@ from enum import StrEnum
 
 class PackApplyDecisionsAdditionalProperty(StrEnum):
     COPY = "copy"
+    IMPORT = "import"
     OVERWRITE = "overwrite"
     SKIP = "skip"
 
