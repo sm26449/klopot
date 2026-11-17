@@ -98,7 +98,7 @@ async def ping(config: dict[str, Any], name: str, status: str, detail: str) -> P
         # 401 wrong key, 422 a bad setting (timeout, recipients), 409 too many
         # watchdogs, 503 Kurier without a key: its `detail` says which.
         try:
-            why = str((r.json() or {}).get("detail") or "")
+            why = _detail_text((r.json() or {}).get("detail"))
         except (ValueError, AttributeError):
             why = ""
         return PingResult(False, f"HTTP {r.status_code}" + (f": {why[:120]}" if why else ""))
@@ -108,6 +108,14 @@ async def ping(config: dict[str, Any], name: str, status: str, detail: str) -> P
         body = {}
     modem = body.get("modem") if isinstance(body, dict) else None
     return PingResult(True, modem=modem if isinstance(modem, dict) else None)
+
+
+def _detail_text(detail: Any) -> str:
+    """Kurier's ``detail``: a string, or FastAPI's validation list
+    (``[{"loc": …, "msg": …}, …]``) — joined by its messages."""
+    if isinstance(detail, list):
+        return "; ".join(str(d.get("msg") or d) if isinstance(d, dict) else str(d) for d in detail)
+    return str(detail or "")
 
 
 def modem_down(modem: dict[str, Any] | None) -> bool:

@@ -137,3 +137,11 @@ async def test_a_refused_ping_says_why(monkeypatch, kurier):
     FakeHTTP.install(monkeypatch, wd).will(reply(422, {"detail": "to: +4x is not a phone number"}))
     result = await wd.ping(kurier.config, "klopot-sms_main", "ok", "")
     assert not result.ok and result.error == "HTTP 422: to: +4x is not a phone number"
+
+
+async def test_a_validation_error_list_is_joined_by_its_messages(monkeypatch, kurier):
+    detail = [{"type": "less_than_equal", "loc": ["body", "timeout_sec"], "msg": "Input should be less than or equal to 604800"},
+              {"type": "missing", "loc": ["body", "status"], "msg": "Field required"}]
+    FakeHTTP.install(monkeypatch, wd).will(reply(422, {"detail": detail}))
+    result = await wd.ping(kurier.config, "klopot-sms_main", "ok", "")
+    assert result.error == "HTTP 422: Input should be less than or equal to 604800; Field required"
