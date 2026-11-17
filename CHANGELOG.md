@@ -62,7 +62,8 @@ adheres to [Semantic Versioning](https://semver.org/).
   `seplos-bms` (seplos-modbus-mqtt), `fronius-inverter` (fronius-modbus-mqtt,
   installed once per inverter), `openvigil-nvr` (every OpenVigil 2.2 alert,
   with its recovery templates) and `multi-bus-gateway` (MBG's own template
-  set). `tests/packs/test_catalog_rules.py` runs every catalog rule against
+  set, with the `_ok` recovery templates of its paired alerts, which MBG
+  sends as episodes — MBG ADR-0053). `tests/packs/test_catalog_rules.py` runs every catalog rule against
   scenarios. The README screenshots show the OpenVigil and MBG packs in use.
 
 ### Security

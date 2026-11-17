@@ -167,10 +167,18 @@ def test_openvigil_has_a_template_for_every_type_it_sends():
 
 
 def test_mbg_matches_the_gateways_own_catalog():
-    # multibus/outputs/alertd_catalog.py: 11 event types + 3 conditions.
-    expected = {"mbg_device", "mbg_sink", "mbg_influx_auth", "mbg_influx_dropped", "mbg_device_alarm",
-                "mbg_bridge", "mbg_vmeter", "mbg_config", "mbg_gateway", "mbg_event", "mbg_test",
-                "mbg_latency", "mbg_influx_buffer", "mbg_threshold"}
+    # multibus/outputs/alerting/alertd_catalog.py: 12 event types, 6 resolutions
+    # (MBG ADR-0053 paired episodes), 3 conditions.
+    paired = {"mbg_device", "mbg_sink", "mbg_device_alarm", "mbg_bridge", "mbg_vmeter", "mbg_rules_engine"}
+    resolutions = {f"{t}_ok" for t in paired}
+    expected = paired | resolutions | {
+        "mbg_influx_auth", "mbg_influx_dropped", "mbg_config", "mbg_gateway", "mbg_event", "mbg_test",
+        "mbg_latency", "mbg_influx_buffer", "mbg_threshold"}
     doc = render(catalog()["multi-bus-gateway"]).document
-    assert {t["type"] for t in doc["templates"]} == expected
+    templates = {t["type"]: t for t in doc["templates"]}
+    assert set(templates) == expected
     assert {r["template"] for r in doc["routes"]} == expected
+    # No per-type cooldown on either side of a pair: it would swallow a second
+    # device's failure, or a recovery notice.
+    assert all(templates[t]["min_repeat_min"] == 0 for t in paired | resolutions)
+    assert all(templates[t]["severity"] == "info" for t in resolutions)

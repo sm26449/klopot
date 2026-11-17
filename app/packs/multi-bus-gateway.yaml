@@ -1,9 +1,17 @@
 # Alerts from Multi-Bus Gateway (https://github.com/sm26449/multi-bus-gateway),
 # sent through POST /v1/fire. The same templates as MBG's own export
-# (GET /api/alerts/alertd-pack, multibus/outputs/alertd_catalog.py) — keep the
+# (GET /api/alerts/alertd-pack, multibus/outputs/alerting/alertd_catalog.py) — keep the
 # two in step. MBG composes the text; the context carries source, message,
 # severity, key, host, ts, and device_id / field / label / value / code where
 # they apply.
+#
+# Paired alerts are episodes (MBG ADR-0053): the failure carries an
+# idempotency_key and resolved_type "<type>_ok"; the recovery sends the same
+# key with status "resolved", and Klopot closes the episode and sends the
+# _ok template once. The paired failure types have no cooldown
+# (min_repeat_min 0): it is per type, so a second device failing within it
+# would never be announced — the episode and MBG's own per-key interval
+# carry the dedup.
 #
 # In MBG: alerts.enabled and alerts.alertd.enabled true, alerts.alertd.url
 # = this instance's /v1/fire, alerts.alertd.api_key = a key with the `fire`
@@ -18,7 +26,7 @@ pack:
   description:
     en: "Templates for the alerts Multi-Bus Gateway sends — devices down and back, device alarms, MQTT and InfluxDB sinks, serial bridges, virtual meters, configuration, gateway role and rule failures — routed to one channel. The same set as MBG's own export."
     ro: "Șabloane pentru alertele trimise de Multi-Bus Gateway — dispozitive căzute și revenite, alarmele dispozitivelor, ieșirile MQTT și InfluxDB, punțile seriale, contoarele virtuale, configurația, rolul gateway-ului și regulile care eșuează — trimise pe un canal. Același set ca exportul propriu al MBG."
-  version: 1.0.0
+  version: 1.1.0
   tags: [energy, modbus, gateway, mbg, api]
   parameters:
     - name: alert_channel
@@ -34,16 +42,16 @@ templates:
     category: MBG
     title_template: "{source}: {message}"
     message_template: "{message}"
-    description: "A device stopped answering (after 45 s) or came back. Context: source, message, device_id."
-    min_repeat_min: 15
+    description: "A device stopped answering (after 45 s). Its recovery is mbg_device_ok. Context: source, message, device_id."
+    min_repeat_min: 0
   - type: mbg_sink
     severity: warning
     icon: "🔗"
     category: MBG
     title_template: "Sink {source}: {message}"
     message_template: "{message}"
-    description: "The MQTT or InfluxDB output went down or came back."
-    min_repeat_min: 15
+    description: "The MQTT or InfluxDB output went down. Its recovery is mbg_sink_ok."
+    min_repeat_min: 0
   - type: mbg_influx_auth
     severity: critical
     icon: "🔑"
@@ -66,24 +74,32 @@ templates:
     category: MBG
     title_template: "{source}: {message}"
     message_template: "{message} ({key})"
-    description: "An alarm declared in a device template went active or cleared. Context: device_id, field, label, value, code."
-    min_repeat_min: 15
+    description: "An alarm declared in a device template went active (a new code opens a new episode). Its clearing is mbg_device_alarm_ok. Context: device_id, field, label, value, code."
+    min_repeat_min: 0
   - type: mbg_bridge
     severity: warning
     icon: "🚌"
     category: MBG
     title_template: "Bus {source}: {message}"
     message_template: "{message}"
-    description: "A serial bridge's line errors, silence or reconnects (signals.bridge)."
-    min_repeat_min: 15
+    description: "A serial bridge's line errors, silence or reconnects (signals.bridge). Its recovery is mbg_bridge_ok."
+    min_repeat_min: 0
   - type: mbg_vmeter
     severity: critical
     icon: "🧮"
     category: MBG
     title_template: "{source}: {message}"
     message_template: "{message} ({key})"
-    description: "A virtual meter not serving, held, or without its consumer."
-    min_repeat_min: 15
+    description: "A virtual meter not serving, held, or without its consumer. Its recovery is mbg_vmeter_ok."
+    min_repeat_min: 0
+  - type: mbg_rules_engine
+    severity: critical
+    icon: "⏱️"
+    category: MBG
+    title_template: "Rules engine: {message}"
+    message_template: "{message}"
+    description: "The rules engine stalled. Its recovery is mbg_rules_engine_ok."
+    min_repeat_min: 0
   - type: mbg_config
     severity: critical
     icon: "⚙️"
@@ -106,7 +122,7 @@ templates:
     category: MBG
     title_template: "{source}: {message}"
     message_template: "{message} ({key})"
-    description: "Everything else MBG reports: power-quality events, the rules engine (store, stalled, command failures)."
+    description: "Everything else MBG reports: power-quality events, the rules engine's store and command failures."
     min_repeat_min: 15
   - type: mbg_test
     severity: info
@@ -115,6 +131,54 @@ templates:
     title_template: "MBG test alert"
     message_template: "{message}"
     description: "The Test button in MBG's alert settings."
+    min_repeat_min: 0
+  - type: mbg_device_ok
+    severity: info
+    icon: "✅"
+    category: MBG
+    title_template: "{source}: {message}"
+    message_template: "{message}"
+    description: "A device answers again. Sent once by Klopot when MBG closes the episode."
+    min_repeat_min: 0
+  - type: mbg_sink_ok
+    severity: info
+    icon: "✅"
+    category: MBG
+    title_template: "Sink {source}: {message}"
+    message_template: "{message}"
+    description: "The MQTT or InfluxDB output is back. Sent once by Klopot when MBG closes the episode."
+    min_repeat_min: 0
+  - type: mbg_device_alarm_ok
+    severity: info
+    icon: "✅"
+    category: MBG
+    title_template: "{source}: {message}"
+    message_template: "{message}"
+    description: "A device alarm cleared. Sent once by Klopot when MBG closes the episode."
+    min_repeat_min: 0
+  - type: mbg_bridge_ok
+    severity: info
+    icon: "✅"
+    category: MBG
+    title_template: "Bus {source}: {message}"
+    message_template: "{message}"
+    description: "A serial bridge is healthy again. Sent once by Klopot when MBG closes the episode."
+    min_repeat_min: 0
+  - type: mbg_vmeter_ok
+    severity: info
+    icon: "✅"
+    category: MBG
+    title_template: "{source}: {message}"
+    message_template: "{message}"
+    description: "A virtual meter serves again. Sent once by Klopot when MBG closes the episode."
+    min_repeat_min: 0
+  - type: mbg_rules_engine_ok
+    severity: info
+    icon: "✅"
+    category: MBG
+    title_template: "Rules engine: {message}"
+    message_template: "{message}"
+    description: "The rules engine runs again. Sent once by Klopot when MBG closes the episode."
     min_repeat_min: 0
   - type: mbg_latency
     severity: warning
@@ -148,10 +212,17 @@ routes:
   - {template: mbg_device_alarm, channel: "${alert_channel}", severity_min: info}
   - {template: mbg_bridge, channel: "${alert_channel}", severity_min: info}
   - {template: mbg_vmeter, channel: "${alert_channel}", severity_min: info}
+  - {template: mbg_rules_engine, channel: "${alert_channel}", severity_min: info}
   - {template: mbg_config, channel: "${alert_channel}", severity_min: info}
   - {template: mbg_gateway, channel: "${alert_channel}", severity_min: info}
   - {template: mbg_event, channel: "${alert_channel}", severity_min: info}
   - {template: mbg_test, channel: "${alert_channel}", severity_min: info}
+  - {template: mbg_device_ok, channel: "${alert_channel}", severity_min: info}
+  - {template: mbg_sink_ok, channel: "${alert_channel}", severity_min: info}
+  - {template: mbg_device_alarm_ok, channel: "${alert_channel}", severity_min: info}
+  - {template: mbg_bridge_ok, channel: "${alert_channel}", severity_min: info}
+  - {template: mbg_vmeter_ok, channel: "${alert_channel}", severity_min: info}
+  - {template: mbg_rules_engine_ok, channel: "${alert_channel}", severity_min: info}
   - {template: mbg_latency, channel: "${alert_channel}", severity_min: info}
   - {template: mbg_influx_buffer, channel: "${alert_channel}", severity_min: info}
   - {template: mbg_threshold, channel: "${alert_channel}", severity_min: info}
