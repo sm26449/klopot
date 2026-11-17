@@ -123,7 +123,7 @@ test("UX-017: Pager range and ListMeta count go through the catalog", async () =
     const txt = document.getElementById("app").textContent;
     assert.match(txt, /1–50 din 200/, "Pager uses the localized range (din, not 'of')");
     assert.doesNotMatch(txt, /1–50 of 200/, "no hard-coded English 'of'");
-    assert.match(txt, /3 element/, "ListMeta uses the localized item count");
+    assert.match(txt, /Elemente: 3/, "ListMeta uses the localized item count");
     assert.doesNotMatch(txt, /3 items/, "no hard-coded English 'items'");
   } finally { setLang("en"); unmount(); }
 });

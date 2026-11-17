@@ -53,8 +53,10 @@ export function LoginView({ onLoggedIn }) {
         <input id="p" name="password" type="password" autocomplete="current-password" value=${password}
           onInput=${(e) => setPassword(e.target.value)} required aria-invalid=${error ? "true" : "false"} />
       </div>
-      ${error ? html`<p class="error" role="alert">${error}
-        ${lockedFor > 0 ? html` ${t("login.tryAgainIn")} <b>${fmtSeconds(lockedFor)}</b>.` : null}</p>` : null}
+      ${error ? html`<p class="error" role="alert">${error}</p>` : null}
+      ${/* The countdown ticks every second: outside the assertive alert, or a
+           screen reader would announce it every second (UX-10). */ ""}
+      ${error && lockedFor > 0 ? html`<p class="error small">${t("login.tryAgainIn")} <b>${fmtSeconds(lockedFor)}</b>.</p>` : null}
       <div class="form-actions">
         <button class="btn primary" type="submit" disabled=${busy || lockedFor > 0}>
           ${busy ? t("login.signingIn") : t("login.signIn")}

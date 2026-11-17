@@ -15,7 +15,7 @@ import { canonicalCategories } from "../lib/categories.js";
 import { TransferMenu } from "../lib/transfer.js";
 import { useFieldErrors, FieldErrorSummary, FieldMsg } from "../lib/form.js";
 import { t, tnode } from "../lib/i18n.js";
-import { sevLabel } from "../lib/labels.js";
+import { sevLabel, reasonLabel } from "../lib/labels.js";
 
 const SEVERITIES = ["info", "warning", "critical"];
 
@@ -212,11 +212,14 @@ function TemplateEditor({ template, categories, onClose, onSaved }) {
     } catch (e) { if (!fieldErrs.show(e)) toast.error(e); } finally { setBusy(false); }
   }
 
+  // The server renders the SAVED template over its SAVED routes, and a test
+  // fire skips throttling — so it is offered only for what is saved, and once
+  // at a time: a double tap must not send two real notifications (UX-05).
   async function testFire() {
     if (!ctx) return toast.error(t("templates.toastInvalidJson"));
-    setFireResult(null);
+    setFireResult(null); setBusy(true);
     try { setFireResult(await api.post("/v1/fire", { type: isNew ? type : template.type, context: ctx, test: true })); }
-    catch (e) { toast.error(e); }
+    catch (e) { toast.error(e); } finally { setBusy(false); }
   }
 
   async function doDelete() {
@@ -226,6 +229,8 @@ function TemplateEditor({ template, categories, onClose, onSaved }) {
   }
 
   const dirty = useDirty({ type, tpl }) || routesDirty;
+  // Nothing saved yet, or edits on screen the server does not have.
+  const unsaved = (isNew && !createdType) || dirty;
   // Draft recovery (UX-007) covers the template body; channel routes reload
   // from the server on reopen and aren't part of the stashed draft.
   const draft = useDraft("templates", isNew ? null : template.type, { type, tpl }, dirty);
@@ -319,11 +324,13 @@ function TemplateEditor({ template, categories, onClose, onSaved }) {
       ${createdType ? html`<p class="validation warn-text small" role="status">${t("templates.partialCreateNote")}</p>` : null}
       <div class="editor-actions">
         <button class="btn primary" onClick=${save} disabled=${busy || !isValidIcon(tpl.icon)}>${isNew && !createdType ? t("templates.create") : t("templates.save")}</button>
-        <button class="btn" onClick=${testFire} disabled=${busy || !ctx}>${t("templates.testFire")}</button>
+        <button class="btn" onClick=${testFire} disabled=${busy || !ctx || unsaved}
+          aria-describedby=${unsaved ? "tpl-test-hint" : undefined}>${t("templates.testFire")}</button>
         ${!isNew ? html`<span class="spacer"></span><button class="btn danger" onClick=${() => setConfirmDel(true)} disabled=${busy}>${t("templates.delete")}</button>` : null}
       </div>
 
-      ${fireResult ? html`<div class="result"><b>${t("templates.firedResult")}</b> ${fireResult.dispatched ? html`<span class="badge ok plain">${t("templates.dispatched")}</span>` : html`<span class="badge warning plain">${fireResult.suppressed_reason || t("templates.notDispatched")}</span>`}
+      ${unsaved ? html`<p id="tpl-test-hint" class="hint small">${t("templates.testFireSaved")}</p>` : null}
+      ${fireResult ? html`<div class="result"><b>${t("templates.firedResult")}</b> ${fireResult.dispatched ? html`<span class="badge ok plain">${t("templates.dispatched")}</span>` : html`<span class="badge warning plain">${fireResult.suppressed_reason ? reasonLabel(fireResult.suppressed_reason) : t("templates.notDispatched")}</span>`}
         <a href=${`#/log?search=${encodeURIComponent(isNew ? type : template.type)}`} onClick=${onClose}>${t("templates.viewInLog")}</a>
         <${Json} value=${fireResult} /></div>` : null}
 

@@ -16,7 +16,7 @@ async function total(path, query) {
   return p.total;
 }
 
-export function DashboardView({ health, user }) {
+export function DashboardView({ health, healthError, refreshHealth, user }) {
   const [stats, setStats] = useState(null);
   const [inv, setInv] = useState(null);
   const [criticals, setCriticals] = useState(null);
@@ -70,7 +70,7 @@ export function DashboardView({ health, user }) {
   return html`<div>
     <div class="page-head">
       <div><h1>${t("dashboard.title")}</h1><p class="muted">${t("dashboard.subtitle")}</p></div>
-      <div class="actions"><button class="btn sm" onClick=${load}>${t("dashboard.refresh")}</button></div>
+      <div class="actions"><button class="btn sm" onClick=${() => { load(); refreshHealth?.(); }}>${t("dashboard.refresh")}</button></div>
     </div>
 
     ${maint ? html`<div class="alert crit"><b>${t("dashboard.maintOn")}</b> ${t("dashboard.maintMuted")}
@@ -86,7 +86,7 @@ export function DashboardView({ health, user }) {
         <div class="tile"><div class="tile-n">${stats.dispatched}</div><div class="tile-l">${t("dashboard.tileDispatched")}</div></div>
         <div class="tile"><div class="tile-n">${stats.suppressed}</div><div class="tile-l">${t("dashboard.tileSuppressed")}</div></div>
         <div class="tile ${stats.unacked_critical > 0 ? "crit" : ""}"><div class="tile-n">${stats.unacked_critical}</div><div class="tile-l">${t("dashboard.tileUnackedCritical")}</div></div>
-        <div class="tile"><div class="tile-n">${(snoozes || []).length}</div><div class="tile-l">${t("dashboard.tileActiveSnoozes")}</div></div>
+        <div class="tile"><div class="tile-n">${errSnz ? "—" : snoozes === null ? "…" : snoozes.length}</div><div class="tile-l">${t("dashboard.tileActiveSnoozes")}</div></div>
       ` : html`<${Spinner} />`}
     </div>
 
@@ -100,7 +100,7 @@ export function DashboardView({ health, user }) {
           ${Object.entries(comps).map(([name, c]) => html`
             <dt key=${name}>${componentLabel(name)}</dt>
             <dd><span class="badge ${c.status}">${statusLabel(c.status)}</span>${healthDetail(c) ? html` <span class="muted small">${healthDetail(c)}</span>` : null}</dd>`)}
-        </dl>` : html`<${Spinner} />`}
+        </dl>` : healthError ? html`<${ErrorState} error=${healthError} onRetry=${refreshHealth} />` : html`<${Spinner} />`}
       </div>
 
       <!-- Inventory -->

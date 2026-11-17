@@ -74,14 +74,14 @@ export function ConfigView() {
       </div>
 
       <div class="card">
-        <h2>${t("config.validateImportHeading")}</h2>
+        <h2 id="cfg-import-h">${t("config.validateImportHeading")}</h2>
         <p class="muted small">${t("config.validateHelp")}</p>
-        <textarea rows="10" class="mono" value=${yaml} onInput=${(e) => { setYaml(e.target.value); setPlan(null); setApplyText(""); }} spellcheck="false" placeholder="templates:\n  - type: …"></textarea>
+        <textarea rows="10" class="mono" aria-labelledby="cfg-import-h" value=${yaml} onInput=${(e) => { setYaml(e.target.value); setPlan(null); setApplyText(""); }} spellcheck="false" placeholder="templates:\n  - type: …"></textarea>
         <div class="form-actions" style="margin-top:10px">
           <button class="btn" onClick=${validate} disabled=${busy || !yaml.trim()}>${t("config.validateBtn")}</button>
           <span class="spacer"></span>
           ${planOk ? html`
-            <input placeholder=${t("config.applyPlaceholder")} value=${applyText} onInput=${(e) => setApplyText(e.target.value)} style="width:auto" />
+            <input aria-label=${t("config.applyPlaceholder")} placeholder=${t("config.applyPlaceholder")} value=${applyText} onInput=${(e) => setApplyText(e.target.value)} style="width:auto" />
             <button class="btn danger" onClick=${apply} disabled=${busy || applyText !== "APPLY"}>${t("config.applyBtn")}</button>` : null}
         </div>
 

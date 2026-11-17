@@ -116,9 +116,12 @@ key with `read`, or a signed-in user) also gets the `version`, the
 `components` map and `docs_enabled` — the components name hosts, inputs and
 error texts, so an anonymous caller does not see them. `/v1/health/ready`
 returns the same body for the same caller, with HTTP 503 on an essential
-outage — use it as a readiness probe. The rule engine counts as down both
-when its task has died and when it is alive but stuck: its loop has not come
-round for 180 s (`code: engine_stalled`), so no rule is being evaluated. Use `/v1/version` for a cheap liveness
+outage — use it as a readiness probe. A rule engine whose task is alive but
+stuck — its loop has not come round for 180 s, so no rule is being evaluated
+— is `degraded` (`code: engine_stalled`), not `down`: readiness stays 200,
+because the container healthcheck probes it and an unhealthy container drops
+out of a proxy's routing (taking `/v1/fire` and the UI with it). The Kurier
+watchdog reports it ([OPERATIONS](OPERATIONS.md#kurier-watchdog)). Use `/v1/version` for a cheap liveness
 probe that never touches MySQL/MQTT.
 
 ```json

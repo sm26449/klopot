@@ -155,9 +155,12 @@ function KeyEditor({ apikey, onClose, onSaved, onPlaintext }) {
     catch (e) { toast.error(e); setConfirmDel(false); } finally { setBusy(false); }
   }
 
-  const dirty = useDirty({ name, scopes, enabled, expires, grace, cidrs, rate });
-  const draft = useDraft("apikeys", isNew ? null : apikey.id, { name, scopes, enabled, expires, grace, cidrs, rate }, dirty);
-  const restoreDraft = () => { const d = draft.recovered; setName(d.name); setScopes(d.scopes); setEnabled(d.enabled); setExpires(d.expires); setGrace(d.grace); setCidrs(d.cidrs ?? ""); setRate(d.rate ?? ""); draft.restore(); };
+  // Every field the user can edit — a restriction left out of the guard is
+  // lost on close; left out of the draft, a restored key loses it (UX-03).
+  const fields = { name, scopes, enabled, expires, grace, cidrs, rate, types };
+  const dirty = useDirty(fields);
+  const draft = useDraft("apikeys", isNew ? null : apikey.id, fields, dirty);
+  const restoreDraft = () => { const d = draft.recovered; setName(d.name); setScopes(d.scopes); setEnabled(d.enabled); setExpires(d.expires); setGrace(d.grace); setCidrs(d.cidrs ?? ""); setRate(d.rate ?? ""); setTypes(d.types ?? ""); draft.restore(); };
   const closeDraft = () => { draft.clear(); onClose(); };
   return html`<${Drawer} open=${true} width=${560} title=${isNew ? t("apikeys.newKeyTitle") : apikey.name} onClose=${closeDraft} dirty=${dirty}>
     ${draft.recovered ? html`<${DraftBanner} onRestore=${restoreDraft} onDiscard=${draft.dismiss} />` : null}

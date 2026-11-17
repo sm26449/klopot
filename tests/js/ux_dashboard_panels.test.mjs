@@ -48,3 +48,27 @@ test("one failing panel errors alone; the others load; retry recovers it", async
   assert.equal(document.querySelectorAll('[role="alert"]').length, 0, "the panel recovered");
   unmount();
 });
+
+test("UX-04/UX-11: a failed health read is an error with a retry, and an unknown snooze count is not 0", async () => {
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    if (u.includes("/v1/snooze")) return err(500);
+    if (u.includes("/v1/log/stats")) return okJson(STATS);
+    if (u.includes("/v1/log")) return okJson({ items: [] });
+    return okJson({ total: 3 });
+  };
+  globalThis.window.fetch = globalThis.fetch;
+  let retried = 0;
+  const m = await import("../../app/admin_ui/static/views/dashboard.js");
+  const failure = Object.assign(new Error("Network error"), { status: 0 });
+  mount(html`<${m.DashboardView} health=${null} healthError=${failure} refreshHealth=${() => { retried++; }} />`);
+  await flush(60);
+  const service = [...document.querySelectorAll(".card")].find((c) => /Service|Serviciu/.test(c.querySelector("h2")?.textContent || ""));
+  assert.ok(service.querySelector('[role="alert"]'), "the Service card shows an error, not a spinner forever");
+  assert.equal(service.querySelector(".spinner"), null);
+  [...service.querySelectorAll("button")].find((b) => /retry|reîncear/i.test(b.textContent)).click();
+  assert.equal(retried, 1, "its retry reads health again");
+  const snoozeTile = [...document.querySelectorAll(".tile")].at(-1);
+  assert.equal(snoozeTile.querySelector(".tile-n").textContent, "—", "unknown, not 0");
+  unmount();
+});

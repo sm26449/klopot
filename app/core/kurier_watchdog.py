@@ -51,11 +51,15 @@ def watchdog_name(channel_name: str) -> str:
 
 def verdict(components: dict[str, ComponentHealth]) -> tuple[str, str]:
     """``("ok", "")``, or ``("fail", why)``: an essential component is down
-    (database, rule engine — also when stuck —, delivery worker) or the
-    outbox is not draining. The same rules as ``/v1/health/ready``."""
+    (database, rule engine, delivery worker — readiness's rule), the engine
+    is stuck, or the outbox is not draining. The last two are only
+    ``degraded`` in health (they must not pull the container out of routing),
+    but for an SMS watchdog they mean the same: alerts are not going out."""
     failing = list(essential_down(components))
-    if components.get("outbox") is not None and components["outbox"].status == "degraded":
-        failing.append("outbox")
+    for name in ("engine", "outbox"):
+        comp = components.get(name)
+        if comp is not None and comp.status == "degraded" and name not in failing:
+            failing.append(name)
     if not failing:
         return "ok", ""
     detail = "; ".join(f"{name}: {components[name].detail or components[name].status}" for name in failing)

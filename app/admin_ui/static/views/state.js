@@ -63,8 +63,11 @@ export function StateView() {
     <div class="page-head">
       <div><h1>${t("state.title")}</h1><p class="muted">${t("state.liveValues")}${state ? html` ${t("state.cached", { n: state.cache_size })}` : ""}${t("state.autoRefresh")}</p></div>
       <div class="actions">
+        ${/* The checkbox keeps its name ("Firehose") whether on or off; the live
+             status sits next to it, outside the label (UX-19). */ ""}
         <label class="live-toggle"><input type="checkbox" checked=${firehose} onChange=${(e) => setFirehose(e.target.checked)} />
-          ${firehose ? html`<${LiveStatus} status=${wsStatus} />` : html`<span class="live-status"><span class="dot"></span> ${t("state.firehose")}</span>`}</label>
+          ${firehose ? null : html`<span class="live-status"><span class="dot"></span></span>`} ${t("state.firehose")}</label>
+        ${firehose ? html`<${LiveStatus} status=${wsStatus} />` : null}
       </div>
     </div>
 

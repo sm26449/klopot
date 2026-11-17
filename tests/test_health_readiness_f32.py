@@ -65,9 +65,11 @@ def _essential_down_from_body(body) -> list[str]:
             if n in {"database", "engine", "delivery"} and c["status"] == "down"]
 
 
-def test_a_stuck_engine_is_down_although_its_task_is_alive(monkeypatch):
+def test_a_stuck_engine_is_degraded_not_down(monkeypatch):
     # IP-01: the task is alive but its loop has not come round — no rule is
-    # evaluated. Readiness must see it (and so must Kurier's watchdog ping).
+    # evaluated. Health shows it, but readiness stays green: it feeds the
+    # container healthcheck, and an unhealthy container leaves traefik's
+    # routing (no /v1/fire, no UI). Kurier's watchdog reports it as a failure.
     from app.api.v1 import health
     from app.core.engine import RuleEngine
 
@@ -80,8 +82,8 @@ def test_a_stuck_engine_is_down_although_its_task_is_alive(monkeypatch):
 
     monkeypatch.setattr("app.core.engine.get_engine", lambda: Stuck())
     comp = health._engine_component()
-    assert comp.status == "down" and comp.code == "engine_stalled"
-    assert _essential_down({"engine": comp}) == ["engine"]
+    assert comp.status == "degraded" and comp.code == "engine_stalled"
+    assert _essential_down({"engine": comp}) == []
 
 
 async def test_a_turning_engine_reports_its_last_round():

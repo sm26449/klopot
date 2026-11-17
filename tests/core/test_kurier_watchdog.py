@@ -30,8 +30,10 @@ def test_watchdog_names_fit_kuriers_alphabet(channel, name):
 
 def test_verdict_is_the_readiness_rule_plus_a_stuck_outbox():
     assert wd.verdict(HEALTHY) == ("ok", "")
-    stuck = {**HEALTHY, "engine": ComponentHealth(status="down", detail="rule engine stuck for 200s")}
+    stuck = {**HEALTHY, "engine": ComponentHealth(status="degraded", detail="rule engine stuck for 200s")}
     assert wd.verdict(stuck) == ("fail", "engine: rule engine stuck for 200s")
+    dead = {**HEALTHY, "engine": ComponentHealth(status="down", detail="rule engine task not running")}
+    assert wd.verdict(dead) == ("fail", "engine: rule engine task not running")
     backlog = {**HEALTHY, "outbox": ComponentHealth(status="degraded", detail="3 delivery(ies) overdue >120s")}
     assert wd.verdict(backlog)[0] == "fail"
     assert wd.verdict({**HEALTHY, "mqtt": ComponentHealth(status="down")}) == ("ok", ""), "not essential"

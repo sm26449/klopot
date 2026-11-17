@@ -84,8 +84,8 @@ the contract is Kurier's ADR-0001, Kurier 1.15+):
 
 - Every 60 s Klopot pings `POST {kurier_url}/api/watchdogs/klopot-<channel>/ping`
   with `status: ok`, or `fail` and the reason when an essential component is
-  down — the database, the delivery worker, the rule engine (also when it is
-  stuck, `engine_stalled`) — or the outbox is not draining. The ping runs in
+  down — the database, the delivery worker, the rule engine — or the engine
+  is stuck (`engine_stalled`), or the outbox is not draining. The ping runs in
   its own task, never in the rule engine.
 - Kurier sends an SMS when the pings stop for `watchdog_timeout_sec` (default
   180 — a deploy's restart fits in it) or say `fail`, and one when Klopot is

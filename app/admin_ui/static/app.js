@@ -130,7 +130,7 @@ const LABEL_KEY_BY_PATH = Object.fromEntries(
   NAV.flatMap((g) => g.items).map((it) => [it.path, it.labelKey]),
 );
 
-function Shell({ user, health, version, onLogout, refreshMe, lang, onLangChange }) {
+function Shell({ user, health, healthError, refreshHealth, version, onLogout, refreshMe, lang, onLangChange }) {
   const route = useRoute();
   const [family, setFamily] = useState(readFamily);
   const [mode, setMode] = useState(readMode);
@@ -152,7 +152,7 @@ function Shell({ user, health, version, onLogout, refreshMe, lang, onLangChange 
   // (a navigate() inside render races the hashchange subscription).
   useEffect(() => { if (route.path === "/") navigate("/dashboard"); }, [route.path]);
   const match = resolve(ROUTES, route.path === "/" ? "/dashboard" : route.path);
-  const props = { user, health, version, onLogout, refreshMe, params: match?.params || {}, query: route.query };
+  const props = { user, health, healthError, refreshHealth, version, onLogout, refreshMe, params: match?.params || {}, query: route.query };
 
   // On route change update the page title and move focus to the new page
   // (focusNewPage: not while a dialog owns focus).
@@ -200,7 +200,8 @@ function Shell({ user, health, version, onLogout, refreshMe, lang, onLangChange 
     <a class="skip-link" href="#main-content" onClick=${skipToMain}>${t("shell.skipToContent")}</a>
     <aside class="sidebar">
       <div class="brand"><${BrandIcon} /><${Wordmark} />
-        ${health ? html`<span class=${"badge brand-health " + health.status} title=${t("shell.health")}>${statusLabel(health.status)}</span>` : null}
+        ${health ? html`<span class=${"badge brand-health " + health.status} title=${t("shell.health")}>${statusLabel(health.status)}</span>`
+          : healthError ? html`<span class="badge brand-health down" title=${t("shell.health")}>${t("shell.unreachable")}</span>` : null}
         ${searchBtn("phone")}
         <button class="nav-toggle" aria-expanded=${navOpen ? "true" : "false"}
                 aria-controls="nav-menu" onClick=${() => setNavOpen((v) => !v)}>
@@ -230,7 +231,10 @@ function Shell({ user, health, version, onLogout, refreshMe, lang, onLangChange 
           <span class="health-label muted small">${t("shell.health")}</span>
           ${health ? html`<a href="#/dashboard" class="badge ${health.status}"
               title=${Object.entries(health.components || {}).map(([k, c]) => `${componentLabel(k)}: ${statusLabel(c.status)}`).join("\n")}>
-            ${statusLabel(health.status)}</a>` : html`<span class="badge">…</span>`}
+            ${statusLabel(health.status)}</a>`
+            // A failed read is not "still loading" (UX-04): say the server is unreachable.
+            : healthError ? html`<a href="#/dashboard" class="badge down" title=${healthError.message || ""}>${t("shell.unreachable")}</a>`
+            : html`<span class="badge">…</span>`}
         </span>
         <span class="spacer"></span>
         ${searchBtn("bar")}
@@ -256,6 +260,9 @@ function App() {
   const [bootError, setBootError] = useState(null); // non-401 failure of the initial /auth/me (UX-006)
   const [user, setUser] = useState(null);
   const [health, setHealth] = useState(null);
+  const [healthError, setHealthError] = useState(null);   // the last read failed (UX-04)
+  const [healthRun, setHealthRun] = useState(0);          // bumped to read again now
+  const refreshHealth = useCallback(() => setHealthRun((n) => n + 1), []);
   const [version, setVersion] = useState(null);
   const [lang, setLangState] = useState(getLang);
   // Switch language: update the i18n runtime (which t() reads) and re-render
@@ -285,16 +292,19 @@ function App() {
   // stops at sign-out.
   const signedIn = state === "ready";
   useEffect(() => {
-    if (!signedIn) { setHealth(null); setVersion(null); return undefined; }
+    if (!signedIn) { setHealth(null); setHealthError(null); setVersion(null); return undefined; }
     let timer;
     let alive = true;
     const tick = async () => {
-      try { const h = await api.health(); if (alive) { setHealth(h); setVersion(h.version); } } catch { if (alive) setHealth(null); }
+      try {
+        const h = await api.health();
+        if (alive) { setHealth(h); setHealthError(null); setVersion(h.version); }
+      } catch (e) { if (alive) { setHealth(null); setHealthError(e); } }
       if (alive) timer = setTimeout(tick, 30000);
     };
     tick();
     return () => { alive = false; clearTimeout(timer); };
-  }, [signedIn]);
+  }, [signedIn, healthRun]);
 
   // First screen after signing in: while the setup is incomplete (and not
   // hidden), an admin landing on the dashboard is taken to the setup guide —
@@ -330,7 +340,7 @@ function App() {
   else if (state === "boot-error") screen = html`<div class="auth-wrap"><${ErrorState} error=${bootError} label=${t("shell.bootError")} onRetry=${() => { setState("booting"); refreshMe(); }} /></div>`;
   else if (state === "anon") screen = html`<${LoginView} onLoggedIn=${(u) => { setUser(u); setState(u.must_change_password ? "must-change" : "ready"); }} />`;
   else if (state === "must-change") screen = html`<${ChangePasswordView} user=${user} onChanged=${refreshMe} onLogout=${logout} />`;
-  else screen = html`<${Shell} user=${user} health=${health} version=${version} onLogout=${logout} refreshMe=${refreshMe} lang=${lang} onLangChange=${changeLang} />`;
+  else screen = html`<${Shell} user=${user} health=${health} healthError=${healthError} refreshHealth=${refreshHealth} version=${version} onLogout=${logout} refreshMe=${refreshMe} lang=${lang} onLangChange=${changeLang} />`;
 
   return html`${screen}<${Toasts} />`;
 }

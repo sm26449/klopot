@@ -111,12 +111,14 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
-- **A stuck rule engine counts as down.** Health checked only that the
-  engine's task existed; a task alive but stuck (a tick waiting on slow
-  sends) kept `/v1/health/ready` green while no rule was evaluated. Now the
-  engine is `down` (`engine_stalled`) when its loop has not come round for
-  180 s — readiness fails and Kurier's watchdog is told (improvements review
-  IP-01, detection; taking sends out of the engine loop is planned).
+- **A stuck rule engine shows.** Health checked only that the engine's task
+  existed; a task alive but stuck (a tick waiting on slow sends) looked fine
+  while no rule was evaluated. Now the engine is `degraded`
+  (`engine_stalled`) when its loop has not come round for 180 s — on the
+  dashboard, in `/v1/health`, and as a failure to Kurier's watchdog.
+  Readiness stays 200 on purpose: the container healthcheck probes it, and an
+  unhealthy container would drop out of the proxy's routing (improvements
+  review IP-01, detection; taking sends out of the engine loop is planned).
 - **Installing a pack no longer adds its channel to templates you already
   have.** A pack routes every template to the channel its parameter names;
   over an existing configuration that added the channel to templates whose

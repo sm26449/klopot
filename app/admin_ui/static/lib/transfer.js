@@ -46,7 +46,7 @@ export function TransferMenu({ section, shownNames = [], filtered = false, onImp
   const [withDeps, setWithDeps] = useState(true);
   const [importing, setImporting] = useState(false);
   const [busy, setBusy] = useState(false);
-  const label = t(`transfer.section.${section}`);
+  const label = t(`transfer.sectionAll.${section}`);
 
   async function run(query, name) {
     setBusy(true);
@@ -135,7 +135,7 @@ export function ImportReview({ preview, dec, applyLabel }) {
   const skippedByDefault = onExisting.some((i) => i.default === "skip");
   return html`
     ${preview.errors.length ? html`<div class="alert crit"><b>${t("transfer.errors")}</b><ul>${preview.errors.map((e, i) => html`<li key=${i}>${e}</li>`)}</ul>
-      <p class="small">${t("transfer.errorsHint")}</p></div>` : null}
+      <p class="small">${t("transfer.errorsHint", { button: applyLabel || t("transfer.apply") })}</p></div>` : null}
     ${preview.warnings.length ? html`<div class="alert warn"><b>${t("transfer.warnings")}</b><ul>${preview.warnings.map((w, i) => html`<li key=${i}>${w}</li>`)}</ul></div>` : null}
     <p class="muted">${t("transfer.counts", preview.counts)}</p>
     <p class="small muted">${t("transfer.previewOnly", { button: applyLabel || t("transfer.apply") })}</p>

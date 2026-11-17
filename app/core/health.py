@@ -63,8 +63,12 @@ def task_component(alive: bool, name: str) -> ComponentHealth:
 
 
 def engine_component() -> ComponentHealth:
-    """Down when the task is gone, or alive but stuck: its loop has not come
-    round for ``RuleEngine.STALL_SEC`` (IP-01) — no rule is being evaluated."""
+    """Down when the task is gone. Alive but stuck — its loop has not come
+    round for ``RuleEngine.STALL_SEC`` (IP-01), no rule is being evaluated —
+    is ``degraded``, not ``down``: readiness feeds the container healthcheck,
+    and an unhealthy container drops out of traefik's routing, which would
+    take ``/v1/fire`` and the admin UI with it. The Kurier watchdog still
+    reports it as a failure (``app.core.kurier_watchdog.verdict``)."""
     from .engine import RuleEngine, get_engine
 
     engine = get_engine()
@@ -72,7 +76,7 @@ def engine_component() -> ComponentHealth:
         return task_component(False, "rule engine")
     stalled = engine.stalled_for()
     if stalled > RuleEngine.STALL_SEC:
-        return ComponentHealth(status="down", detail=f"rule engine stuck for {int(stalled)}s",
+        return ComponentHealth(status="degraded", detail=f"rule engine stuck for {int(stalled)}s",
                                code="engine_stalled", params={"seconds": int(stalled)})
     return task_component(True, "rule engine")
 

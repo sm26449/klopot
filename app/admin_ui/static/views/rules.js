@@ -70,7 +70,8 @@ export function RulesView({ query, params }) {
     let active = true;
     api.get(`/v1/rules/${encodeURIComponent(id)}`)
       .then((r) => { if (active) setEditing(r); })
-      .catch(() => { if (active) { toast.error(t("rules.notFound", { id })); navigate("/rules"); } });
+      // Only a 404 means "no such rule"; a network or server error says what it is (UX-14).
+      .catch((e) => { if (active) { toast.error(e && e.status === 404 ? t("rules.notFound", { id }) : e); navigate("/rules"); } });
     return () => { active = false; };
   }, [params && params.id]);
   // force: the Drawer's dirty guard already confirmed, so don't re-ask here.
