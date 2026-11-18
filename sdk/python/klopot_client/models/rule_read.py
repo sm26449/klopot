@@ -50,7 +50,8 @@ class RuleRead:
             resolved_template_type (None | str | Unset):
             run_state (None | RuleRunState | Unset): Where the rule is in its cycle at its last evaluation: inactive
                 (condition false), pending (true, persist_n not reached), firing (fired and still true; an incident rule: its
-                incident is open), no_data, error. null until its first evaluation.
+                incident is open), no_data, error. null until its first evaluation, and after an edit of the condition until the
+                new one is evaluated.
             run_state_since (None | str | Unset):
             sort_order (int | Unset):  Default: 100.
             trigger_logic_md (None | str | Unset):

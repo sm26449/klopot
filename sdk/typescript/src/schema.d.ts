@@ -2301,7 +2301,7 @@ export interface components {
             status: "ok" | "degraded" | "down";
             /**
              * Version
-             * @default 1.3.0-rc.5
+             * @default 1.3.0-rc.6
              */
             version: string;
         };
@@ -3360,7 +3360,7 @@ export interface components {
             recovery_persist_n: number;
             /** Resolved Template Type */
             resolved_template_type?: string | null;
-            /** @description Where the rule is in its cycle at its last evaluation: inactive (condition false), pending (true, persist_n not reached), firing (fired and still true; an incident rule: its incident is open), no_data, error. null until its first evaluation. */
+            /** @description Where the rule is in its cycle at its last evaluation: inactive (condition false), pending (true, persist_n not reached), firing (fired and still true; an incident rule: its incident is open), no_data, error. null until its first evaluation, and after an edit of the condition until the new one is evaluated. */
             run_state?: components["schemas"]["RuleRunState"] | null;
             /** Run State Since */
             run_state_since?: string | null;
@@ -3995,7 +3995,7 @@ export interface components {
             service: string;
             /**
              * Version
-             * @default 1.3.0-rc.5
+             * @default 1.3.0-rc.6
              */
             version: string;
         };
