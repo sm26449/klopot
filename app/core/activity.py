@@ -174,6 +174,22 @@ def note_exchange(
 # ── Writer ─────────────────────────────────────────────────────────
 
 
+# MySQL deadlock / lock wait timeout: the transaction was rolled back whole.
+_TRANSIENT_CODES = {1213, 1205}
+_WRITE_ATTEMPTS = 3
+_RETRY_BACKOFF_SEC = 0.2
+
+
+def _code(e: BaseException) -> int | None:
+    orig = getattr(e, "orig", None)
+    args = getattr(orig, "args", None) or ()
+    return args[0] if args and isinstance(args[0], int) else None
+
+
+def _transient(e: BaseException) -> bool:
+    return _code(e) in _TRANSIENT_CODES
+
+
 class ActivityWriter:
     """Bounded queue + batching background inserts (one per process)."""
 
@@ -211,21 +227,37 @@ class ActivityWriter:
         hits = get_rule_cache().take_hits()
         if not batch and not hits:
             return 0
-        try:
-            async with get_session_factory()() as session:
-                session.add_all([models[table](**row) for table, row in batch])
-                for rule_id, (count, last_at, last_ip) in hits.items():
-                    from sqlalchemy import update
+        for attempt in range(1, _WRITE_ATTEMPTS + 1):
+            try:
+                async with get_session_factory()() as session:
+                    session.add_all([models[table](**row) for table, row in batch])
+                    for rule_id, (count, last_at, last_ip) in hits.items():
+                        from sqlalchemy import update
 
-                    from ..db.models import ActivityRule
-                    await session.execute(update(ActivityRule).where(ActivityRule.id == rule_id).values(
-                        hits=ActivityRule.hits + count, last_hit_at=last_at, last_ip=(last_ip or "")[:45] or None))
-                await session.commit()
-        except Exception:
-            # The log must never take the service down: lose the batch, say so.
-            logger.exception("activity log: could not write %d row(s)", len(batch))
-            return 0
-        return len(batch)
+                        from ..db.models import ActivityRule
+                        await session.execute(update(ActivityRule).where(ActivityRule.id == rule_id).values(
+                            hits=ActivityRule.hits + count, last_hit_at=last_at, last_ip=(last_ip or "")[:45] or None))
+                    await session.commit()
+                return len(batch)
+            except Exception as e:
+                # A deadlock or lock wait is transient: the whole transaction
+                # was rolled back, so writing it again cannot duplicate a row
+                # (rc.9 review RC-01: a 1213 lost a batch, uncounted).
+                if attempt < _WRITE_ATTEMPTS and _transient(e):
+                    logger.warning("activity log: %s writing %d row(s), retrying (%d/%d)",
+                                   _code(e) or type(e).__name__, len(batch), attempt, _WRITE_ATTEMPTS)
+                    await asyncio.sleep(_RETRY_BACKOFF_SEC * attempt)
+                    continue
+                # The log must never take the service down: drop the rows,
+                # count them, keep the rule counters for the next flush.
+                logger.exception("activity log: could not write %d row(s)", len(batch))
+                get_rule_cache().give_back_hits(hits)
+                if batch:
+                    self.dropped += len(batch)
+                    from ..metrics import ACTIVITY_DROPPED_TOTAL
+                    ACTIVITY_DROPPED_TOTAL.inc(len(batch))
+                return 0
+        return 0  # pragma: no cover — the loop always returns
 
     async def _run(self) -> None:
         # Every second, whether rows are queued or not: an ``ignore`` rule only

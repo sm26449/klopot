@@ -139,6 +139,14 @@ class RuleCache:
         hits, self._hits = self._hits, {}
         return {k: (v[0], v[1], v[2]) for k, v in hits.items()}
 
+    def give_back_hits(self, hits: dict[int, tuple[int, datetime, str | None]]) -> None:
+        """Return counts a failed write took, merged with any counted since."""
+        for rule_id, (count, last_at, last_ip) in hits.items():
+            entry = self._hits.setdefault(rule_id, [0, None, None])
+            entry[0] += count
+            if entry[1] is None or (last_at is not None and last_at > entry[1]):
+                entry[1], entry[2] = last_at, last_ip
+
 
 _cache: RuleCache | None = None
 
