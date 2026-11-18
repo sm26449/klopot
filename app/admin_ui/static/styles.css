@@ -2,6 +2,7 @@
    Light/dark follow the OS unless the user toggles (data-theme on <html>). */
 
 :root {
+  color-scheme: light;
   --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
 
@@ -38,6 +39,7 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    color-scheme: dark;
     --bg: #0d1117;
     --surface: #161b22;
     --surface-2: #1f262e;
@@ -60,6 +62,7 @@
   }
 }
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --bg: #0d1117;
   --surface: #161b22;
   --surface-2: #1f262e;
@@ -93,6 +96,7 @@
 
 /* macOS — light */
 :root[data-theme="macos-light"] {
+  color-scheme: light;
   --bg: #ececee;
   --surface: #ffffff;
   --surface-2: #f2f2f5;
@@ -116,6 +120,7 @@
 
 /* macOS — dark */
 :root[data-theme="macos-dark"] {
+  color-scheme: dark;
   --bg: #1e1e20;
   --surface: #28282a;
   --surface-2: #323235;
@@ -139,6 +144,7 @@
 
 /* Windows 11 — light */
 :root[data-theme="win-light"] {
+  color-scheme: light;
   --bg: #f3f3f3;
   --surface: #ffffff;
   --surface-2: #f0f0f0;
@@ -162,6 +168,7 @@
 
 /* Windows 11 — dark */
 :root[data-theme="win-dark"] {
+  color-scheme: dark;
   --bg: #202020;
   --surface: #2b2b2b;
   --surface-2: #323232;
@@ -185,6 +192,7 @@
 
 /* GNOME — light */
 :root[data-theme="gnome-light"] {
+  color-scheme: light;
   --bg: #ebebed;
   --surface: #ffffff;
   --surface-2: #f2f2f4;
@@ -208,6 +216,7 @@
 
 /* GNOME — dark */
 :root[data-theme="gnome-dark"] {
+  color-scheme: dark;
   --bg: #222226;
   --surface: #2e2e32;
   --surface-2: #38383c;
@@ -231,6 +240,7 @@
 
 /* KDE Plasma — light */
 :root[data-theme="kde-light"] {
+  color-scheme: light;
   --bg: #eff0f1;
   --surface: #fcfcfc;
   --surface-2: #f3f4f5;
@@ -254,6 +264,7 @@
 
 /* KDE Plasma — dark */
 :root[data-theme="kde-dark"] {
+  color-scheme: dark;
   --bg: #202326;
   --surface: #292c30;
   --surface-2: #31363b;
@@ -381,6 +392,8 @@ fieldset.timing { border: 1px solid var(--border); border-radius: 10px; padding:
 fieldset.timing legend { padding: 0 6px; font-weight: 600; font-size: 13px; }
 .timing-sentence { line-height: 2.4; margin: 0; }
 .timing-sentence .inline-num { width: 5.5em; display: inline-block; margin: 0 4px; }
+/* The unit next to a duration: wide enough for "minutes" / "secunde" (UX-R09). */
+.timing-sentence .inline-unit { width: auto; min-width: 7.5em; display: inline-block; margin: 0 4px; }
 details.advanced { border-top: 1px solid var(--border); margin: 10px 0 14px; padding-top: 8px; }
 details.advanced > summary { cursor: pointer; font-weight: 600; min-height: 32px; display: flex; align-items: center; }
 details.advanced[open] > summary { margin-bottom: 8px; }
@@ -518,6 +531,12 @@ fieldset.gate .hint { margin: 0 0 10px; }
 input, select, textarea {
   font: inherit; color: var(--text); background: var(--surface);
   border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; width: 100%;
+}
+/* Checkboxes and radios are not text fields (UX-R01): the rule above gave
+   them padding, a full width and a border; and the brand accent (UX-R02). */
+input[type=checkbox], input[type=radio] {
+  width: 18px; height: 18px; padding: 0; margin: 0; flex: none; vertical-align: middle;
+  border: 0; background: none; accent-color: var(--accent); cursor: pointer;
 }
 input:focus, select:focus, textarea:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--focus); }
 /* The translucent halo above is a pointer-focus companion only; a keyboard user
@@ -1035,3 +1054,13 @@ ul.diff .mono { word-break: break-all; }
 .push-devices-title { margin: 16px 0 6px; font-size: 14px; }
 .setup-phone { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--border); }
 .setup-phone .push-card { box-shadow: none; border: 0; padding: 0; margin: 0; }
+
+/* Rule editor (rules UI/UX review): status line, help lines, groups. */
+.rule-status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 0 0 12px; }
+.rule-status-msg { flex-basis: 100%; margin: 0; }
+.field-help { margin: 4px 0 0; }
+.field-label { display: block; font-weight: 600; margin-bottom: 6px; }
+.adv-group { border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; margin: 0 0 14px; }
+.adv-group > legend { font-weight: 600; padding: 0 6px; }
+.rule-check { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--border); }
+.chip.small { font-size: 11px; padding: 0 6px; margin: 0 0 0 4px; }
