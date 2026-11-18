@@ -143,8 +143,10 @@ def settings_evaluator(cache: StateCache | None) -> Any:
     ``ALERTD_LATITUDE`` / ``ALERTD_LONGITUDE``): one for the engine tick,
     eval-now, validate and computed variables, so all four see the same
     ``hour_now()`` and sun."""
+    from .history import get_history_store
     s = get_settings()
-    return eval_module.make_evaluator(timezone=s.tz, state_cache=cache, location=s.location)
+    return eval_module.make_evaluator(timezone=s.tz, state_cache=cache, location=s.location,
+                                      history=get_history_store())
 
 
 class RuleEngine:
@@ -343,6 +345,10 @@ class RuleEngine:
                     )
                 self._rules = new
                 self._by_name = {rt.rule.name: rt for rt in new.values()}
+                # The history the enabled rules look back on (ADR-0004).
+                from .history import get_history_store, merge_needs
+                get_history_store().set_needs("rules", merge_needs(
+                    e for r in rules for e in (r.condition_expr, r.recovery_expr)))
                 # Drop truthy markers for rules that no longer exist
                 # (renamed/deleted) so they can't inhibit forever.
                 self._last_truthy = {

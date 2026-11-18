@@ -140,12 +140,32 @@ A variable name is passed **in quotes** to these functions.
 
 A call to any other function name is refused when the rule is saved.
 
-### Not available
+### History ([ADR-0004](adr/0004-rule-history-functions.md))
 
-There are no history functions (`recent_avg`, `recent_max`, `recent_min`,
-`is_rising`): the state cache keeps only the latest value of each variable.
-For "sustained" behaviour use the rule's `persist_n` (consecutive matching
-evaluations).
+The variable name and the window are **in quotes**, as literals: `"30s"`,
+`"5m"`, `"2h"`, at most `"24h"` (anything else is refused when the rule is
+saved). Values are a step function — a value holds until the next one, as
+on-change producers mean it — so the average is weighted by time.
+
+| Function | Example | Result |
+|----------|---------|--------|
+| `avg_over(name, w)` | `avg_over("battery.temp", "10m") > 45` | time-weighted mean over the last `w` |
+| `min_over(name, w)`, `max_over(name, w)` | `min_over("grid.voltage", "1m") < 207` | lowest / highest value in the window |
+| `delta(name, w)` | `delta("battery.soc", "1h") < -30` | value now minus the value at the window's start |
+| `rate(name, w)` | `rate("tank.level", "5m") > 0.1` | `delta` per second |
+| `changed(name, w)` | `NOT changed("meter.energy_kwh", "15m")` | the value changed inside the window (any type) |
+| `prev(name)` | `prev("inverter.state") == 7 AND inverter.state != 7` | the value before the current one (any type) |
+
+Only what saved, enabled rules and computed formulas ask for is kept — in
+memory, up to `ALERTD_HISTORY_MAX_VARS` variables (default 200), 2 000 buckets
+each over the longest window asked for (min and max exact, the mean exact to a
+bucket). Until the history covers the whole window — after a start, or for a
+variable no rule watched before — the function is a **missing input** (the
+rule is `no_data`, "history 2m of 5m"); so is a stale variable, and a
+non-numeric value in a numeric function. The history is not kept across a
+restart: a 24 h window is `no_data` for 24 h after one. **Validate** in the
+editor knows the history only of saved rules. For "true at every check for
+N checks" the rule's own persistence is still the tool.
 
 ---
 

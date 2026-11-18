@@ -409,7 +409,9 @@ Wraps `simpleeval`:
 
 - Names: the state cache, limited to the rule's `vars_extract` (plus the
   variables its expressions read) when set
-- Functions: a fixed whitelist (numeric, list, string, time, sun, data age)
+- Functions: a fixed whitelist (numeric, list, string, time, sun, data age,
+  history — `app/core/history.py`, ADR-0004: the store tracks what the enabled
+  rules and computed formulas ask for, rebuilt at each engine / input reload)
   — see [EXPRESSION_LANGUAGE.md](EXPRESSION_LANGUAGE.md); a call to any other
   name is refused at write time. One evaluator per tick, built by
   `engine.settings_evaluator` with `ALERTD_TZ` and the place

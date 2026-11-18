@@ -137,6 +137,7 @@ See `.env.example`. The main ones:
 | `ALERTD_LOG_LEVEL` | `INFO` | DEBUG/INFO/WARNING/ERROR |
 | `ALERTD_LOG_FORMAT` | `console` | `console` / `json` |
 | `ALERTD_TZ` | `UTC` | Timezone for hour_now()/in_window() |
+| `ALERTD_HISTORY_MAX_VARS` | `200` | Variables kept in memory for the history functions of rule expressions (`avg_over`, `delta`, …; ADR-0004), 2 000 buckets each. A variable past it is not tracked and its functions report a missing input (logged) |
 | `ALERTD_LATITUDE`, `ALERTD_LONGITUDE` | (empty) | Place of the install in degrees (north / east positive), for `sun_elevation()` and `is_daylight()` in rule conditions; without them those functions are an evaluation error |
 | `ALERTD_PV_POWER_VAR` | (empty) | **Deprecated.** Before migration 0030 every template's `require_pv_kw` compared against this one variable. Now each template names its own `gate_variable`; this value is read only by migration 0030 to convert existing templates, and when an old client writes `require_pv_kw` without a variable. |
 | `ALERTD_HASH_MAX_CONCURRENCY` | `4` | Max concurrent password/API-key hashing ops offloaded to threads (bounds CPU + argon2 memory on an auth burst). |

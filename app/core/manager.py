@@ -212,6 +212,10 @@ class InputManager:
         mappings = [_var_to_mapping(v) for v in variables]
         mappings = [m for m in mappings if m is not None]
         invalidated = self._resolver.replace_mappings(mappings)
+        # The history computed formulas look back on (ADR-0004).
+        from .history import get_history_store, merge_needs
+        get_history_store().set_needs("computed", merge_needs(
+            m.formula for m in mappings if m is not None and m.source == "computed"))
         await self._resolver.seed_constants()
         # Seed computed variables whose dependencies are already known
         # (e.g. constants), so they have a value before the first message.

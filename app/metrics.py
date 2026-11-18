@@ -105,6 +105,12 @@ ACTIVITY_DROPPED_TOTAL = Counter(
 DISPATCH_ATTEMPTS_TOTAL = Counter("alertd_dispatch_attempts_total", "Completed transport attempts by outcome; excludes deferrals.",
                                   ["channel", "outcome"], registry=REGISTRY)
 
+HISTORY_TRACKED_VARS = Gauge(
+    "alertd_history_tracked_vars",
+    "Variables kept for the history functions of rule expressions (ADR-0004)",
+    registry=REGISTRY,
+)
+
 CHANNEL_BREAKER_STATE = Gauge(
     "alertd_channel_breaker_state",
     "Circuit breaker state. 0=closed (healthy), 1=half_open, 2=open.",

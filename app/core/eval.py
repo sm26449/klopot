@@ -36,6 +36,7 @@ import re2
 from simpleeval import EvalWithCompoundTypes, FunctionNotDefined, NameNotDefined
 
 from ..utils.sun import SUNRISE_ELEVATION, sun_elevation
+from .history import HISTORY_FUNCTIONS, MissingHistory, build_functions, history_problem
 
 logger = logging.getLogger(__name__)
 
@@ -149,6 +150,10 @@ def _expr_rejection(transformed: str) -> str | None:
                 return "keyword arguments are not allowed in function calls"
             if node.func.id not in FUNCTION_NAMES:
                 return f"unknown function: {node.func.id}()"
+            if node.func.id in HISTORY_FUNCTIONS:
+                problem = history_problem(node)
+                if problem is not None:
+                    return problem
             if (node.func.id == "regex_match" and len(node.args) >= 2
                     and isinstance(node.args[1], ast.Constant) and isinstance(node.args[1].value, str)):
                 problem = _regex_problem(node.args[1].value)
@@ -227,7 +232,7 @@ def referenced_names(expr: str) -> frozenset[str]:
 
 
 # Functions whose first argument is a variable name in quotes.
-_NAME_ARG_FUNCTIONS = frozenset({"var_age", "fresh", "has"})
+_NAME_ARG_FUNCTIONS = frozenset({"var_age", "fresh", "has"}) | HISTORY_FUNCTIONS
 
 
 def display_names(expr: str) -> list[str]:
@@ -688,12 +693,14 @@ def make_evaluator(
     timezone: str = "UTC",
     state_cache: Any = None,
     location: tuple[float, float] | None = None,
+    history: Any = None,
 ) -> EvalWithCompoundTypes:
     """Construct a simpleeval instance with our function whitelist.
 
     Reused across many evals (cheap to construct, but repeated work
     if every rule rebuilds it). Engine builds one per tick. ``location`` is
-    (latitude, longitude) for the sun functions.
+    (latitude, longitude) for the sun functions; ``history`` the
+    :class:`~app.core.history.HistoryStore` for the history functions (ADR-0004).
     """
     funcs: dict[str, Any] = {
         # Numeric
@@ -722,6 +729,7 @@ def make_evaluator(
     }
     funcs.update(_build_time_helpers(timezone, location))
     funcs.update(_build_cache_helpers(state_cache))
+    funcs.update(build_functions(history))
 
     e = EvalWithCompoundTypes(functions=funcs)
     # Bound `**`, `*` and `%` at runtime — operand sizes come from the context
@@ -803,6 +811,11 @@ def evaluate(
         )
     except SyntaxError as e:
         return EvalResult(value=None, ok=False, error=f"syntax: {e}")
+    except MissingHistory as e:
+        # The history does not cover the window yet (ADR-0004): the rule waits.
+        waiting = [*missing, e.name]
+        return EvalResult(value=None, ok=False, error=f"{MISSING_INPUT_PREFIX}{e}",
+                          missing_vars=waiting, missing_input=True)
     except Exception as e:
         # Includes ZeroDivisionError, TypeError, etc.
         waiting = missing + no_value
