@@ -659,7 +659,8 @@ Pe lângă `eval_status`, o regulă spune unde se află în ciclul ei la ultima
 evaluare, `run_state`: `inactive` (condiția e falsă), `pending` (adevărată,
 `persist_n` încă neatins), `firing` (s-a declanșat și ține în continuare; o
 regulă cu incident: incidentul e deschis, inclusiv între cele două praguri),
-`no_data`, `error` — `null` până la prima evaluare. Împreună cu
+`no_data`, `error` — `null` până la prima evaluare și, după editarea
+condiției, până la evaluarea celei noi. Împreună cu
 `run_state_since` și `last_true_at` (când condiția a devenit ultima dată
 adevărată).
 

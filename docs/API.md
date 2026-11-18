@@ -655,7 +655,8 @@ Next to `eval_status`, a rule carries where it is in its cycle at its last
 evaluation, `run_state`: `inactive` (condition false), `pending` (true,
 `persist_n` not reached yet), `firing` (it fired and still holds; an
 incident rule: its incident is open, between the two thresholds included),
-`no_data`, `error` — `null` until its first evaluation. With it
+`no_data`, `error` — `null` until its first evaluation, and after an edit of
+the condition until the new one is evaluated. With it
 `run_state_since` and `last_true_at` (when the condition last became true):
 "never true in 90 days" and "true but never fired" are visible without the
 log.

@@ -230,7 +230,10 @@ CREATE TABLE rules (
   cycle at its last evaluation — `inactive` (condition false), `pending`
   (true, `persist_n` not reached), `firing` (fired and still true; an incident
   rule: its incident is open, hysteresis included), `no_data`, `error`. NULL
-  until the first evaluation after the migration. Written by the engine on a
+  until the first evaluation after the migration — and after an edit of the
+  condition until its next evaluation: the edit clears it in its own
+  transaction and keeps `run_state_since`, which is how a restarted engine
+  knows the stored state belonged to the old condition. Written by the engine on a
   change only, with `run_state_since`; `last_true_at` = when it last went from
   not true to `pending` / `firing`. History: `rule_transitions`.
 

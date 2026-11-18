@@ -302,12 +302,16 @@ class RuleEngine:
                         else:
                             cmc = 0
                             rmc = 0
-                        # The stored run state; edited since its streak was
-                        # stored (a restart between PATCH and the first tick)
-                        # = reconfigured (RV-04).
+                        # The stored run state. An edit of the condition
+                        # clears run_state in its own transaction and keeps
+                        # run_state_since (rule_state_ops): a NULL state with
+                        # a since = changed and not evaluated yet, even across
+                        # a restart (RV-04). A streak stored under an older
+                        # epoch says the same.
                         stored = (r.run_state, r.run_state_since, r.last_true_at)
-                        run = (*stored, stored, [], deque(), 0,
-                               db_state is not None and db_state.state_epoch != (r.state_epoch or 0))
+                        changed = (r.run_state is None and r.run_state_since is not None) or (
+                            db_state is not None and db_state.state_epoch != (r.state_epoch or 0))
+                        run = (*stored, stored, [], deque(), 0, changed)
                         # last_match_at lives in DB as wall-clock UTC
                         # but in-memory we use monotonic seconds.
                         # Approximate: if the row says "recent" (<24h

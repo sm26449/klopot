@@ -223,3 +223,39 @@ async def test_an_open_incident_is_firing_again_after_a_gap_in_the_data(db_engin
     await engine._eval_rule(rt, now=2.0)
     assert rt.run_state == "firing"
     assert rt.consecutive_match_count == 1
+
+
+async def test_an_edit_then_a_restart_before_the_first_tick_is_pending(
+        db_engine, db_session, db_client, admin_key, make_rule, make_template, monkeypatch):
+    """RV-04, rc.6 verification: the real PATCH aligns the streak's epoch in
+    its own transaction, so a restart found no epoch difference and loaded the
+    old condition's "firing" as current."""
+    cache = await _cache(x=50)
+    engine, rid = await _setup(db_session, make_rule, make_template, cache, condition_expr="x > 10", persist_n=3)
+    for _ in range(3):
+        await engine._eval_rule(engine._rules[rid], now=0.0)
+    assert engine._rules[rid].run_state == "firing"
+
+    class _NoReload:
+        async def reload_rules(self):
+            return None
+    monkeypatch.setattr("app.api.v1.rules.get_engine", lambda: _NoReload())
+    r = await db_client.patch(f"/v1/rules/{rid}", json={"condition_expr": "x > 40"}, headers={"X-API-Key": admin_key})
+    assert r.status_code == 200, r.text
+    assert r.json()["run_state"] is None
+
+    restarted = RuleEngine()                                   # a new process
+    restarted._cache = cache
+    await restarted.reload_rules()
+    rt = restarted._rules[rid]
+    assert rt.reconfigured
+    await restarted._eval_rule(rt, now=1.0)
+    assert (rt.consecutive_match_count, rt.run_state) == (1, "pending")
+    for _ in range(2):
+        await restarted._eval_rule(rt, now=2.0)
+    assert rt.run_state == "firing"
+    await fresh(db_session)
+    rows = (await db_session.execute(select(RuleTransition).where(RuleTransition.rule_id == rid)
+                                      .order_by(RuleTransition.id))).scalars().all()
+    assert [(x.from_state, x.to_state, x.detail) for x in rows[-2:]] == [
+        (None, "pending", "rule changed"), ("pending", "firing", None)]

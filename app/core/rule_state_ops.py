@@ -54,6 +54,12 @@ async def reset_streak_on_reconfig(
         return False
 
     rule.state_epoch = (rule.state_epoch or 0) + 1
+    # The run state described the old condition: clear it durably, so a
+    # restart before the first evaluation does not load it as current
+    # (2026-11-18 rc.6 verification, RV-04). ``run_state_since`` stays as
+    # the marker: a NULL state with a since = "changed, not evaluated yet".
+    if rule.run_state is not None:
+        rule.run_state = None
     st = await session.get(RuleState, rule.id)
     if st is not None:
         st.consecutive_match_count = 0
