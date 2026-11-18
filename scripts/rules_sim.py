@@ -105,6 +105,13 @@ class Sim:
         r.raise_for_status()
         return r.json()["items"]
 
+    def transitions(self, name: str) -> list[tuple[str | None, str]]:
+        """The rule's run-state changes, oldest first (RL-32)."""
+        rid = self.rule(name)["id"]
+        r = api.get(f"/v1/rules/{rid}/transitions")
+        r.raise_for_status()
+        return [(t["from_state"], t["to_state"]) for t in reversed(r.json())]
+
     def incidents(self, name: str) -> list[dict[str, Any]]:
         rid = self.rule(name)["id"]
         r = api.get("/v1/incidents", params={"rule_id": rid})
@@ -283,6 +290,21 @@ SCENARIOS: list[Scenario] = [
          Phase([("sim/s2", 7, 0)], fired("sim_any_all"))],
     ),
     Scenario(
+        "run_state", "run state and its history: inactive → pending → firing → inactive, last_true_at set (RL-32)",
+        [mvar("sim.rs", "sim/rs")],
+        [rule("sim_run_state", "sim.rs > 50", persist=3)],
+        [Phase([("sim/rs", 10, 0)], lambda s: expect(s.rule("sim_run_state")["run_state"] == "inactive",
+                                                     f"sim_run_state: {s.rule('sim_run_state')['run_state']}")),
+         Phase([("sim/rs", 60, 0)], lambda s: expect(
+             s.rule("sim_run_state")["run_state"] == "firing" and s.rule("sim_run_state")["last_true_at"],
+             f"sim_run_state: {s.rule('sim_run_state')}")),
+         Phase([("sim/rs", 10, 0)], lambda s: expect(
+             # Before its first message the rule is no_data, then inactive.
+             s.transitions("sim_run_state")[-4:] == [("no_data", "inactive"), ("inactive", "pending"),
+                                                     ("pending", "firing"), ("firing", "inactive")],
+             f"sim_run_state transitions: {s.transitions('sim_run_state')}"))],
+    ),
+    Scenario(
         "render", "the template renders the rule's values into the title",
         [mvar("sim.rv", "sim/rv")],
         [rule("sim_render", "sim.rv > 0", template="sim_render")],
@@ -342,6 +364,9 @@ def write_time_checks() -> None:
     expect(r.status_code == 422 and "unknown function" in r.text, f"unknown function not refused: {r.status_code} {r.text[:200]}")
     v = api.post("/v1/rules/validate", json={"condition_expr": "contains(sim.peers, 'STATUS') and sim.temp > 1"}).json()
     expect("STATUS" not in v["unknown_vars"], f"validate reports string contents as variables: {v['unknown_vars']}")
+    # RL-31: "what if" values laid over the live ones.
+    w = api.post("/v1/rules/validate", json={"condition_expr": "sim.whatif > 5", "context": {"sim.whatif": 9}}).json()
+    expect(w["ok"] and w["result"] is True, f"validate with a context: {w}")
 
 
 # ── Runner ─────────────────────────────────────────────────────────
@@ -394,7 +419,7 @@ def main() -> int:
     failures: dict[str, str] = {}
     try:
         write_time_checks()
-        print("  ok   write-time checks (lookahead and unknown function refused, validate ignores string contents)")
+        print("  ok   write-time checks (lookahead and unknown function refused, validate ignores string contents, what-if context)")
     except CheckFailed as e:
         failures["write_time"] = str(e)
         print(f"  FAIL write-time checks: {e}")
