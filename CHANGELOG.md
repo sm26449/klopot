@@ -96,6 +96,15 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Rule editor in two tabs** — *Basic* (what every rule needs, plus *Check
+  the rule*: Eval now, Test fire prefilled with live values, instances, state
+  history) and *Advanced* (incident and recovery, For each, captured values,
+  inhibitors, order) — with a help line on every field; the header shows the
+  rule's state, last true, last fired and its notification count. "Trigger
+  summary" is now **Short description** (the line under the name in the list)
+  and "Trigger logic" **Notes**; the recovery confirmation is a duration like
+  the trigger; the "History" button is **Notifications**. The list shows
+  "held 1m · every 30s" and `ok` for a healthy rule.
 - **Parametric rules** ([ADR-0005](docs/adr/0005-parametric-rules.md), migration
   `0046`): `for_each: {"n": ["f1", "f2", "f3", "f4"]}` runs one rule once per
   value, `{n}` replaced in the condition, recovery, captured variables and
@@ -199,6 +208,10 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Checkboxes follow the theme**: every theme sets `color-scheme` and
+  checkboxes / radios use the brand accent at 18 px — they were white squares
+  on dark tables, and the text-field style (padding, full width) applied to
+  them. The duration's unit no longer shows cut ("minu").
 - **Fixes from the review of rc.9** (`.audit` RC-01 … RC-12):
   - **History functions are exact** (ADR-0004 amended): the history keeps
     every change point instead of merging samples, which gave a `max_over` of
