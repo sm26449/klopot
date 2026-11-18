@@ -115,7 +115,8 @@ adheres to [Semantic Versioning](https://semver.org/).
   the live ones for that check; in the editor, *Validate* → **Try other
   values**.
 - Rule editor: **persistence as a duration** ("held for 5 minutes, checking
-  every 10 s" — the API still stores `persist_n`), and for a plain threshold
+  every 10 s" — the API still stores `persist_n`, rounded up so the alert
+  never goes out sooner than asked), and for a plain threshold
   the incident recovery field offers a 5 % hysteresis.
 - Rule editor: the condition and recovery fields **complete variable and
   function names** (↑ / ↓, Enter or Tab, Escape closes the list only), and the
@@ -179,6 +180,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Kurier watchdog**: an answer without the modem's state (`registered`
+  missing or `null`) no longer closes an open "modem offline" episode — only
+  `registered: true` does; a `200` that is not Kurier's JSON (a proxy page)
+  counts as a failed ping. Two SMS channels whose names share their first 57
+  characters no longer share one watchdog (a long name now ends in a hash;
+  shorter names are unchanged).
 - **Two rules sharing a template no longer swallow each other's notifications.**
   The de-duplication key was (template, context): two rules with the same
   template that saw the same values — both with an empty `vars_extract`, or
