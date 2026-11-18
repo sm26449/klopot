@@ -17,6 +17,20 @@ export class KlopotError extends Error {
   }
 }
 
+/**
+ * Create a Klopot HTTP client on fetch.
+ * @param {object} options
+ * @param {string} options.baseUrl Absolute API base URL (required).
+ * @param {string} [options.apiKey] Machine key, sent as `X-API-Key`.
+ * @param {typeof fetch} [options.fetch=globalThis.fetch] Fetch implementation.
+ * @param {number} [options.timeoutMs=10000] Request timeout, where `AbortSignal.timeout` exists.
+ * @returns {{request: Function, fire: Function, resolve: Function, health: Function}}
+ *   Methods returning promises of the parsed JSON body, or `null` for an empty body.
+ * @throws {TypeError} When `baseUrl` is missing.
+ * Rejects with `KlopotError` (status, body) on a non-2xx response with a JSON or
+ * empty body; a non-JSON body rejects with the JSON parse error; network
+ * failures and timeouts reject with fetch's error.
+ */
 export function createClient({ baseUrl, apiKey, fetch: fetchImpl = globalThis.fetch, timeoutMs = 10000 }) {
   if (!baseUrl) throw new TypeError("baseUrl is required");
   const root = baseUrl.replace(/\/+$/, "");

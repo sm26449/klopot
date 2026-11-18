@@ -42,6 +42,12 @@ from .component_health_status import ComponentHealthStatus
 from .delivery_read import DeliveryRead
 from .delivery_read_purpose import DeliveryReadPurpose
 from .delivery_read_state import DeliveryReadState
+from .error_body import ErrorBody
+from .error_body_details_type_0 import ErrorBodyDetailsType0
+from .error_detail import ErrorDetail
+from .error_detail_detail_type_1_item import ErrorDetailDetailType1Item
+from .error_detail_detail_type_2 import ErrorDetailDetailType2
+from .error_envelope import ErrorEnvelope
 from .eval_rule_result import EvalRuleResult
 from .eval_rule_result_context import EvalRuleResultContext
 from .failed_operation import FailedOperation
@@ -263,6 +269,12 @@ __all__ = (
     "DeliveryRead",
     "DeliveryReadPurpose",
     "DeliveryReadState",
+    "ErrorBody",
+    "ErrorBodyDetailsType0",
+    "ErrorDetail",
+    "ErrorDetailDetailType1Item",
+    "ErrorDetailDetailType2",
+    "ErrorEnvelope",
     "EvalRuleResult",
     "EvalRuleResultContext",
     "FailedOperation",

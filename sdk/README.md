@@ -7,8 +7,8 @@ API change regenerates them in the same commit.
 
 | SDK | Path | Generated | Hand-written |
 |-----|------|-----------|--------------|
-| Python `klopot-client` (package `klopot_client`) | `sdk/python/` | everything (openapi-python-client 0.29.1, httpx + attrs) | — |
-| TypeScript / JavaScript `@klopot/client` | `sdk/typescript/` | `src/schema.d.ts` (openapi-typescript 7.4.4) | `src/index.js` + `src/index.d.ts` (fetch wrapper) |
+| Python `klopot-client` (package `klopot_client`) | `sdk/python/` | everything but the README (openapi-python-client 0.29.1, httpx + attrs) | `README.md`, kept in `sdk/python-README.md` and copied in by the generator script |
+| TypeScript / JavaScript `@klopot/client` | `sdk/typescript/` | `src/schema.d.ts` (openapi-typescript 7.13.0) | `src/index.js` + `src/index.d.ts` (fetch wrapper) |
 
 Not published to PyPI / npm yet — install from the repository.
 

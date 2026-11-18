@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...auth import Actor, require_scope
 from ...core import fire_service
 from ...db import get_session
+from ...schemas.common import AUTH_ERRORS, ErrorDetail
 from ...schemas.fire import FireRequest, FireResponse
 from ...utils.keys import bounded_key
 
@@ -22,6 +23,15 @@ router = APIRouter()
     "/fire",
     response_model=FireResponse,
     status_code=202,
+    # Every error /v1/fire gives, so generated clients parse them (documentation
+    # review D03: a domain 422's string detail broke the Python client).
+    responses={
+        **AUTH_ERRORS,
+        403: {"model": ErrorDetail, "description": "Scope denied, or `{\"code\": \"TYPE_NOT_ALLOWED\"}` for an "
+                                                  "alert type this key may not fire"},
+        422: {"model": ErrorDetail, "description": "Validation errors (a list), or a domain error (a string), e.g. "
+                                                  "`status=resolved needs the idempotency_key of the episode to close`"},
+    },
     summary="Fire a notification by type",
     description=(
         "External callers (Node-RED, scripts, third-party apps) post here "

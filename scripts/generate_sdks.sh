@@ -28,6 +28,9 @@ out="$(mktemp -d)"; trap 'rm -rf "$out"' EXIT
   || { echo "openapi-python-client failed" >&2; exit 1; }
 npx --no-install openapi-typescript "$SPEC" --output "$out/schema.d.ts" >/dev/null 2>&1 \
   || { echo "openapi-typescript failed (run npm ci)" >&2; exit 1; }
+# The generator's README teaches a Bearer header and placeholder endpoints:
+# ours replaces it, here, so a regeneration cannot bring them back.
+cp sdk/python-README.md "$out/python/README.md"
 
 if [ "$CHECK" = 1 ]; then
   rc=0

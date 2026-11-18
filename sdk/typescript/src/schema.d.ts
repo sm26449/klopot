@@ -2195,6 +2195,40 @@ export interface components {
             updated_at: string | null;
         };
         /**
+         * ErrorBody
+         * @description Per-API_DESIGN.md error model. Clients receive this on 4xx/5xx.
+         */
+        ErrorBody: {
+            /** Code */
+            code: string;
+            /** Details */
+            details?: {
+                [key: string]: unknown;
+            } | null;
+            /** Message */
+            message: string;
+            /** Trace Id */
+            trace_id?: string | null;
+        };
+        /**
+         * ErrorDetail
+         * @description The body of an API error. ``detail`` is a message (most errors, and a
+         *     domain 422), a list of validation errors (a 422 from request validation),
+         *     or an object such as ``{"code": "TYPE_NOT_ALLOWED", "message": "…"}``.
+         */
+        ErrorDetail: {
+            /** Detail */
+            detail: string | {
+                [key: string]: unknown;
+            }[] | {
+                [key: string]: unknown;
+            };
+        };
+        /** ErrorEnvelope */
+        ErrorEnvelope: {
+            error: components["schemas"]["ErrorBody"];
+        };
+        /**
          * EvalRuleResult
          * @description ``POST /v1/rules/{id}/eval-now`` response.
          */
@@ -5326,13 +5360,49 @@ export interface operations {
                     "application/json": components["schemas"]["FireResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Missing, invalid or expired API key */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Scope denied, or `{"code": "TYPE_NOT_ALLOWED"}` for an alert type this key may not fire */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Request body over the configured limit (`REQUEST_TOO_LARGE`) */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Validation errors (a list), or a domain error (a string), e.g. `status=resolved needs the idempotency_key of the episode to close` */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ErrorDetail"];
+                };
+            };
+            /** @description Too many requests or invalid keys; see Retry-After */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetail"];
                 };
             };
         };

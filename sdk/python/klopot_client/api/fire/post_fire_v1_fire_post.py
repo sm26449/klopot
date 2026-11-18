@@ -8,9 +8,10 @@ from ...client import AuthenticatedClient, Client
 from ...types import Response, UNSET
 from ... import errors
 
+from ...models.error_detail import ErrorDetail
+from ...models.error_envelope import ErrorEnvelope
 from ...models.fire_request import FireRequest
 from ...models.fire_response import FireResponse
-from ...models.http_validation_error import HTTPValidationError
 from typing import cast
 
 
@@ -41,7 +42,7 @@ def _get_kwargs(
 
 
 
-def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> FireResponse | HTTPValidationError | None:
+def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> ErrorDetail | ErrorEnvelope | FireResponse | None:
     if response.status_code == 202:
         response_202 = FireResponse.from_dict(response.json())
 
@@ -49,12 +50,40 @@ def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Res
 
         return response_202
 
+    if response.status_code == 401:
+        response_401 = ErrorDetail.from_dict(response.json())
+
+
+
+        return response_401
+
+    if response.status_code == 403:
+        response_403 = ErrorDetail.from_dict(response.json())
+
+
+
+        return response_403
+
+    if response.status_code == 413:
+        response_413 = ErrorEnvelope.from_dict(response.json())
+
+
+
+        return response_413
+
     if response.status_code == 422:
-        response_422 = HTTPValidationError.from_dict(response.json())
+        response_422 = ErrorDetail.from_dict(response.json())
 
 
 
         return response_422
+
+    if response.status_code == 429:
+        response_429 = ErrorDetail.from_dict(response.json())
+
+
+
+        return response_429
 
     if client.raise_on_unexpected_status:
         raise errors.UnexpectedStatus(response.status_code, response.content)
@@ -62,7 +91,7 @@ def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Res
         return None
 
 
-def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Response[FireResponse | HTTPValidationError]:
+def _build_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> Response[ErrorDetail | ErrorEnvelope | FireResponse]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -76,7 +105,7 @@ def sync_detailed(
     client: AuthenticatedClient,
     body: FireRequest,
 
-) -> Response[FireResponse | HTTPValidationError]:
+) -> Response[ErrorDetail | ErrorEnvelope | FireResponse]:
     """ Fire a notification by type
 
      External callers (Node-RED, scripts, third-party apps) post here with `type` and `context` (vars
@@ -100,7 +129,7 @@ def sync_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[FireResponse | HTTPValidationError]
+        Response[ErrorDetail | ErrorEnvelope | FireResponse]
      """
 
 
@@ -120,7 +149,7 @@ def sync(
     client: AuthenticatedClient,
     body: FireRequest,
 
-) -> FireResponse | HTTPValidationError | None:
+) -> ErrorDetail | ErrorEnvelope | FireResponse | None:
     """ Fire a notification by type
 
      External callers (Node-RED, scripts, third-party apps) post here with `type` and `context` (vars
@@ -144,7 +173,7 @@ def sync(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        FireResponse | HTTPValidationError
+        ErrorDetail | ErrorEnvelope | FireResponse
      """
 
 
@@ -159,7 +188,7 @@ async def asyncio_detailed(
     client: AuthenticatedClient,
     body: FireRequest,
 
-) -> Response[FireResponse | HTTPValidationError]:
+) -> Response[ErrorDetail | ErrorEnvelope | FireResponse]:
     """ Fire a notification by type
 
      External callers (Node-RED, scripts, third-party apps) post here with `type` and `context` (vars
@@ -183,7 +212,7 @@ async def asyncio_detailed(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[FireResponse | HTTPValidationError]
+        Response[ErrorDetail | ErrorEnvelope | FireResponse]
      """
 
 
@@ -203,7 +232,7 @@ async def asyncio(
     client: AuthenticatedClient,
     body: FireRequest,
 
-) -> FireResponse | HTTPValidationError | None:
+) -> ErrorDetail | ErrorEnvelope | FireResponse | None:
     """ Fire a notification by type
 
      External callers (Node-RED, scripts, third-party apps) post here with `type` and `context` (vars
@@ -227,7 +256,7 @@ async def asyncio(
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        FireResponse | HTTPValidationError
+        ErrorDetail | ErrorEnvelope | FireResponse
      """
 
 
