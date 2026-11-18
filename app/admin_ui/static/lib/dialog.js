@@ -35,6 +35,23 @@ export function dialogOpen() {
   return _stack.length > 0;
 }
 
+/** A popover that keeps focus where it is (a completion list under a field):
+ *  while ``open``, Escape closes it — not the dialog it sits in. */
+export function useEscapeLayer(open, onClose) {
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  useEffect(() => {
+    if (!open) return undefined;
+    _bindGlobalEscape();
+    const entry = { onClose: () => onCloseRef.current?.() };
+    _stack.push(entry);
+    return () => {
+      const i = _stack.indexOf(entry);
+      if (i >= 0) _stack.splice(i, 1);
+    };
+  }, [open]);
+}
+
 let _seq = 0;
 export function dialogTitleId(prefix = "dlg") {
   // Stable enough per render; only needs to be unique among mounted dialogs.

@@ -718,6 +718,16 @@ details.cheat summary { cursor: pointer; font-weight: 600; font-size: 13px; }
 details.cheat table { margin-top: 8px; }
 details.cheat td { padding: 3px 8px; border: 0; }
 
+/* Expression field with a completion list under it (lib/expr.js). */
+.expr-input { position: relative; }
+.expr-input textarea { width: 100%; }
+.expr-suggest { position: absolute; left: 0; right: 0; top: 100%; z-index: 20; list-style: none; margin: 2px 0 0; padding: 4px;
+  max-height: 260px; overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: var(--shadow); }
+.expr-suggest li { display: flex; justify-content: space-between; gap: 12px; padding: 6px 10px; border-radius: 6px; cursor: pointer; }
+.expr-suggest li.active { background: var(--accent-soft); }
+.expr-suggest li .mono { overflow-wrap: anywhere; }
+
 /* Per-kind tiered help panel at the bottom of an editor (lead + Details). */
 .kind-help { margin-top: 16px; padding: 12px 14px; background: var(--surface-2); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 8px; }
 .kind-help-lead { margin: 0; font-size: 13px; color: var(--text); line-height: 1.5; }

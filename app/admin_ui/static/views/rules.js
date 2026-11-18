@@ -14,23 +14,9 @@ import { TagInput, useFieldErrors, FieldErrorSummary, fieldErrorId } from "../li
 import { fmtRelative, fmtDateTime, fmtSeconds } from "../lib/format.js";
 import { sevLabel } from "../lib/labels.js";
 import { t, tnode } from "../lib/i18n.js";
+import { ExprInput, cheatRows } from "../lib/expr.js";
 
 const LIMIT = 500;
-// Expression cheat-sheet rows: [signature, human description]. Built at render
-// time so the translated descriptions re-resolve when the language changes.
-function cheats() {
-  return [
-    ["var_age(\"name\")", t("rules.cheatVarAge")],
-    ["clamp(x, lo, hi)", t("rules.cheatClamp")],
-    ["avg([a, b, …])", t("rules.cheatAvg")],
-    ["contains(s, sub)", t("rules.cheatContains")],
-    ["regex_match(s, pat)", t("rules.cheatRegex")],
-    ["in_window(start_h, end_h)", t("rules.cheatInWindow")],
-    ["hour_now() / dow_now()", t("rules.cheatHourNow")],
-    ["abs min max round sum len", t("rules.cheatNumeric")],
-    ["AND OR NOT", t("rules.cheatBoolean")],
-  ];
-}
 
 // Outcome of POST /v1/rules/validate under an expression field: ok / error,
 // the variables it reads (with live value and age) and the unknown ones.
@@ -407,10 +393,11 @@ function RuleEditor({ rule, templateRows = [], variables, rules, onClose, onSave
         ${fieldErrs.msgFor("template_type") ? html`<div id=${fieldErrorId("template_type")} class="error small" role="alert">${fieldErrs.msgFor("template_type")}</div>` : null}</div>
 
       <div class=${"field" + (fieldErrs.msgFor("condition_expr") ? " has-error" : "")}><label for="r-cond">${t("rules.conditionLabel")} <span class="req">*</span></label>
-        <textarea id="r-cond" rows="3" class="mono" value=${r.condition_expr} onInput=${(e) => { set("condition_expr", e.target.value); setValidation(null); }}
+        <${ExprInput} id="r-cond" rows="3" value=${r.condition_expr} variables=${variables}
+          onChange=${(v) => { set("condition_expr", v); setValidation(null); }}
           aria-invalid=${fieldErrs.msgFor("condition_expr") ? "true" : undefined}
           aria-describedby=${fieldErrs.msgFor("condition_expr") ? fieldErrorId("condition_expr") : undefined}
-          placeholder=${t("rules.conditionPlaceholder")} spellcheck="false"></textarea>
+          placeholder=${t("rules.conditionPlaceholder")} />
         ${fieldErrs.msgFor("condition_expr") ? html`<div id=${fieldErrorId("condition_expr")} class="error small" role="alert">${fieldErrs.msgFor("condition_expr")}</div>` : null}
         <div class="form-actions"><button type="button" class="btn sm" onClick=${validate}>${t("rules.validate")}</button>
         </div>
@@ -418,7 +405,7 @@ function RuleEditor({ rule, templateRows = [], variables, rules, onClose, onSave
       </div>
 
       <details class="cheat"><summary>${t("rules.cheatSheet")}</summary>
-        <table class="tbl small">${cheats().map(([fn, d]) => html`<tr key=${fn}><td class="mono">${fn}</td><td class="muted">${d}</td></tr>`)}</table>
+        <table class="tbl small">${cheatRows().map(([fn, d]) => html`<tr key=${fn}><td class="mono">${fn}</td><td class="muted">${d}</td></tr>`)}</table>
       </details>
 
       <fieldset class="timing">
@@ -448,9 +435,10 @@ function RuleEditor({ rule, templateRows = [], variables, rules, onClose, onSave
         <p class="muted small">${t("rules.incidentHelp")}</p></div>
       ${r.incident_enabled ? html`
         <div class="field"><label for="r-recovery">${t("rules.recoveryExpr")}</label>
-          <textarea id="r-recovery" class="mono" rows="2" value=${r.recovery_expr || ""} onInput=${(e) => { set("recovery_expr", e.target.value); setRecValidation(null); }} placeholder="x < 75" spellcheck="false"
+          <${ExprInput} id="r-recovery" rows="2" value=${r.recovery_expr || ""} variables=${variables}
+            onChange=${(v) => { set("recovery_expr", v); setRecValidation(null); }} placeholder="x < 75"
             aria-invalid=${!!fieldErrs.msgFor("recovery_expr") || undefined}
-            aria-describedby=${fieldErrs.msgFor("recovery_expr") ? fieldErrorId("recovery_expr") : "r-recovery-help"}></textarea>
+            aria-describedby=${fieldErrs.msgFor("recovery_expr") ? fieldErrorId("recovery_expr") : "r-recovery-help"} />
           ${fieldErrs.msgFor("recovery_expr") ? html`<div class="error small" id=${fieldErrorId("recovery_expr")} role="alert">${fieldErrs.msgFor("recovery_expr")}</div>` : null}
           ${(r.recovery_expr || "").trim() ? html`<div class="form-actions"><button type="button" class="btn sm" onClick=${() => validateExpr(r.recovery_expr, setRecValidation)}>${t("rules.validate")}</button></div>
             <${ValidationResult} validation=${recValidation} />` : null}

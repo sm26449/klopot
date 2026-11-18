@@ -112,7 +112,7 @@ before touching `app/admin_ui/static/`.
   (`fresh` / `stale` / `missing`), `used` (`true` / `false`).
 - "Used by" = rules (`vars_extract`, `condition_expr`, `recovery_expr`) and
   computed variables (`formula`), including names passed as strings to helpers
-  such as `var_age("x")` — computed server-side by
+  such as `var_age("x")`, `fresh("x", s)`, `has("x")` — computed server-side by
   `app/services/references.py`. The table shows counts; the editor lists them
   as links; deleting a variable still in use warns with the names.
 
@@ -120,6 +120,12 @@ before touching `app/admin_ui/static/`.
 
 - The template is a select of existing templates (icon, type, severity); a
   value that is not a template stays selectable, marked "not a template".
+- The condition and recovery fields are `ExprInput` (`lib/expr.js`): a list
+  under the field completes the word before the caret with variable names and
+  functions (`name(`); ↑ / ↓ pick, Enter / Tab insert, Escape closes only the
+  list (`useEscapeLayer` puts it on the dialog stack without taking focus).
+  `EXPR_FUNCTIONS` there is also the cheat-sheet; a Python test keeps it equal
+  to the server's `FUNCTION_NAMES`.
 - Timing reads as a sentence with the two numbers inline — "Send when the
   condition holds for [N] checks in a row, checking every [S] seconds" — and a
   hint with the resulting delay (`(N − 1) × S`).
