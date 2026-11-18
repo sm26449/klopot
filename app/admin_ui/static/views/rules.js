@@ -292,6 +292,7 @@ function RuleGroup({ label, rules, open, onToggle, selected, onSelect, onOpen })
         <td><button class="link-btn" onClick=${(e) => { e.stopPropagation(); onOpen(r); }}
               aria-label=${t("rules.editAria", { name: r.name })}><b>${r.name}</b></button>
           ${r.inhibited_by?.length ? html` <span class="muted small" title=${r.inhibited_by.join(", ")}>⊘${r.inhibited_by.length}</span>` : null}
+          ${r.for_each ? html` <span class="chip small" title=${forEachParts(r.for_each)[1].join(", ")}>×${forEachParts(r.for_each)[1].length}</span>` : null}
           ${r.trigger_summary ? html`<div class="muted small">${r.trigger_summary}</div>` : null}</td>
         <td class="mono small">${r.template_type}</td>
         <td><${RuleStatusBadge} rule=${r} /></td>
@@ -307,8 +308,14 @@ const EMPTY_R = {
   template_type: "", condition_expr: "", persist_n: 1, eval_interval_sec: 10,
   incident_enabled: false, recovery_expr: "", recovery_persist_n: 1, resolved_template_type: "",
   vars_extract: [], inhibited_by: [], trigger_summary: "", trigger_logic_md: "",
-  enabled: true, sort_order: 100,
+  enabled: true, sort_order: 100, for_each: null,
 };
+
+// The parameter and values of a parametric rule (ADR-0005): {"n": [...]}.
+export function forEachParts(fe) {
+  const [param, values] = Object.entries(fe || {})[0] || ["n", []];
+  return [param, values || []];
+}
 
 function RuleEditor({ rule, templateRows = [], variables, rules, onClose, onSaved, onDuplicate }) {
   const isNew = !!rule.__new;
@@ -327,11 +334,14 @@ function RuleEditor({ rule, templateRows = [], variables, rules, onClose, onSave
   // "What if": the condition with other values (review RL-31).
   const [whatIfText, setWhatIfText] = useState(null);
   const [whatIf, setWhatIf] = useState(null);
-  // Run-state history of a saved rule (review RL-32).
+  // Run-state history of a saved rule (review RL-32), and its instances (ADR-0005).
   const [history, setHistory] = useState(null);
+  const [instanceRows, setInstanceRows] = useState(null);
+  const [paramDraft, setParamDraft] = useState(() => forEachParts(rule.for_each)[0]);
   useEffect(() => {
     if (isNew) return;
     lookup(api.get(`/v1/rules/${rule.id}/transitions`, { limit: 50 }), []).then((rows) => setHistory(Array.isArray(rows) ? rows : []));
+    if (rule.for_each) lookup(api.get(`/v1/rules/${rule.id}/instances`), []).then((rows) => setInstanceRows(Array.isArray(rows) ? rows : []));
   }, []);
   // How long the condition must hold, kept while the interval changes (RL-30).
   const [hold, setHold] = useState(() => splitDuration(checksToHold(rule.persist_n ?? 1, rule.eval_interval_sec ?? 10)));
@@ -344,7 +354,7 @@ function RuleEditor({ rule, templateRows = [], variables, rules, onClose, onSave
 
   async function validateExpr(expr, setResult) {
     if (!(expr || "").trim()) return;
-    try { setResult(await api.post("/v1/rules/validate", { condition_expr: expr, vars_extract: r.vars_extract })); }
+    try { setResult(await api.post("/v1/rules/validate", { condition_expr: expr, vars_extract: r.vars_extract, for_each: r.for_each || null })); }
     catch (e) { toast.error(e); }
   }
   const validate = () => { setWhatIf(null); setWhatIfText(null); validateExpr(r.condition_expr, setValidation); };
@@ -357,8 +367,18 @@ function RuleEditor({ rule, templateRows = [], variables, rules, onClose, onSave
   async function runWhatIf() {
     let context; try { context = JSON.parse(whatIfText || "{}"); } catch { return toast.error(t("rules.toastInvalidJson")); }
     if (!context || typeof context !== "object" || Array.isArray(context)) return toast.error(t("rules.toastInvalidJson"));
-    try { setWhatIf(await api.post("/v1/rules/validate", { condition_expr: r.condition_expr, vars_extract: r.vars_extract, context })); }
+    try { setWhatIf(await api.post("/v1/rules/validate", { condition_expr: r.condition_expr, vars_extract: r.vars_extract, for_each: r.for_each || null, context })); }
     catch (e) { toast.error(e); }
+  }
+  // The parameter's name is kept while there are no values yet.
+  const feValues = forEachParts(r.for_each)[1];
+  const feParam = r.for_each ? forEachParts(r.for_each)[0] : paramDraft;
+  // The parameter must appear somewhere, or every instance is the same rule.
+  const usesParam = [r.condition_expr, r.recovery_expr, r.template_type, r.resolved_template_type, ...(r.vars_extract || [])]
+    .some((x) => (x || "").includes(`{${feParam}}`));
+  function setForEach(param, values) {
+    setParamDraft(param);
+    set("for_each", values.length ? { [param || "n"]: values } : null);
   }
   function setHoldPart(value, unit) {
     setHold([value, unit]);
@@ -383,7 +403,7 @@ function RuleEditor({ rule, templateRows = [], variables, rules, onClose, onSave
         incident_enabled: !!r.incident_enabled, recovery_expr: r.recovery_expr || null,
         recovery_persist_n: Number(r.recovery_persist_n || 1), resolved_template_type: r.resolved_template_type || null,
         persist_n: Number(r.persist_n), eval_interval_sec: Number(r.eval_interval_sec),
-        vars_extract: r.vars_extract, inhibited_by: r.inhibited_by,
+        vars_extract: r.vars_extract, inhibited_by: r.inhibited_by, for_each: r.for_each || null,
         trigger_summary: r.trigger_summary || null, trigger_logic_md: r.trigger_logic_md || null,
         enabled: r.enabled, sort_order: Number(r.sort_order),
       };
@@ -445,7 +465,7 @@ function RuleEditor({ rule, templateRows = [], variables, rules, onClose, onSave
   // check counts), for the plain-language hint.
   const delaySec = (Math.max(1, Number(r.persist_n) || 1) - 1) * (Number(r.eval_interval_sec) || 0);
   // Advanced options open by themselves when the rule uses one or has an error there.
-  const advancedOpen = !!((r.vars_extract || []).length || r.incident_enabled || (r.inhibited_by || []).length
+  const advancedOpen = !!((r.vars_extract || []).length || r.incident_enabled || (r.inhibited_by || []).length || r.for_each
     || Number(r.sort_order) !== 100 || ["recovery_expr", "recovery_persist_n", "resolved_template_type"].some((f) => fieldErrs.msgFor(f)));
   return html`<${Drawer} open=${true} width=${760} title=${isNew ? t("rules.newRule") : rule.name} onClose=${closeDraft} dirty=${dirty}>
       ${draft.recovered ? html`<${DraftBanner} onRestore=${restoreDraft} onDiscard=${draft.dismiss} />` : null}
@@ -520,6 +540,16 @@ function RuleEditor({ rule, templateRows = [], variables, rules, onClose, onSave
 
       <details class="advanced" open=${advancedOpen}>
       <summary>${t("rules.advanced")}</summary>
+      <fieldset class="for-each"><legend>${t("rules.forEach")}</legend>
+        <p class="timing-sentence">${t("rules.forEachA")}
+          <input id="r-fe-param" class="inline-num mono" value=${feParam} aria-label=${t("rules.forEachParam")} maxlength="32"
+            onInput=${(e) => setForEach(e.target.value, feValues)} />
+          ${t("rules.forEachB")}</p>
+        <${TagInput} inputId="r-fe-values" ariaLabel=${t("rules.forEachValues")} value=${feValues}
+          onChange=${(v) => setForEach(feParam, v)} placeholder=${t("rules.forEachValuesPlaceholder")} />
+        <p class="muted small">${t("rules.forEachHelp", { param: `{${feParam || "n"}}` })}</p>
+        ${feValues.length && !usesParam ? html`<p class="warn-text small">${t("rules.forEachUnused", { param: `{${feParam}}` })}</p>` : null}
+      </fieldset>
       <div class="field"><label for="r-vars">${t("rules.varsCapture")}</label>
         <${TagInput} inputId="r-vars" ariaLabel=${t("rules.varsCapture")} value=${r.vars_extract} onChange=${(v) => set("vars_extract", v)} options=${variables} placeholder=${t("rules.varNamePlaceholder")} />
         <p class="muted small">${t("rules.varsHelp")}</p></div>
@@ -573,13 +603,22 @@ function RuleEditor({ rule, templateRows = [], variables, rules, onClose, onSave
         <div class="small muted">${t("rules.consecutiveMatches", { count: evalRes.consecutive_match_count })}</div><${Json} value=${evalRes.context} /></div>` : null}
       ${fireRes ? html`<div class="result"><b>${t("rules.firedResult")}</b> ${fireRes.dispatched ? html`<span class="badge ok plain">${t("rules.dispatched")}</span>` : html`<span class="badge warning plain">${fireRes.suppressed_reason || t("rules.notDispatched")}</span>`}<${Json} value=${fireRes} /></div>` : null}
 
+      ${instanceRows?.length ? html`<details class="history" open><summary>${t("rules.instancesTitle", { count: instanceRows.length })}</summary>
+        <table class="tbl small"><thead><tr><th>${t("rules.instanceCol")}</th><th>${t("rules.colState")}</th><th>${t("rules.colLastTrue")}</th><th>${t("rules.historyDetail")}</th></tr></thead>
+          <tbody>${instanceRows.map((i) => html`<tr key=${i.instance}>
+            <td class="mono">${i.instance}</td>
+            <td>${i.run_state ? t("rules.state_" + i.run_state) : "—"}</td>
+            <td title=${fmtDateTime(i.last_true_at)}>${i.last_true_at ? fmtRelative(i.last_true_at) : "—"}</td>
+            <td class="muted small">${i.last_eval_error || ""}</td></tr>`)}</tbody></table>
+      </details>` : null}
+
       ${!isNew ? html`<details class="history"><summary>${t("rules.historyTitle")}${rule.run_state ? html` · <span class="muted">${t("rules.state_" + rule.run_state)}</span>` : null}</summary>
         ${history === null ? html`<p class="muted small">${t("common.loading")}</p>`
           : history.length === 0 ? html`<p class="muted small">${t("rules.historyEmpty")}</p>`
           : html`<table class="tbl small"><thead><tr><th>${t("rules.historyWhen")}</th><th>${t("rules.historyChange")}</th><th>${t("rules.historyDetail")}</th></tr></thead>
             <tbody>${history.map((h, i) => html`<tr key=${i}>
               <td title=${fmtDateTime(h.at)}>${fmtRelative(h.at)}</td>
-              <td>${h.from_state ? t("rules.state_" + h.from_state) + " → " : ""}<b>${t("rules.state_" + h.to_state)}</b></td>
+              <td>${h.instance ? html`<span class="mono">${h.instance}</span> · ` : null}${h.from_state ? t("rules.state_" + h.from_state) + " → " : ""}<b>${t("rules.state_" + h.to_state)}</b></td>
               <td class="muted small">${h.detail || ""}</td></tr>`)}</tbody></table>`}
         <p class="muted small">${t("rules.historyHelp")}</p>
       </details>` : null}
@@ -596,9 +635,9 @@ function RuleEditor({ rule, templateRows = [], variables, rules, onClose, onSave
 function stripMeta(r) {
   const { template_type, condition_expr, persist_n, eval_interval_sec, vars_extract,
     inhibited_by, trigger_summary, trigger_logic_md, enabled, sort_order,
-    incident_enabled, recovery_expr, recovery_persist_n, resolved_template_type } = r;
+    incident_enabled, recovery_expr, recovery_persist_n, resolved_template_type, for_each } = r;
   return { template_type, condition_expr, persist_n, eval_interval_sec,
     incident_enabled, recovery_expr, recovery_persist_n, resolved_template_type,
     vars_extract: vars_extract || [], inhibited_by: inhibited_by || [],
-    trigger_summary, trigger_logic_md, enabled, sort_order };
+    trigger_summary, trigger_logic_md, enabled, sort_order, for_each: for_each || null };
 }

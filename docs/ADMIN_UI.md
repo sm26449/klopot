@@ -138,6 +138,11 @@ before touching `app/admin_ui/static/`.
 - **State history** (saved rules): `GET /v1/rules/{id}/transitions`, newest
   first. The list shows `firing` / `pending` in the state column and a
   **Last true** column (`last_true_at`).
+- **For each** (advanced, ADR-0005): parameter name and values (TagInput);
+  the editor warns when `{param}` appears nowhere. A saved parametric rule
+  shows an **Instances** table (`/instances`) above the state history, whose
+  rows carry the instance; the list shows `×N` next to the name. Validate and
+  What-if send `for_each` (evaluated as the first value).
 - Incident mode stays opt-in; for a plain threshold (`x > 80`) the empty
   recovery field offers a 5 % hysteresis (`x < 76`, `hysteresisFor`).
 - Timing reads as a sentence with the two numbers inline — "Send when the
