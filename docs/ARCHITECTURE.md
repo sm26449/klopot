@@ -284,7 +284,8 @@ event loop. Responsibilities:
 - Maintain `state_cache` keyed by variable name
 - Tick every N seconds (configurable per rule)
 - For each `enabled=True` rule:
-  - Build a context dict from `state_cache` filtered by `vars_extract`
+  - Build a context dict from `state_cache`: `vars_extract` plus the variables
+    the expressions read (`engine.rule_context`, shared with eval-now and validate)
   - Evaluate `condition_expr` via `app/core/eval.py`
   - Update `rule_state.consecutive_match_count`
   - If satisfied (≥ `persist_n`), call `dispatcher.fire()`
@@ -406,7 +407,8 @@ Persist is enforced by the engine, not here: the counter is
 
 Wraps `simpleeval`:
 
-- Names: the state cache, limited to the rule's `vars_extract` when set
+- Names: the state cache, limited to the rule's `vars_extract` (plus the
+  variables its expressions read) when set
 - Functions: a fixed whitelist (numeric, string, time, `var_age`) — see
   [EXPRESSION_LANGUAGE.md](EXPRESSION_LANGUAGE.md)
 - A default-deny AST allowlist checked before evaluation (and at write

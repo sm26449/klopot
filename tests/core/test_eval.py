@@ -113,8 +113,8 @@ def test_whitelisted_regex_match():
 
 def test_regex_match_bad_pattern():
     r = evaluate("regex_match(s, '[unclosed')", {"s": "x"})
-    # Bad pattern compiles to False, doesn't crash
-    assert r.ok and r.value is False
+    # A bad pattern is an error, not a silent no-match (review RL-01)
+    assert not r.ok and "not supported" in (r.error or "")
 
 
 def test_disallowed_function_returns_error():

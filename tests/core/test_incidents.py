@@ -191,9 +191,25 @@ async def test_recovery_expression_error_is_unknown_not_healthy(scenario):
     [incident] = await read_all(Incident)
     assert incident.state == "active"
     assert engine._rules[rule_id].recovery_match_count == 0
-    assert engine._rules[rule_id].consecutive_eval_errors == 1
+    # ``y`` has no value: the recovery waits for data (review RL-05) — not an
+    # error, and never evidence of recovery.
+    assert engine._rules[rule_id].consecutive_eval_errors == 0
     [rule] = await read_all(Rule)
-    assert "y" in rule.last_eval_error
+    assert rule.last_eval_error.startswith("missing input: y")
+
+
+async def test_recovery_expression_real_error_counts(scenario):
+    engine, rule_id = scenario
+    await open_problem(scenario)
+    async with get_session_factory()() as session:
+        rule = await session.get(Rule, rule_id)
+        rule.recovery_expr = "x < 75 and nope(x)"
+        await session.commit()
+    await engine.reload_rules()
+    await evaluate(engine, rule_id, 70)
+    [incident] = await read_all(Incident)
+    assert incident.state == "active"
+    assert engine._rules[rule_id].consecutive_eval_errors == 1
 
 
 async def test_recovery_condition_is_only_evaluated_for_an_open_problem(scenario):

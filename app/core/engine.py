@@ -86,6 +86,31 @@ class _RuleRuntime:
     # visible "duplicate" instead of vanishing into the earlier row (second
     # review, C13). Not persisted: after a restart it starts False.
     false_since_fire: bool = False
+    # (consecutive, recovery, epoch) as last written to rule_state, so a tick
+    # that changes nothing writes nothing (review RL-12: incident rules wrote
+    # the row on every evaluation). None = unknown, write on the next call.
+    persisted: tuple[int, int, int] | None = None
+
+
+def rule_context(
+    cache: StateCache, vars_extract: list[str] | None, *exprs: str | None,
+) -> dict[str, Any]:
+    """The values a rule sees: ``vars_extract`` plus every variable its
+    expressions read (review RL-03 — a name left out of ``vars_extract`` used
+    to stay "missing input" forever), or the whole cache when
+    ``vars_extract`` is empty. Stale variables are dropped (audit H-4): the
+    expression then sees them as missing inputs. Shared by the engine,
+    eval-now and validate so the three never disagree (RL-02)."""
+    if vars_extract:
+        names: set[str] = set(vars_extract)
+        for expr in exprs:
+            if expr:
+                names |= eval_module.referenced_names(expr)
+        snaps = ((n, cache.get(n)) for n in sorted(names))
+        items = [(n, v) for n, v in snaps if v is not None]
+    else:
+        items = sorted(cache.snapshot().items())
+    return {n: v.value for n, v in items if not v.is_stale()}
 
 
 class RuleEngine:
@@ -192,6 +217,7 @@ class RuleEngine:
                 for r in rules:
                     prev = old.get(r.id)
                     db_state = persisted.get(r.id)
+                    persisted_row: tuple[int, int, int] | None = None
                     if prev is not None:
                         # In-process reload — trust live counters, UNLESS
                         # the condition expression itself changed. A streak
@@ -212,6 +238,7 @@ class RuleEngine:
                         lma = None if reconfigured else prev.last_match_at
                         cee = prev.consecutive_eval_errors
                         lee = prev.last_eval_error
+                        persisted_row = None if reconfigured else prev.persisted
                         eeo = prev.error_event_open
                         if reconfigured:
                             self._last_truthy.pop(r.name, None)
@@ -230,6 +257,7 @@ class RuleEngine:
                         if db_state and db_state.state_epoch == (r.state_epoch or 0):
                             cmc = db_state.consecutive_match_count
                             rmc = db_state.recovery_match_count
+                            persisted_row = (cmc, rmc, db_state.state_epoch)
                         else:
                             cmc = 0
                             rmc = 0
@@ -257,6 +285,7 @@ class RuleEngine:
                         last_eval_error=lee,
                         error_event_open=eeo,
                         state_epoch=r.state_epoch or 0,
+                        persisted=persisted_row,
                     )
                 self._rules = new
                 self._by_name = {rt.rule.name: rt for rt in new.values()}
@@ -325,6 +354,7 @@ class RuleEngine:
         ]
         if not due:
             return
+        evaluator = eval_module.make_evaluator(timezone=get_settings().tz, state_cache=self._cache)
         for rt in due:
             # A reload earlier in this same tick (e.g. an admin disabling or
             # editing another due rule) can have swapped this runtime out or
@@ -332,7 +362,7 @@ class RuleEngine:
             if not self._is_current(rt):
                 continue
             try:
-                await self._eval_rule(rt, now=now)
+                await self._eval_rule(rt, now=now, evaluator=evaluator)
             except Exception:
                 logger.exception("eval rule %s failed", rt.rule.name)
             rt.next_eval_at = now + rt.rule.eval_interval_sec
@@ -359,8 +389,9 @@ class RuleEngine:
         self._by_name.pop(rt.rule.name, None)
         self._last_truthy.pop(rt.rule.name, None)
 
-    async def _eval_rule(self, rt: _RuleRuntime, *, now: float) -> None:
-        """Evaluate one rule against the current state cache."""
+    async def _eval_rule(self, rt: _RuleRuntime, *, now: float, evaluator: Any = None) -> None:
+        """Evaluate one rule against the current state cache. ``evaluator`` is
+        the tick's shared one (built here when called alone, e.g. in tests)."""
         ctx = self._build_context(rt.rule)
 
         settings = get_settings()
@@ -370,6 +401,7 @@ class RuleEngine:
         result = eval_module.evaluate(
             rt.rule.condition_expr,
             ctx,
+            evaluator=evaluator,
             timezone=settings.tz,
             state_cache=self._cache,
         )
@@ -384,7 +416,8 @@ class RuleEngine:
                 return
         if active_incident and rt.rule.recovery_expr:
             recovery = eval_module.evaluate(
-                rt.rule.recovery_expr, ctx, timezone=settings.tz, state_cache=self._cache,
+                rt.rule.recovery_expr, ctx, evaluator=evaluator,
+                timezone=settings.tz, state_cache=self._cache,
             )
             if not recovery.ok:
                 # Unknown/missing data is never evidence of recovery. Reuse
@@ -716,42 +749,10 @@ class RuleEngine:
     # ── Helpers ───────────────────────────────────────────────────
 
     def _build_context(self, rule: Rule) -> dict[str, Any]:
-        """Snapshot the state cache filtered by ``vars_extract``.
-
-        Empty list = all variables (common during early development).
-        Specific list = only those names (preferred for production
-        rules — explicit dependencies, clear telemetry).
-
-        Stale-variable handling (audit H-4): variables whose age
-        exceeds their declared ``stale_after_sec`` are DROPPED from
-        the context. The rule expression then surfaces them as
-        ``NameNotDefined`` → eval returns ok=False → no match. This
-        is intentionally loud — better than silently firing on
-        phantom data when the MQTT broker drops mid-day.
-
-        Rules that need graceful degradation can opt in by using
-        the ``var_age("name")`` function in their condition, which
-        reads ts from the state_cache directly (bypassing context).
-        """
-        snap = self._cache.snapshot()
-        if rule.vars_extract:
-            wanted = set(rule.vars_extract)
-            items = ((k, v) for k, v in snap.items() if k in wanted)
-        else:
-            items = snap.items()
-        ctx: dict[str, Any] = {}
-        dropped: list[str] = []
-        for k, v in items:
-            if v.is_stale():
-                dropped.append(k)
-                continue
-            ctx[k] = v.value
-        if dropped:
-            logger.debug(
-                "Rule %s context: dropped %d stale var(s): %s",
-                rule.name, len(dropped), ",".join(dropped),
-            )
-        return ctx
+        """The rule's evaluation context — see :func:`rule_context`. Rules
+        that need graceful degradation use ``var_age("name")``, which reads
+        the state cache directly (bypassing the context)."""
+        return rule_context(self._cache, rule.vars_extract, rule.condition_expr, rule.recovery_expr)
 
     def _build_dispatch_context(self, rule: Rule, eval_ctx: dict[str, Any]) -> dict[str, Any]:
         """Context passed to the template renderer. Same as eval_ctx
@@ -760,7 +761,11 @@ class RuleEngine:
         return dict(eval_ctx)
 
     async def _persist_state(self, rt: _RuleRuntime) -> None:
-        """Mirror in-memory runtime to ``rule_state``."""
+        """Mirror in-memory runtime to ``rule_state`` — only when the counters
+        or the epoch changed since the last write (review RL-12)."""
+        key = (rt.consecutive_match_count, rt.recovery_match_count, rt.state_epoch)
+        if rt.persisted == key:
+            return
         async for s in get_session():
             existing = (
                 await s.execute(
@@ -786,6 +791,7 @@ class RuleEngine:
                 if rt.last_match_at is not None:
                     existing.last_match_at = utc_now()
             await s.commit()
+            rt.persisted = key
             break
 
     async def _record_eval_error(self, rt: _RuleRuntime, error: str | None, *, real: bool = True) -> None:

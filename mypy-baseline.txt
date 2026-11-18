@@ -62,7 +62,6 @@ app/core/dispatcher.py:0: error: Argument "effective_by_name" to "dispatch" of "
 app/core/dispatcher.py:0: note: "dict" is invariant -- see https://mypy.readthedocs.io/en/stable/common_issues.html#variance
 app/core/dispatcher.py:0: note: Consider using "Mapping" instead, which is covariant in the value type
 app/core/dispatcher.py:0: error: Item "None" of "DeliveryStatus | None" has no attribute "value"  [union-attr]
-app/core/engine.py:0: error: Incompatible types in assignment (expression has type "dict_items[str, VarSnapshot]", variable has type "Generator[tuple[str, VarSnapshot], None, None]")  [assignment]
 app/core/digest.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 app/core/delivery_worker.py:0: error: Function is missing a type annotation for one or more parameters  [no-untyped-def]
 app/core/delivery_worker.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
@@ -79,7 +78,6 @@ app/services/config_io.py:0: error: Statement is unreachable  [unreachable]
 app/services/config_io.py:0: error: Argument 3 to "dry_compile_variable" has incompatible type "Any | None"; expected "str"  [arg-type]
 app/services/config_io.py:0: error: Statement is unreachable  [unreachable]
 app/api/v1/rules.py:0: error: Function is missing a return type annotation  [no-untyped-def]
-app/api/v1/rules.py:0: error: Incompatible types in assignment (expression has type "dict_items[str, VarSnapshot]", variable has type "Generator[tuple[str, VarSnapshot], None, None]")  [assignment]
 app/api/v1/inputs.py:0: error: Function is missing a return type annotation  [no-untyped-def]
 app/main.py:0: error: Function is missing a type annotation  [no-untyped-def]
 app/main.py:0: error: Function is missing a type annotation  [no-untyped-def]

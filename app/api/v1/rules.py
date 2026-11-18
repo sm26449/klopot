@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-import re
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -16,7 +15,7 @@ from ...auth import Actor, require_scope
 from ...config import get_settings
 from ...core import dispatcher as dispatcher_module
 from ...core import eval as eval_module
-from ...core.engine import get_engine
+from ...core.engine import get_engine, rule_context
 from ...core.eval import MISSING_INPUT_PREFIX
 from ...core.incidents import lifecycle_config
 from ...core.rule_state_ops import reset_streak_on_reconfig
@@ -95,33 +94,6 @@ class ValidateRuleResult(BaseModel):
     result: Any = None
     referenced_vars: list[ReferencedVar] = Field(default_factory=list)
     unknown_vars: list[str] = Field(default_factory=list)
-
-
-# Expression tokens that are language keywords / literals, never variables.
-_EXPR_KEYWORDS = frozenset({
-    "and", "or", "not", "in", "is", "if", "else", "true", "false",
-    "none", "null", "True", "False", "None", "AND", "OR", "NOT",
-})
-_NAME_RE = re.compile(r"[A-Za-z_][\w.]*")
-
-
-def _referenced_names(expr: str) -> list[str]:
-    """Variable-ish names in an expression (dedup, order-preserving).
-
-    Excludes language keywords and function calls (a name immediately
-    followed by ``(``), so only value references remain — close enough
-    to what the engine treats as variables for a validate preview.
-    """
-    seen: dict[str, None] = {}
-    for m in _NAME_RE.finditer(expr):
-        name = m.group(0)
-        if name in _EXPR_KEYWORDS:
-            continue
-        # Skip function calls: the next non-space char after the name is '('.
-        if expr[m.end():].lstrip().startswith("("):
-            continue
-        seen.setdefault(name, None)
-    return list(seen)
 
 
 def _validate_expr_or_422(expr: str) -> None:
@@ -415,18 +387,8 @@ async def eval_now(
 ) -> EvalRuleResult:
     rule = await crud_get_or_404(session, Rule, rule_id)
     cache = get_state_cache()
-    snap = cache.snapshot()
-    # Mirror engine._build_context including staleness filtering
-    # (audit H-4). Stale variables are dropped so eval-now reflects
-    # exactly what the engine tick would see — surfacing stale-driven
-    # eval errors during diagnostics instead of letting the variable
-    # silently leak into the rule's match decision.
-    if rule.vars_extract:
-        wanted = set(rule.vars_extract)
-        items = ((k, v) for k, v in snap.items() if k in wanted)
-    else:
-        items = snap.items()
-    ctx = {k: v.value for k, v in items if not v.is_stale()}
+    # Exactly what the engine tick sees, staleness filtering included.
+    ctx = rule_context(cache, rule.vars_extract, rule.condition_expr, rule.recovery_expr)
 
     settings = get_settings()
     res = eval_module.evaluate(
@@ -436,7 +398,7 @@ async def eval_now(
 
     state = (
         await session.execute(
-            __import__("sqlalchemy").select(RuleState).where(RuleState.rule_id == rule.id)
+            select(RuleState).where(RuleState.rule_id == rule.id)
         )
     ).scalar_one_or_none()
     counter = state.consecutive_match_count if state else 0
@@ -468,7 +430,9 @@ async def validate_rule(
 ) -> ValidateRuleResult:
     cache = get_state_cache()
     snap = cache.snapshot()
-    ctx = {k: v.value for k, v in snap.items() if not v.is_stale()}
+    # The context the engine would build for a rule with this
+    # ``vars_extract`` (review RL-02: it was ignored here).
+    ctx = rule_context(cache, body.vars_extract, body.condition_expr)
 
     settings = get_settings()
     # User regexes compile under RE2 (audit V10), which matches in linear time,
@@ -492,7 +456,7 @@ async def validate_rule(
 
     referenced: list[ReferencedVar] = []
     unknown: list[str] = []
-    for name in _referenced_names(body.condition_expr):
+    for name in eval_module.display_names(body.condition_expr):
         vs = snap.get(name)
         if vs is None:
             unknown.append(name)

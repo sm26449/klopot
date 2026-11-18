@@ -17,6 +17,23 @@ adheres to [Semantic Versioning](https://semver.org/).
   reached a channel (or is being sent) or someone acknowledged the incident;
   otherwise the incident closes quietly and the still-queued page is
   cancelled, as before. Raised by Multi-Bus Gateway's paired episodes.
+- **`regex_match` with a pattern RE2 cannot run is an error**, no longer a
+  silent `False`. RE2 has no lookahead, lookbehind or backreferences; such a
+  rule matched nothing and still showed "ok". A literal pattern is refused when
+  a rule is saved or imported; a stored one fails each evaluation (and is
+  auto-disabled after `ALERTD_EVAL_ERROR_DISABLE_THRESHOLD` errors, with the
+  `rule_auto_disabled` alert). A subject over 4096 characters is an error too.
+  **Before upgrading**, look for `(?=`, `(?!`, `(?<` and `\1` in your rules.
+- **A rule sees every variable its expressions read**, even when
+  `vars_extract` lists others: a variable left out of the list used to be a
+  "missing input" for ever. Notifications get those values too.
+- **An absent input is "no data" whether or not its name has a dot**, and so
+  is a variable whose value is `None` (an MQTT `null`) — before, `temp > 5`
+  with no `temp`, or `x.v > 5` with `x.v = null`, counted as evaluation errors
+  towards auto-disable. An unknown function is still an error.
+- **`avg()` of no values** no longer returns `0` (which matched every "below
+  threshold" rule while its inputs were missing): the rule waits for data.
+- `true` / `false` / `null` / `none` (any case) are literals in expressions.
 
 ### Upgrade notes
 
@@ -119,6 +136,10 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The rule engine writes a rule's `rule_state` row only when its counters
+  change: an incident rule wrote it on every evaluation. One expression
+  evaluator per tick, and a rule's context is read by name instead of copying
+  the whole state cache for every rule.
 - **A recovery notice no longer goes missing for a long episode.** Retention
   deleted the firing notice of an episode open longer than
   `ALERTD_LOG_RETENTION_DAYS`; its end then looked unannounced and no recovery

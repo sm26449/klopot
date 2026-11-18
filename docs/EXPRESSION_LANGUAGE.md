@@ -40,15 +40,18 @@ String concat: 'a' + 'b'
 - Booleans: `True`, `False`
 - None: `None`
 
-(`true`, `false` and `null` are reserved words — they never name a
-variable — but they are not literals; write `True` / `False` / `None`.)
+`true` / `false` / `null` / `none` — lowercase, uppercase or capitalised —
+are literals too (the same as `True` / `False` / `None`); they never name a
+variable.
 - Lists: `[1, 2, 3]`
 - Dicts: `{'k': 'v'}`
 
 ### Variables
 
-Any variable in the state cache — limited to the names in the rule's
-`vars_extract` when that list is non-empty. Examples:
+Any variable in the state cache. When the rule's `vars_extract` is
+non-empty, the rule sees the names listed there **plus every variable its
+condition and recovery expressions read** — a variable used in the
+expression is never left out. Examples:
 
 ```
 disk.used_pct
@@ -78,7 +81,7 @@ These are always available in any expression:
 | `round(x, n=0)` | `round(3.14159, 2)` | `3.14` (`n` between -100 and 100) |
 | `clamp(x, lo, hi)` | `clamp(level, 0, 100)` | bounded |
 | `sum([a, b, ...], start=0)` | `sum([f1, f2, f3])` | sum (numbers only) |
-| `avg([a, b, ...])` | `avg([f1, f2, f3])` | mean |
+| `avg([a, b, ...])` | `avg([f1, f2, f3])` | mean of the values that are not `None`; with none left the rule waits for data (an empty literal list is an error) |
 | `int(x)`, `float(x)`, `bool(x)` | type coercion |  |
 
 ### String
@@ -90,7 +93,7 @@ These are always available in any expression:
 | `endswith(s, p)` | `endswith(topic, '/W')` | bool |
 | `len(s)` | `len(error_msg) > 100` | int |
 | `lower(s)`, `upper(s)` | normalize | str |
-| `regex_match(s, pat)` | `regex_match(phone, '^\\+40')` | bool |
+| `regex_match(s, pat)` | `regex_match(phone, '^\\+40')` | bool — [RE2 syntax](https://github.com/google/re2/wiki/Syntax): no lookahead / lookbehind / backreferences. A pattern RE2 cannot run is refused when the rule is saved and is an evaluation error at run time (never a silent `False`); so is a subject over 4096 characters |
 
 ### Time
 
@@ -190,10 +193,13 @@ If a rule's expression raises (undefined var, type error, rejected syntax):
    `rule_auto_disabled` alert fires (template from the `self-monitoring` pack)
 5. Admin can re-enable after fixing the expression
 
-A **missing input** — a dotted variable with no value in the cache, compared
-directly — is not an error: it records `last_eval_error` (`missing input: …`,
-`eval_status = no_data` in the API), breaks the streak, and does not count
-towards auto-disable.
+A **missing input** — a variable (dotted or not) with no value in the cache,
+or one whose value is `None`, used where a value is needed (a comparison,
+`lower(x)`, `avg` of nothing) — is not an error: it records
+`last_eval_error` (`missing input: …`, `eval_status = no_data` in the API),
+breaks the streak, and does not count towards auto-disable. A misspelt
+variable therefore shows as `no_data`; the editor's **Validate** lists it as
+unknown. An unknown *function* is an error.
 
 This mirrors how good monitoring systems treat sensor errors:
 silent on transient noise, loud on persistent breakage.

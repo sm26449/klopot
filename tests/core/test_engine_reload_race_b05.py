@@ -85,10 +85,10 @@ async def test_tick_skips_rule_disabled_earlier_in_tick(
 
     orig_eval = engine._eval_rule
 
-    async def eval_then_disable_b(rt, *, now):
+    async def eval_then_disable_b(rt, *, now, **kw):
         if rt.rule.id == r_a.id:
             engine._rules.pop(r_b.id, None)  # admin disables B mid-tick
-        return await orig_eval(rt, now=now)
+        return await orig_eval(rt, now=now, **kw)
 
     engine._eval_rule = eval_then_disable_b  # type: ignore[method-assign]
 

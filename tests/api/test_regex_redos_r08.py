@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import time
 
-from app.core.eval import _REGEX_MAX_PATTERN, _REGEX_MAX_SUBJECT, _regex_match
+import pytest
+
+from app.core.eval import _REGEX_MAX_PATTERN, _REGEX_MAX_SUBJECT, ExpressionError, _regex_match
 
 
 def test_regex_match_normal_still_works():
@@ -15,11 +17,14 @@ def test_regex_match_normal_still_works():
 
 
 def test_regex_match_oversized_pattern_refused():
-    assert _regex_match("a", "a" * (_REGEX_MAX_PATTERN + 1)) is False
+    # Refused loudly, never a silent False (review RL-01).
+    with pytest.raises(ExpressionError, match="too long"):
+        _regex_match("a", "a" * (_REGEX_MAX_PATTERN + 1))
 
 
 def test_regex_match_oversized_subject_refused():
-    assert _regex_match("a" * (_REGEX_MAX_SUBJECT + 1), "a") is False
+    with pytest.raises(ExpressionError, match="subject too long"):
+        _regex_match("a" * (_REGEX_MAX_SUBJECT + 1), "a")
 
 
 async def test_validate_rejects_oversized_expression(db_client, admin_key):

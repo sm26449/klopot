@@ -217,7 +217,7 @@ async def test_eval_error_increments_error_counter(db_engine, db_session, make_r
     t = make_template(type="r_type", min_repeat_min=0)
     r = make_rule(
         template_type="r_type",
-        condition_expr="undefined_variable > 10",  # NameNotDefined
+        condition_expr="unknown_function(1) > 10",  # FunctionNotDefined
         vars_extract=[],
         persist_n=1,
     )
@@ -431,11 +431,11 @@ async def test_tick_isolates_rule_failures(db_engine, db_session, make_rule, mak
     real_eval = engine._eval_rule
     call_count = {"n": 0}
 
-    async def flaky_eval(rt, *, now):
+    async def flaky_eval(rt, *, now, **kw):
         call_count["n"] += 1
         if rt.rule.name == "r1":
             raise RuntimeError("boom")
-        await real_eval(rt, now=now)
+        await real_eval(rt, now=now, **kw)
 
     with patch.object(engine, "_eval_rule", side_effect=flaky_eval):
         await engine._tick()
@@ -496,12 +496,12 @@ async def test_auto_disable_fires_meta_alert(
 
     cache = StateCache()
     engine = RuleEngine()
-    engine._cache = cache  # cache empty → 'missing_var' undefined → eval error
+    engine._cache = cache  # cache empty → the rule's function is unknown → eval error
 
     t = make_template(type="r_type", min_repeat_min=0)
     r = make_rule(
         template_type="r_type",
-        condition_expr="missing_var > 1",
+        condition_expr="missing_fn(1) > 1",  # a real error (RL-05: a missing name is no data)
         vars_extract=["missing_var"],
         persist_n=1,
     )
@@ -538,7 +538,7 @@ async def test_auto_disable_fires_meta_alert(
     assert env.context["rule_name"] == r.name
     assert env.context["rule_id"] == r.id
     assert env.context["threshold"] == 3
-    assert "missing_var" in env.context["error"]
+    assert "missing_fn" in env.context["error"]
 
 
 async def test_auto_disabled_rule_removed_from_indexes_and_not_evaluated(
@@ -555,7 +555,7 @@ async def test_auto_disabled_rule_removed_from_indexes_and_not_evaluated(
     t = make_template(type="r_type", min_repeat_min=0)
     r = make_rule(
         template_type="r_type",
-        condition_expr="missing_var > 1",
+        condition_expr="missing_fn(1) > 1",  # a real error (RL-05: a missing name is no data)
         vars_extract=["missing_var"],
         persist_n=1,
     )
@@ -611,7 +611,7 @@ async def test_no_meta_alert_below_threshold(
     t = make_template(type="r_type", min_repeat_min=0)
     r = make_rule(
         template_type="r_type",
-        condition_expr="missing_var > 1",
+        condition_expr="missing_fn(1) > 1",  # a real error (RL-05: a missing name is no data)
         vars_extract=["missing_var"],
         persist_n=1,
     )
@@ -830,7 +830,7 @@ async def test_eval_error_breaks_persist_streak(
 
     t = make_template(type="r_type", min_repeat_min=0)
     r = make_rule(
-        template_type="r_type", condition_expr="undefined_variable > 10",
+        template_type="r_type", condition_expr="undefined_fn(1) > 10",
         vars_extract=[], persist_n=2,
     )
     db_session.add_all([t, r])

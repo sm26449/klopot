@@ -145,6 +145,11 @@ def _expr_rejection(transformed: str) -> str | None:
                 return "only direct calls to named functions are allowed"
             if node.keywords:
                 return "keyword arguments are not allowed in function calls"
+            if (node.func.id == "regex_match" and len(node.args) >= 2
+                    and isinstance(node.args[1], ast.Constant) and isinstance(node.args[1].value, str)):
+                problem = _regex_problem(node.args[1].value)
+                if problem is not None:
+                    return problem
     if _ast_depth(tree) > _MAX_AST_DEPTH:
         return f"expression nested too deeply (> {_MAX_AST_DEPTH})"
     return None
@@ -212,9 +217,44 @@ def referenced_names(expr: str) -> frozenset[str]:
     simple = {
         n.id for n in ast.walk(tree)
         if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
-        and not _PLACEHOLDER.match(n.id)
+        and not _PLACEHOLDER.match(n.id) and n.id.lower() not in KEYWORD_WORDS
     }
     return frozenset((simple - func_names) | set(dotted))
+
+
+def display_names(expr: str) -> list[str]:
+    """Variables an expression reads, for the editor (review RL-04): the
+    names of :func:`referenced_names` plus the string arguments of
+    ``var_age("…")``, in order of first appearance. Text inside other string
+    literals (``contains(x, 'STATUS')``) is never reported."""
+    names = set(referenced_names(expr))
+    try:
+        transformed, _ctx, _dotted = _substitute_dots(expr, {})
+        tree = ast.parse(transformed, mode="eval")
+    except (SyntaxError, ValueError):
+        tree = None
+    if tree is not None:
+        for n in ast.walk(tree):
+            if (isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "var_age"
+                    and n.args and isinstance(n.args[0], ast.Constant) and isinstance(n.args[0].value, str)):
+                names.add(n.args[0].value)
+    return sorted(names, key=lambda n: (expr.find(n) if n in expr else len(expr), n))
+
+
+@lru_cache(maxsize=1024)
+def _simple_names(transformed: str) -> frozenset[str]:
+    """Undotted names a (transformed) expression reads as values — not
+    function names, placeholders or keywords."""
+    try:
+        tree = ast.parse(transformed, mode="eval")
+    except SyntaxError:
+        return frozenset()
+    funcs = {n.func.id for n in ast.walk(tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
+    return frozenset(
+        n.id for n in ast.walk(tree)
+        if isinstance(n, ast.Name) and n.id not in funcs
+        and not _PLACEHOLDER.match(n.id) and n.id.lower() not in KEYWORD_WORDS
+    )
 
 
 def _deep_len(x: Any, budget: int) -> int:
@@ -294,6 +334,15 @@ _STRINGS = re.compile(r'"[^"\\]*(?:\\.[^"\\]*)*"|\'[^\'\\]*(?:\\.[^\'\\]*)*\'')
 # Words the expression language treats as literals / operators in any case
 # (``false``, ``NULL``, ``And``…), never as variable names (audit B07).
 KEYWORD_WORDS = frozenset({"true", "false", "and", "or", "not", "none", "null"})
+
+# ``true`` / ``false`` / ``null`` / ``none`` in lower, upper or capitalised
+# form are literals (review RL-08), like Python's ``True`` / ``False`` / ``None``.
+_LITERAL_NAMES: dict[str, Any] = {
+    form: value
+    for word, value in (("true", True), ("false", False), ("null", None), ("none", None))
+    for form in (word, word.upper(), word.capitalize())
+    if form not in ("True", "False", "None")
+}
 
 # Prefix of EvalResult.error for a rule waiting on an input (not a broken
 # rule). The rules API derives eval_status="no_data" from it.
@@ -409,9 +458,19 @@ def _round(x: Any, ndigits: Any = None) -> Any:
     return round(x, ndigits)
 
 
+class NoValues(TypeError):
+    """An aggregate got no values. A ``TypeError`` so that, when the values
+    are missing inputs, the rule waits for data instead of failing."""
+
+
 def _avg(values: Any) -> float:
+    """Mean of the values that are not ``None``. With none left it raises
+    instead of returning 0, which matched every "below threshold" rule while
+    its inputs were missing (review RL-07)."""
     nums = [float(v) for v in values if v is not None]
-    return sum(nums) / len(nums) if nums else 0.0
+    if not nums:
+        raise NoValues("avg() of no values")
+    return sum(nums) / len(nums)
 
 
 def _contains(s: Any, sub: Any) -> bool:
@@ -451,24 +510,36 @@ def _compile_re2(pattern: str) -> Any:
     return re2.compile(pattern, options=_RE2_OPTIONS)
 
 
+def _regex_problem(pattern: str) -> str | None:
+    """Why ``pattern`` cannot be used by ``regex_match``, or ``None``."""
+    if len(pattern) > _REGEX_MAX_PATTERN:
+        return f"regex_match pattern too long (> {_REGEX_MAX_PATTERN} chars)"
+    try:
+        _compile_re2(pattern)
+    except Exception as e:
+        detail = e.args[0] if e.args else e
+        if isinstance(detail, bytes):
+            detail = detail.decode("utf-8", "replace")
+        return (f"regex_match pattern not supported: {detail} "
+                "(RE2 syntax: no lookahead, lookbehind or backreferences)")
+    return None
+
+
 def _regex_match(s: Any, pattern: str) -> bool:
+    """RE2 search. A pattern RE2 cannot run, or an oversized subject, is an
+    error, never a silent ``False`` (review RL-01: a rule with a lookahead
+    stopped firing without any sign). It is never handed to a backtracking
+    engine. A literal pattern is already refused when the expression is saved."""
     if s is None:
         return False
     pat = str(pattern)
     subj = str(s)
-    if len(pat) > _REGEX_MAX_PATTERN or len(subj) > _REGEX_MAX_SUBJECT:
-        # Oversized pattern/subject — refuse rather than spend the work.
-        return False
-    try:
-        rx = _compile_re2(pat)
-    except Exception:
-        # Invalid pattern, or one RE2 can't represent (backreference /
-        # lookaround). Fail closed — never hand it to a backtracking engine.
-        return False
-    try:
-        return bool(rx.search(subj))
-    except Exception:
-        return False
+    problem = _regex_problem(pat)
+    if problem is not None:
+        raise ExpressionError(problem)
+    if len(subj) > _REGEX_MAX_SUBJECT:
+        raise ExpressionError(f"regex_match subject too long (> {_REGEX_MAX_SUBJECT} chars)")
+    return bool(_compile_re2(pat).search(subj))
 
 
 def _build_time_helpers(tz_name: str) -> dict[str, Any]:
@@ -602,6 +673,16 @@ def evaluate(
     # present in ``ctx``.
     eva_names = {k: v for k, v in ctx.items() if "." not in k}
     eva_names.update(new_ctx)
+    # An undotted name with no value waits for data like a dotted one
+    # (review RL-05): bound to None, reported as missing.
+    for name in sorted(_simple_names(transformed)):
+        if name not in eva_names:
+            eva_names[name] = None
+            missing.append(name)
+    eva_names.update(_LITERAL_NAMES)
+    # Inputs that are present but hold no value (an MQTT null) — a TypeError
+    # on them is the rule waiting for data too (review RL-06).
+    no_value = sorted(n for n in referenced_names(expr) if n in ctx and ctx[n] is None)
 
     eva = evaluator or make_evaluator(timezone=timezone, state_cache=state_cache)
     eva.names = eva_names
@@ -618,16 +699,18 @@ def evaluate(
         return EvalResult(value=None, ok=False, error=f"syntax: {e}")
     except Exception as e:
         # Includes ZeroDivisionError, TypeError, etc.
-        if missing and isinstance(e, TypeError):
-            # A missing dotted name is bound to None; comparing it raises
-            # here. That is the rule waiting for an input (a namespace stale
-            # as a whole, a collector down), not a broken rule — the caller
-            # must not count it towards auto-disable (a rule over a
-            # briefly silent namespace was otherwise auto-disabled).
+        waiting = missing + no_value
+        if waiting and isinstance(e, TypeError):
+            # A missing name is bound to None; comparing it raises here —
+            # as does an input whose value is None. That is the rule waiting
+            # for an input (a namespace stale as a whole, a collector down),
+            # not a broken rule — the caller must not count it towards
+            # auto-disable (a rule over a briefly silent namespace was
+            # otherwise auto-disabled).
             return EvalResult(
                 value=None, ok=False,
-                error=f"{MISSING_INPUT_PREFIX}{', '.join(missing)} ({type(e).__name__}: {e})",
-                missing_vars=missing, missing_input=True,
+                error=f"{MISSING_INPUT_PREFIX}{', '.join(waiting)} ({type(e).__name__}: {e})",
+                missing_vars=waiting, missing_input=True,
             )
         return EvalResult(
             value=None, ok=False, error=f"{type(e).__name__}: {e}",

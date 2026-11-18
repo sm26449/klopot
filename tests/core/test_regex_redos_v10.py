@@ -6,7 +6,9 @@ from __future__ import annotations
 
 import time
 
-from app.core.eval import _regex_match
+import pytest
+
+from app.core.eval import ExpressionError, _regex_match
 
 
 def test_catastrophic_regex_is_linear_time():
@@ -26,12 +28,16 @@ def test_catastrophic_regex_is_linear_time():
     assert elapsed < 0.5, f"regex took {elapsed:.3f}s — backtracking not bounded"
 
 
-def test_unsupported_regex_syntax_fails_closed():
-    """RE2 cannot represent lookahead or backreferences. Rather than fall back
-    to a backtracking engine, such a pattern fails closed — no match, no crash,
-    no exception leaking to the caller."""
-    assert _regex_match("foobar", r"foo(?=bar)") is False   # lookahead
-    assert _regex_match("aa", r"(a)\1") is False            # backreference
+@pytest.mark.parametrize(("subject", "pattern"), [
+    ("foobar", r"foo(?=bar)"),   # lookahead
+    ("aa", r"(a)\1"),            # backreference
+])
+def test_unsupported_regex_syntax_is_an_error(subject, pattern):
+    """RE2 cannot represent lookahead or backreferences. Such a pattern is
+    never handed to a backtracking engine, and it is an error — not a silent
+    no-match, which kept a production rule quiet for weeks (review RL-01)."""
+    with pytest.raises(ExpressionError, match="not supported"):
+        _regex_match(subject, pattern)
 
 
 def test_supported_regex_still_matches():
