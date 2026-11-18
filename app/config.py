@@ -1,9 +1,13 @@
 """Runtime configuration via Pydantic Settings.
 
-All values come from environment variables. Each setting has a sane
-default so the service starts in a development context without a
-.env file. Production deployment supplies values via docker-compose
-``environment:`` block (see ``docker-compose.yml``).
+Values come from the process environment and an optional ``.env`` file and
+are read once at start. Most settings have a default; starting the service
+needs a database URL (``ALERTD_DATABASE_URL``, MySQL 8 in production). The
+base ``docker-compose.yml`` passes every operator setting explicitly — the
+metadata / debug exceptions and the fixed listener are in docs/DEPLOY.md.
+
+``GET /v1/settings`` reports the effective values; there is no settings
+write: change the environment and restart.
 """
 from __future__ import annotations
 
@@ -109,8 +113,8 @@ class Settings(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     log_format: Literal["json", "console"] = "console"
 
-    # ── Behavior tuning (defaults; admin can override per-rule
-    #     where applicable, via /v1/settings) ──────────────────
+    # ── Behavior defaults (a rule overrides its own fields where it has
+    #     them; service-wide values are environment settings) ──────
     default_eval_interval_sec: int = Field(default=10, ge=1, le=3600)
     idempotency_window_sec: int = Field(default=300, ge=0, le=3600)
     log_retention_days: int = Field(default=90, ge=1, le=3650)

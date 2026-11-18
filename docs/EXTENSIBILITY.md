@@ -112,12 +112,13 @@ rely on it.
 
 ### 3. Add a config schema in the API enum
 
-`InputKind` is defined twice and both need the new member:
-`app/schemas/common.py` (API) and `app/db/models.py` (the DB enum — which
-also means an Alembic migration to extend the column's ENUM):
+Add the member to `InputKind` in `app/enums.py` — the one definition
+(`enum.StrEnum`), re-exported by `app/schemas/common.py` and
+`app/db/models.py`; never define a second enum there. Then a forward-only
+Alembic migration to extend the MySQL ENUM column:
 
 ```python
-class InputKind(str, enum.Enum):
+class InputKind(enum.StrEnum):
     mqtt = "mqtt"
     http_poll = "http_poll"
     webhook = "webhook"
@@ -217,9 +218,10 @@ SEVERITY_COLORS = {"info": 0x3498DB, "warning": 0xF1C40F, "critical": 0xE74C3C}
 
 ### 3. Schema enum
 
-Add `discord = "discord"` to `ChannelKind` in both `app/schemas/common.py`
-and `app/db/models.py`, plus a forward-only Alembic migration extending the
-MySQL enum. Update metadata and the secret registry alongside them.
+Add `discord = "discord"` to `ChannelKind` in `app/enums.py` (the one
+definition, re-exported by `app/schemas/common.py` and `app/db/models.py`),
+plus a forward-only Alembic migration extending the MySQL enum. Update
+metadata and the secret registry alongside them.
 
 ### 4. (UI) form fragment + test
 
@@ -263,14 +265,17 @@ one means:
 
 1. Implement the resolution in `app/core/variable_resolver.py` (follow
    how `computed` or `schedule` is handled there).
-2. Add the member to `VariableSource` in **both** `app/schemas/common.py`
-   and `app/db/models.py` (plus an Alembic migration for the ENUM).
+2. Add the member to `VariableSource` in `app/enums.py` (re-exported by
+   `app/schemas/common.py` and `app/db/models.py`; plus an Alembic migration
+   for the ENUM).
 3. Declare its config fields in `app/meta_kinds.py` (`_VARIABLES`) so the
    admin UI can render the form.
 
-The variable's config (URL, token, query, refresh interval) lives in
-the `variables.config` JSON column — kind-specific shape validated
-by Pydantic at write time.
+The variable's config (URL, token, query, refresh interval) lives in the
+`variables.config` JSON column. The API and import accept any JSON object
+there: validate the kind-specific shape yourself, in both the REST write
+(`_reject_uncompilable_config` in `app/api/v1/variables.py`) and config
+import, alongside its runtime resolution.
 
 ---
 

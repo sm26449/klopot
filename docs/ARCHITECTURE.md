@@ -16,9 +16,11 @@ the dispatcher.
 
 ## Founding principles
 
-1. **API-everything.** Every configuration item is mutable via REST.
-   Inputs, variables, templates, rules, channels, schedules, API
-   keys, snoozes, settings — all CRUD via `/v1/...`. The UI is just
+1. **API-first configuration.** Inputs, variables, templates, rules,
+   channels, schedules, API keys and snoozes — all CRUD via `/v1/...`.
+   Runtime settings are environment variables read at start;
+   `GET /v1/settings` reports their effective values (there is no settings
+   write), and importing the legacy settings row does not change them. The UI is just
    another API consumer. No "DB-only" knobs. See
    [`API.md`](API.md) for the full surface (and the live OpenAPI at
    `/openapi.json`).

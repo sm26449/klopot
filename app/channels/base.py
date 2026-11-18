@@ -1,17 +1,19 @@
-"""BaseChannel — abstract interface for output channels.
+"""Output-channel adapter contract.
 
-Each channel kind subclasses this. The dispatcher calls
-``send(notif, config)`` and gets back ``SendResult`` (ok flag + error
-message). Adapters are simple: send or fail. Retries / circuit
-breakers / rate limiting live in ``manager.py`` and are
-channel-agnostic.
+- ``kind`` class attribute matches the DB enum value (``"telegram"``).
+- ``async def send(notif, config, *, idempotency_key=None) -> SendResult``:
+  ``notif`` is the rendered content, ``config`` the channel's effective config
+  for this delivery; ``idempotency_key`` stays the same across attempts of one
+  delivery — forward it to a provider that de-duplicates. Return a failed
+  ``SendResult`` for expected transport / provider failures (``retry_after``
+  asks for a later attempt, ``permanent`` refuses for good); raise only on
+  programmer errors.
+- ``async def healthcheck(config)`` optionally probes reachability; ``close()``
+  releases resources.
 
-Plugin contract:
-- ``kind`` class attribute matches the DB enum value (``"telegram"``)
-- ``async def send(notif, config)`` does the I/O; raises only on
-  programmer errors. Network failures, 4xx/5xx etc. → return
-  ``SendResult(ok=False, error="...")``.
-- ``async def healthcheck(config)`` returns ``{reachable: bool, ...}``
+The channel manager (``manager.py``) enforces send timeouts, rate limits and
+circuit breakers; the durable outbox (``app/core/outbox.py``) and the delivery
+worker own the retries.
 """
 from __future__ import annotations
 

@@ -43,12 +43,18 @@ docker compose -f docker-compose.yml -f compose.dev.yml logs -f alertd
 …or just the DB and broker, and run alertd from source for fast iteration:
 
 ```bash
+# First copy .env.example to .env and fill in the required passwords.
 docker compose -f docker-compose.yml -f compose.dev.yml up -d mysql mosquitto
-set -a; . ./.env; set +a          # MYSQL_PASSWORD from your .env
-export ALERTD_DATABASE_URL="mysql+aiomysql://alertd:$MYSQL_PASSWORD@localhost:3306/alertd"
+
+# <MYSQL_PASSWORD> = the one in .env; the port is KLOPOT_DEV_MYSQL_PORT if you changed it.
+export ALERTD_DATABASE_URL='mysql+aiomysql://alertd:<MYSQL_PASSWORD>@127.0.0.1:3306/alertd'
+export ALERTD_MQTT_HOST=127.0.0.1 ALERTD_MQTT_PORT=1883   # KLOPOT_DEV_MQTT_PORT if changed
 alembic upgrade head
-ALERTD_BOOTSTRAP_ADMIN_KEY=alertd_dev_key uvicorn app.main:app --reload
+ALERTD_BOOTSTRAP_ADMIN_KEY=alertd_dev_key uvicorn app.main:app --reload --host 127.0.0.1 --port 5090
 ```
+
+Do not `source` `.env` as a shell script: it is a Compose / Pydantic dotenv
+file (`BACKUP_CRON=0 2 * * *` is not shell); Pydantic reads it directly.
 
 ## Project layout
 

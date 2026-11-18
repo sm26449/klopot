@@ -204,9 +204,12 @@ disk.used_pct > 90 AND disk.free_gb < 20
 
 Variable definition (in DB):
 ```yaml
-- name: api.error_ratio
-  source: computed
-  formula: "api.errors_per_min / api.requests_per_min"
+variables:
+  - name: api.error_ratio
+    source: computed
+    config:
+      formula: "api.errors_per_min / api.requests_per_min"
+      type: number
 ```
 
 Rule condition:

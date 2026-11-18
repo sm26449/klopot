@@ -210,6 +210,19 @@ A key limited to some alert types (`allowed_types`, see
 [API keys](#api-keys)) gets `403` with `{"code": "TYPE_NOT_ALLOWED"}` for any
 other `type` or `resolved_type`; nothing is logged or sent.
 
+Errors of `POST /v1/fire` (all declared in the OpenAPI spec, so generated
+clients parse them):
+
+| Status | Body |
+|--------|------|
+| `401` | `{"detail": "…"}`: missing, invalid or expired key |
+| `403` | scope denied, or `{"detail": {"code": "TYPE_NOT_ALLOWED", "message": "…"}}` |
+| `413` | `{"error": {"code": "REQUEST_TOO_LARGE", "message": "…"}}` (the body cap, before the route) |
+| `422` | request validation: a **list** in `detail`; a domain check: a **string**, e.g. `{"detail": "status=resolved needs the idempotency_key of the episode to close"}` |
+| `429` | too many requests or invalid keys; wait `Retry-After` seconds |
+
+A client must accept both forms of a `422`.
+
 #### Episodes (`idempotency_key`)
 
 A script that reports the same problem every minute should notify once, not
@@ -639,7 +652,7 @@ Every rule carries `eval_status`, derived from `consecutive_eval_errors` and
 | `eval_status` | Meaning | Counted towards auto-disable |
 |---------------|---------|------------------------------|
 | `ok` | Last evaluation succeeded | — |
-| `no_data` | Waiting for an input: a dotted variable it reads has no value (`last_eval_error` starts with `missing input:`) | No |
+| `no_data` | Waiting for an input: a variable it needs (with or without a dot) has no usable value, or the history it needs is not there yet (`last_eval_error` starts with `missing input:`) | No |
 | `error` | The expression fails (`NameError`, type error, …) | Yes |
 
 A successful evaluation clears `last_eval_error`, including a `no_data`

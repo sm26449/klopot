@@ -186,9 +186,9 @@ The existing retention task sweeps the three tables with
 |----------|-------|---------|
 | `GET /v1/activity/sources` | read | grouped callers + ignored counters |
 | `GET/POST/PATCH/DELETE /v1/activity/rules`, `POST /v1/activity/rules/preview` | read (list, preview) / admin (changes, audited) | the rules |
-| `GET /v1/activity/requests` | read | rows without bodies; filters: status class, route, actor, method, since/until, trace id |
+| `GET /v1/activity/requests` | read | rows without bodies; filters: `method`, `route`, `search`, `status` (class or code), `actor`, `ip`, `trace_id`, `webhooks`, `from`, `to`; `skip`, `limit` |
 | `GET /v1/activity/requests/{id}` | **admin** | with bodies |
-| `GET /v1/activity/events` | read | filters: source kind / id, event, since/until |
+| `GET /v1/activity/events` | read | filters: `source_kind`, `source_name`, `event`; `skip`, `limit` (no time range, no source id) |
 | `GET /v1/activity/attempts?notification_id=…` / `?channel=…` | read (bodies: admin) | attempts of one notification (in order) or one channel |
 
 Bodies need `admin` because alert text and payloads can carry personal data

@@ -37,17 +37,19 @@ failure mode.
 **Q.** A rule's `condition_expr` references a variable that doesn't
 exist (typo, deleted variable, never published).
 
-**A.** Two cases:
+**A.** A missing variable — with or without a dot (`room.temprature`,
+`temprature`), or one whose value is `null` — is bound to `None`. When the
+expression needs its value (a comparison, `NOT x`, `lower(x)`), the evaluation
+is a *missing input*: `rules.last_eval_error` reads `missing input: … (…)`,
+the API reports `eval_status = no_data`, the persist streak breaks, and it
+does **not** count towards auto-disable — the rule waits for the input. A
+fallback (`coalesce(x, 0)`) or a short-circuiting guard (`var_age("x") < 60
+AND x > 5`) still gives a result.
 
-- **A dotted name** (`room.temprature`) with no value is bound to `None`.
-  If the expression compares it, the evaluation is a *missing input*:
-  `rules.last_eval_error` reads `missing input: room.temprature (…)`, the
-  API reports `eval_status = no_data`, the persist streak breaks, and it
-  does **not** count towards auto-disable — the rule waits for the input.
-- **A plain name** that is not defined, or any other failure (type error,
-  rejected syntax), is an evaluation error: `rules.consecutive_eval_errors`
-  is incremented, `last_eval_error` is set, and a warning is logged at 5
-  in a row.
+An unknown function (refused when the rule is saved since 1.3.0), rejected
+syntax or any failure not caused by missing data is an evaluation error:
+`rules.consecutive_eval_errors` is incremented, `last_eval_error` is set, and
+a warning is logged at 5 in a row.
 
 The rule does NOT fire for that tick. After
 `ALERTD_EVAL_ERROR_DISABLE_THRESHOLD` (default 50) consecutive errors the

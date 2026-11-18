@@ -643,7 +643,7 @@ Fiecare regulă are `eval_status`, derivat din `consecutive_eval_errors` și
 | `eval_status` | Înseamnă | Contează la auto-dezactivare |
 |---------------|----------|------------------------------|
 | `ok` | Ultima evaluare a reușit | — |
-| `no_data` | Așteaptă un input: o variabilă cu punct pe care o citește nu are valoare (`last_eval_error` începe cu `missing input:`) | Nu |
+| `no_data` | Așteaptă date: o variabilă necesară (cu sau fără punct) nu are o valoare utilizabilă, sau istoricul necesar nu e încă disponibil (`last_eval_error` începe cu `missing input:`) | Nu |
 | `error` | Expresia eșuează (`NameError`, eroare de tip, …) | Da |
 
 O evaluare reușită șterge `last_eval_error`, inclusiv mesajul `no_data`. O

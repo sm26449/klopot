@@ -137,6 +137,16 @@ class TelegramService:
                     pass
 
     async def poll_once(self, key: str, config: dict[str, Any]) -> int:
+        """Fetch and process one batch of callback queries for one bot.
+
+        ``key`` is the bot identity derived from the resolved token in
+        ``config`` (a mismatch raises ValueError). Uses the persisted offset,
+        dropped after seven days without updates (Telegram re-randomises it).
+        Each update is stored before its action command is applied; a failed
+        callback answer never undoes a recorded action. Returns the number of
+        updates processed; an invalid batch or update raises ValueError, and
+        provider or processing errors propagate to the polling loop.
+        """
         token = resolve_secret(config, "bot_token", "bot_token_ref")
         if not token or bot_key(token) != key:
             raise ValueError("Telegram bot identity unavailable")
@@ -252,6 +262,15 @@ class TelegramService:
             await self.feedback_one(ident)
 
     async def feedback_one(self, ident: int) -> None:
+        """One attempt at a queued reply-markup update (removing the buttons).
+
+        Skips a command that is absent, not pending, not due yet or locked by
+        another worker. Uses the delivery's saved config and checks the bot
+        identity. A successful edit — "not modified" included — completes it;
+        a 400/401/403/404, missing credentials or the last attempt fails it;
+        any other Telegram error reschedules it with the outbox backoff. The
+        outcome is committed before the metric counts it.
+        """
         async with get_session_factory()() as session:
             command = (await session.execute(select(ChannelProviderCommand).where(
                 ChannelProviderCommand.id == ident, ChannelProviderCommand.state == "pending",

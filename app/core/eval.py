@@ -397,8 +397,9 @@ def _substitute_dots(expr: str, ctx: dict[str, Any]) -> tuple[str, dict[str, Any
             # (e.g. every sensor of a device that went to sleep), and NameError there
             # made the rule count eval errors towards auto-disable. With
             # None the usual ``var_age(...) < N and x > y`` short-circuits on
-            # the age guard; a rule that compares the None directly still
-            # raises a TypeError, so a genuine typo does not go silent.
+            # the age guard; an operation that needs the value raises a
+            # TypeError, which evaluate() reports as a missing input (no_data,
+            # not counted towards auto-disable) — undotted names alike.
             ph = f"__v{counter[0]}__"
             counter[0] += 1
             mapping[original] = ph

@@ -1,20 +1,18 @@
-"""Input adapter base class.
+"""Input adapter contract.
 
-Every input kind (mqtt, http_poll, webhook, schedule, sms_inbox,
-email_imap) inherits ``BaseInput``. The plugin API is intentionally
-small:
+Registered adapters (``app/inputs/__init__.py``): mqtt, http_poll, webhook,
+sms_inbox and alertmanager. The ``schedule`` and ``email_imap`` enum values
+have no adapter: schedule values are produced by the input manager itself.
 
-- ``async def start(on_value)`` — begin streaming values; the
-  callback is invoked per (topic, payload) the adapter receives.
-- ``async def stop()`` — clean shutdown.
-- ``def health()`` — snapshot for ``/v1/health`` and
+- Construct with keyword arguments ``name``, ``config`` and ``on_value``; the
+  async ``on_value(topic, payload, source_kind)`` callback receives raw
+  input, which the resolver (``app.core.variable_resolver``) maps into named
+  variables.
+- ``await start()`` begins work and returns promptly; ``await stop()`` cancels
+  and awaits owned tasks and closes resources.
+- ``health()`` returns a snapshot for ``/v1/health`` and
   ``/v1/inputs/{id}/health``.
-- ``async def update_topics(topics)`` — hot reload entry point.
-  MQTT uses this; other kinds may ignore.
-
-All adapters get plain (topic, payload, source_kind) on the
-callback. The downstream resolver (``app.core.variable_resolver``)
-maps that into the state cache.
+- ``await update_topics(topics)`` is an optional hot-reload hook (MQTT).
 """
 from __future__ import annotations
 

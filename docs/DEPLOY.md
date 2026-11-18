@@ -114,9 +114,13 @@ See `.env.example`. The main ones:
 
 > **Compose passes only listed variables.** `docker-compose.yml` hands the
 > `alertd` container the variables in its `environment:` list (plus
-> `secrets.env`). Every `ALERTD_*` setting of `app/config.py` is in that list
-> with the same default (`tests/test_compose_env.py` keeps them in step), so
-> setting one in `.env` is enough.
+> `secrets.env`). Every operator `ALERTD_*` setting of `app/config.py` is in
+> that list with the same default (`tests/test_compose_env.py` keeps them in
+> step), so setting one in `.env` is enough. Not passed on purpose:
+> `ALERTD_SERVICE_NAME`, `ALERTD_VERSION`, `ALERTD_DATABASE_ECHO` (metadata /
+> debug); `ALERTD_BIND_HOST` / `ALERTD_BIND_PORT` are fixed by the image's
+> server command (`0.0.0.0:5090`). Script options are not settings: see
+> `scripts/README.md`.
 
 | Var | Default | Purpose |
 |-----|---------|---------|
@@ -137,6 +141,10 @@ See `.env.example`. The main ones:
 | `ALERTD_LOG_LEVEL` | `INFO` | DEBUG/INFO/WARNING/ERROR |
 | `ALERTD_LOG_FORMAT` | `console` | `console` / `json` |
 | `ALERTD_TZ` | `UTC` | Timezone for hour_now()/in_window() |
+| `ALERTD_ACTIVITY_REFUSED_DAYS` | `1` | Days to keep refused anonymous requests (4xx, caller not let in) in the Activity log, without bodies; capped by the log retention unless an activity rule sets its own |
+| `ALERTD_SERVICE_NAME`, `ALERTD_VERSION` | `alertd`, package version | Metadata shown by `GET /v1/settings`; not passed by compose. The advertised version comes from the package |
+| `ALERTD_DATABASE_ECHO` | `false` | SQLAlchemy SQL logging, for debugging; not passed by compose — set it on the process (or a custom overlay) |
+| `ALERTD_BIND_HOST`, `ALERTD_BIND_PORT` | `0.0.0.0`, `5090` | Metadata only: the image's server command binds `0.0.0.0:5090`; change the command to change the listener |
 | `ALERTD_HISTORY_MAX_VARS` | `200` | Variables kept in memory for the history functions of rule expressions (`avg_over`, `delta`, …; ADR-0004), each with at most 10 000 exact change points (≈ 0.4 MB at the cap). Saving a rule, formula or import that would need more is refused |
 | `ALERTD_LATITUDE`, `ALERTD_LONGITUDE` | (empty) | Place of the install in degrees (north / east positive), for `sun_elevation()` and `is_daylight()` in rule conditions; without them those functions are an evaluation error |
 | `ALERTD_PV_POWER_VAR` | (empty) | **Deprecated.** Before migration 0030 every template's `require_pv_kw` compared against this one variable. Now each template names its own `gate_variable`; this value is read only by migration 0030 to convert existing templates, and when an old client writes `require_pv_kw` without a variable. |
@@ -320,11 +328,11 @@ backup:
   build: { dockerfile: Dockerfile.backup }
   environment:
     MYSQL_HOST: mysql
-    MYSQL_USER: alertd
-    MYSQL_PASSWORD: alertd
-    MYSQL_DATABASE: alertd
-    BACKUP_KEEP_DAYS: 30
-    BACKUP_CRON: "0 2 * * *"
+    MYSQL_USER: ${MYSQL_USER:-alertd}
+    MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}
+    MYSQL_DATABASE: ${MYSQL_DATABASE:-alertd}
+    BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-30}
+    BACKUP_CRON: ${BACKUP_CRON:-0 2 * * *}
   volumes:
     - ./backups:/backups
 ```
@@ -335,18 +343,18 @@ Restore (single dump file → fresh DB):
 # 1. Stop alertd so no writes interfere
 docker compose stop alertd
 
-# 2. Wipe and recreate the DB
-docker compose exec -T mysql \
-    mysql -u alertd -palertd \
-    -e "DROP DATABASE alertd; CREATE DATABASE alertd CHARACTER SET utf8mb4;"
+# 2. Restore — the dump drops and recreates the database itself
+#    (mysqldump --add-drop-database --databases); the password comes from
+#    the container's environment, never the command line.
+gzip -dc backups/<selected-backup>.sql.gz | \
+  docker compose exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" exec mysql --user="$MYSQL_USER"'
 
-# 3. Restore
-zcat backups/alertd-20260510T020000Z.sql.gz | \
-    docker compose exec -T mysql mysql -u alertd -palertd
-
-# 4. Bring alertd back
+# 3. Only after the restore succeeded, bring alertd back
 docker compose start alertd
 ```
+
+These commands target the bundled MySQL service and its configured user. With
+an external database, use that server's restore procedure and credentials.
 
 The dump uses `--single-transaction` for a consistent snapshot
 without locking writes; `--no-tablespaces` skips the global tablespace

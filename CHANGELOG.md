@@ -223,6 +223,17 @@ adheres to [Semantic Versioning](https://semver.org/).
     retried (a batch was lost, uncounted); a lasting failure is counted in
     `klopot_activity_dropped_total`.
   - The rule engine writes its last `last_evaluated_at` stamps on shutdown.
+  - **`POST /v1/fire` declares its error responses** (401, 403
+    `TYPE_NOT_ALLOWED`, 413, 422, 429) in the OpenAPI spec, with an
+    `ErrorDetail` whose `detail` may be a string, a list or an object: the
+    generated Python client failed to parse a domain 422 (a string). The
+    Python SDK's README is ours now (`X-API-Key`, a real `fire` example),
+    copied in by `scripts/generate_sdks.sh`.
+  - Documentation review (19 findings): every setting in `.env.example`,
+    script options in `scripts/README.md`, a working source-start in
+    `CONTRIBUTING.md`, restore without the old password, the right computed
+    variable YAML, activity filters, enum locations, missing-input semantics,
+    and the adapter / config / channel docstrings.
   - CI publishes an image only after the browser e2e **and** a new rules
     simulation job (MQTT) pass; the pack catalog ships in the wheel;
     `.dockerignore` keeps `private/`, `.audit/` and `node_modules/` out of the
