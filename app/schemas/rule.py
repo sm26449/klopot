@@ -80,7 +80,8 @@ class RuleRead(RuleBase):
         default=None,
         description="Where the rule is in its cycle at its last evaluation: inactive (condition false), "
                     "pending (true, persist_n not reached), firing (fired and still true; an incident rule: "
-                    "its incident is open), no_data, error. null until its first evaluation.",
+                    "its incident is open), no_data, error. null until its first evaluation, and after an edit "
+                    "of the condition until the new one is evaluated.",
     )
     run_state_since: datetime | None = None
     last_true_at: datetime | None = Field(default=None, description="When the condition last became true.")
