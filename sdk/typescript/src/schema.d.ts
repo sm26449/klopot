@@ -1179,6 +1179,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/rules/{rule_id}/instances": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The instances of a rule and their state
+         * @description A parametric rule (``for_each``, ADR-0005) runs once per value: each instance has its own run state, streak and last message. An ordinary rule has one instance, ``""``.
+         */
+        get: operations["rule_instances_v1_rules__rule_id__instances_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/rules/{rule_id}/test": {
         parameters: {
             query?: never;
@@ -2187,6 +2207,11 @@ export interface components {
             };
             /** Error */
             error?: string | null;
+            /**
+             * Instance
+             * @default
+             */
+            instance: string;
             /** Matched */
             matched: boolean;
             /** Missing Vars */
@@ -3244,6 +3269,13 @@ export interface components {
              */
             eval_interval_sec: number;
             /**
+             * For Each
+             * @description Parametric rule (ADR-0005): one parameter and its values, {"n": ["f1", "f2"]}. The rule runs once per value, {n} replaced in condition_expr, recovery_expr, vars_extract, template_type and resolved_template_type; the template sees n. null = an ordinary rule.
+             */
+            for_each?: {
+                [key: string]: string[];
+            } | null;
+            /**
              * Incident Enabled
              * @default false
              */
@@ -3279,6 +3311,26 @@ export interface components {
             trigger_summary?: string | null;
             /** Vars Extract */
             vars_extract?: string[];
+        };
+        /**
+         * RuleInstanceRead
+         * @description One instance of a rule (``GET /v1/rules/{id}/instances``).
+         */
+        RuleInstanceRead: {
+            /**
+             * Consecutive Match Count
+             * @default 0
+             */
+            consecutive_match_count: number;
+            /** Instance */
+            instance: string;
+            /** Last Eval Error */
+            last_eval_error?: string | null;
+            /** Last True At */
+            last_true_at?: string | null;
+            run_state?: components["schemas"]["RuleRunState"] | null;
+            /** Run State Since */
+            run_state_since?: string | null;
         };
         /** RulePreview */
         RulePreview: {
@@ -3324,6 +3376,13 @@ export interface components {
              * @default 0
              */
             fire_count_lifetime: number;
+            /**
+             * For Each
+             * @description Parametric rule (ADR-0005): one parameter and its values, {"n": ["f1", "f2"]}. The rule runs once per value, {n} replaced in condition_expr, recovery_expr, vars_extract, template_type and resolved_template_type; the template sees n. null = an ordinary rule.
+             */
+            for_each?: {
+                [key: string]: string[];
+            } | null;
             /** Id */
             id: number;
             /**
@@ -3399,6 +3458,12 @@ export interface components {
             /** Detail */
             detail?: string | null;
             from_state?: components["schemas"]["RuleRunState"] | null;
+            /**
+             * Instance
+             * @description The instance of a parametric rule; "" otherwise.
+             * @default
+             */
+            instance: string;
             to_state: components["schemas"]["RuleRunState"];
         };
         /** RuleUpdate */
@@ -3409,6 +3474,10 @@ export interface components {
             enabled?: boolean | null;
             /** Eval Interval Sec */
             eval_interval_sec?: number | null;
+            /** For Each */
+            for_each?: {
+                [key: string]: string[];
+            } | null;
             /** Incident Enabled */
             incident_enabled?: boolean | null;
             /** Inhibited By */
@@ -3823,6 +3892,8 @@ export interface components {
             context?: {
                 [key: string]: unknown;
             };
+            /** Instance */
+            instance?: string | null;
         };
         /** UserRead */
         UserRead: {
@@ -3848,6 +3919,12 @@ export interface components {
             context?: {
                 [key: string]: unknown;
             } | null;
+            /** For Each */
+            for_each?: {
+                [key: string]: string[];
+            } | null;
+            /** Instance */
+            instance?: string | null;
             /** Vars Extract */
             vars_extract?: string[] | null;
         };
@@ -6511,7 +6588,10 @@ export interface operations {
     };
     eval_now_v1_rules__rule_id__eval_now_post: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The instance of a parametric rule (default: the first) */
+                instance?: string | null;
+            };
             header?: never;
             path: {
                 rule_id: number;
@@ -6527,6 +6607,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EvalRuleResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rule_instances_v1_rules__rule_id__instances_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleInstanceRead"][];
                 };
             };
             /** @description Validation Error */
@@ -6579,6 +6690,8 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: number;
+                /** @description Only this instance of a parametric rule */
+                instance?: string | null;
             };
             header?: never;
             path: {

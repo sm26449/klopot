@@ -11,6 +11,8 @@ from ..types import UNSET, Unset
 from ..types import UNSET, Unset
 from typing import cast
 
+if TYPE_CHECKING:
+  from ..models.rule_create_for_each_type_0 import RuleCreateForEachType0
 
 
 
@@ -29,6 +31,9 @@ class RuleCreate:
             template_type (str):
             enabled (bool | Unset):  Default: True.
             eval_interval_sec (int | Unset):  Default: 10.
+            for_each (None | RuleCreateForEachType0 | Unset): Parametric rule (ADR-0005): one parameter and its values,
+                {"n": ["f1", "f2"]}. The rule runs once per value, {n} replaced in condition_expr, recovery_expr, vars_extract,
+                template_type and resolved_template_type; the template sees n. null = an ordinary rule.
             incident_enabled (bool | Unset):  Default: False.
             inhibited_by (list[str] | Unset):
             persist_n (int | Unset):  Default: 1.
@@ -46,6 +51,7 @@ class RuleCreate:
     template_type: str
     enabled: bool | Unset = True
     eval_interval_sec: int | Unset = 10
+    for_each: None | RuleCreateForEachType0 | Unset = UNSET
     incident_enabled: bool | Unset = False
     inhibited_by: list[str] | Unset = UNSET
     persist_n: int | Unset = 1
@@ -63,6 +69,7 @@ class RuleCreate:
 
 
     def to_dict(self) -> dict[str, Any]:
+        from ..models.rule_create_for_each_type_0 import RuleCreateForEachType0 # noqa: PLC0415
         condition_expr = self.condition_expr
 
         name = self.name
@@ -72,6 +79,14 @@ class RuleCreate:
         enabled = self.enabled
 
         eval_interval_sec = self.eval_interval_sec
+
+        for_each: dict[str, Any] | None | Unset
+        if isinstance(self.for_each, Unset):
+            for_each = UNSET
+        elif isinstance(self.for_each, RuleCreateForEachType0):
+            for_each = self.for_each.to_dict()
+        else:
+            for_each = self.for_each
 
         incident_enabled = self.incident_enabled
 
@@ -129,6 +144,8 @@ class RuleCreate:
             field_dict["enabled"] = enabled
         if eval_interval_sec is not UNSET:
             field_dict["eval_interval_sec"] = eval_interval_sec
+        if for_each is not UNSET:
+            field_dict["for_each"] = for_each
         if incident_enabled is not UNSET:
             field_dict["incident_enabled"] = incident_enabled
         if inhibited_by is not UNSET:
@@ -156,6 +173,7 @@ class RuleCreate:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
+        from ..models.rule_create_for_each_type_0 import RuleCreateForEachType0 # noqa: PLC0415
         d = dict(src_dict)
         condition_expr = d.pop("condition_expr")
 
@@ -166,6 +184,26 @@ class RuleCreate:
         enabled = d.pop("enabled", UNSET)
 
         eval_interval_sec = d.pop("eval_interval_sec", UNSET)
+
+        def _parse_for_each(data: object) -> None | RuleCreateForEachType0 | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            try:
+                if not isinstance(data, dict):
+                    raise TypeError()
+                for_each_type_0 = RuleCreateForEachType0.from_dict(data)
+
+
+
+                return for_each_type_0
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
+            return cast(None | RuleCreateForEachType0 | Unset, data)
+
+        for_each = _parse_for_each(d.pop("for_each", UNSET))
+
 
         incident_enabled = d.pop("incident_enabled", UNSET)
 
@@ -227,6 +265,7 @@ class RuleCreate:
             template_type=template_type,
             enabled=enabled,
             eval_interval_sec=eval_interval_sec,
+            for_each=for_each,
             incident_enabled=incident_enabled,
             inhibited_by=inhibited_by,
             persist_n=persist_n,

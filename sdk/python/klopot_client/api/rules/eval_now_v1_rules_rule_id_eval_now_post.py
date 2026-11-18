@@ -10,23 +10,38 @@ from ... import errors
 
 from ...models.eval_rule_result import EvalRuleResult
 from ...models.http_validation_error import HTTPValidationError
+from ...types import UNSET, Unset
 from typing import cast
 
 
 
 def _get_kwargs(
     rule_id: int,
+    *,
+    instance: None | str | Unset = UNSET,
 
 ) -> dict[str, Any]:
     
 
     
 
-    
+    params: dict[str, Any] = {}
+
+    json_instance: None | str | Unset
+    if isinstance(instance, Unset):
+        json_instance = UNSET
+    else:
+        json_instance = instance
+    params["instance"] = json_instance
+
+
+    params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
+
 
     _kwargs: dict[str, Any] = {
         "method": "post",
         "url": "/v1/rules/{rule_id}/eval-now".format(rule_id=quote(str(rule_id), safe=""),),
+        "params": params,
     }
 
 
@@ -68,6 +83,7 @@ def sync_detailed(
     rule_id: int,
     *,
     client: AuthenticatedClient,
+    instance: None | str | Unset = UNSET,
 
 ) -> Response[EvalRuleResult | HTTPValidationError]:
     """ Force evaluate rule against current state cache (no fire)
@@ -77,6 +93,7 @@ def sync_detailed(
 
     Args:
         rule_id (int):
+        instance (None | str | Unset): The instance of a parametric rule (default: the first)
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -89,6 +106,7 @@ def sync_detailed(
 
     kwargs = _get_kwargs(
         rule_id=rule_id,
+instance=instance,
 
     )
 
@@ -102,6 +120,7 @@ def sync(
     rule_id: int,
     *,
     client: AuthenticatedClient,
+    instance: None | str | Unset = UNSET,
 
 ) -> EvalRuleResult | HTTPValidationError | None:
     """ Force evaluate rule against current state cache (no fire)
@@ -111,6 +130,7 @@ def sync(
 
     Args:
         rule_id (int):
+        instance (None | str | Unset): The instance of a parametric rule (default: the first)
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -124,6 +144,7 @@ def sync(
     return sync_detailed(
         rule_id=rule_id,
 client=client,
+instance=instance,
 
     ).parsed
 
@@ -131,6 +152,7 @@ async def asyncio_detailed(
     rule_id: int,
     *,
     client: AuthenticatedClient,
+    instance: None | str | Unset = UNSET,
 
 ) -> Response[EvalRuleResult | HTTPValidationError]:
     """ Force evaluate rule against current state cache (no fire)
@@ -140,6 +162,7 @@ async def asyncio_detailed(
 
     Args:
         rule_id (int):
+        instance (None | str | Unset): The instance of a parametric rule (default: the first)
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -152,6 +175,7 @@ async def asyncio_detailed(
 
     kwargs = _get_kwargs(
         rule_id=rule_id,
+instance=instance,
 
     )
 
@@ -165,6 +189,7 @@ async def asyncio(
     rule_id: int,
     *,
     client: AuthenticatedClient,
+    instance: None | str | Unset = UNSET,
 
 ) -> EvalRuleResult | HTTPValidationError | None:
     """ Force evaluate rule against current state cache (no fire)
@@ -174,6 +199,7 @@ async def asyncio(
 
     Args:
         rule_id (int):
+        instance (None | str | Unset): The instance of a parametric rule (default: the first)
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -187,5 +213,6 @@ async def asyncio(
     return (await asyncio_detailed(
         rule_id=rule_id,
 client=client,
+instance=instance,
 
     )).parsed

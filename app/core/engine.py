@@ -39,15 +39,41 @@ from sqlalchemy import select, update
 
 from ..config import get_settings
 from ..db import get_session, get_session_factory
-from ..db.models import Incident, Rule, RuleRunState, RuleState, RuleTransition
+from ..db.models import Rule, RuleInstance, RuleRunState, RuleState, RuleTransition
 from ..utils.time import utc_now
 from . import dispatcher as dispatcher_module
 from . import eval as eval_module
 from . import gating as gating_module
 from . import incidents
+from .parametric import RuleView, instances
 from .state_cache import StateCache, get_state_cache
 
 logger = logging.getLogger(__name__)
+
+
+RuntimeKey = int | tuple[int, str]
+
+
+def _key(rule_id: int, instance: str) -> RuntimeKey:
+    """An ordinary rule's runtime is keyed by its id, an instance of a
+    parametric rule by (id, instance) — ADR-0005."""
+    return (rule_id, instance) if instance else rule_id
+
+
+def _rid(key: RuntimeKey) -> int:
+    return key[0] if isinstance(key, tuple) else key
+
+
+TruthyKey = str | tuple[str, str]
+
+
+def _tkey(name: str, instance: str) -> TruthyKey:
+    """Inhibition marker key: the rule's name, or (name, instance)."""
+    return (name, instance) if instance else name
+
+
+def _tname(key: TruthyKey) -> str:
+    return key[0] if isinstance(key, tuple) else key
 
 
 # History rows kept in memory while the database cannot be written; past it
@@ -63,7 +89,7 @@ class _RuleRuntime:
     survivability; we read it on startup, write it on every change.
     """
 
-    rule: Rule
+    rule: Any                          # a RuleView (the rule as this instance sees it) or a Rule
     next_eval_at: float = 0.0           # monotonic seconds
     consecutive_match_count: int = 0
     recovery_match_count: int = 0
@@ -115,6 +141,11 @@ class _RuleRuntime:
     # evaluation: the next state is recorded as a change even when equal, and
     # a "firing" of the old expression is not carried over (RV-04).
     reconfigured: bool = False
+    # The instance of a parametric rule (ADR-0005); "" for an ordinary rule.
+    instance: str = ""
+    # (errors, message) as last written for an instance (its row and the
+    # rule's summary); None = not written yet.
+    written_error: tuple[int, str | None] | None = None
 
 
 def rule_context(
@@ -173,13 +204,14 @@ class RuleEngine:
         self._task: asyncio.Task[None] | None = None
         self._stop_evt = asyncio.Event()
         self._cache: StateCache = get_state_cache()
-        self._rules: dict[int, _RuleRuntime] = {}
+        # One runtime per (rule id, instance) — ADR-0005; "" = ordinary rule.
+        self._rules: dict[RuntimeKey, _RuleRuntime] = {}
         # rule name → runtime (inhibition lookups) and rule name →
         # last truthy eval (monotonic). In-memory only: after a
         # restart, inhibition kicks in again on the inhibitor's first
         # truthy tick (brief non-inhibited window, documented).
         self._by_name: dict[str, _RuleRuntime] = {}
-        self._last_truthy: dict[str, float] = {}
+        self._last_truthy: dict[TruthyKey, float] = {}   # name, or (name, instance)
         self._reload_lock = asyncio.Lock()
         # Accumulates {rule_id: utc_now()} from _touch_evaluated_at;
         # flushed in batch by _flush_touches() every _TOUCH_FLUSH_SEC.
@@ -249,14 +281,21 @@ class RuleEngine:
                 persisted: dict[int, RuleState] = {
                     rs.rule_id: rs for rs in rule_state_rows
                 }
+                # The instances of parametric rules keep theirs apart (ADR-0005).
+                instance_rows: dict[tuple[int, str], RuleInstance] = {
+                    (ri.rule_id, ri.instance): ri
+                    for ri in (await s.execute(select(RuleInstance))).scalars().all()
+                }
 
                 # Preserve runtime state for rules we already track
                 old = self._rules
-                new: dict[int, _RuleRuntime] = {}
+                new: dict[RuntimeKey, _RuleRuntime] = {}
                 now = _time.monotonic()
-                for r in rules:
-                    prev = old.get(r.id)
-                    db_state = persisted.get(r.id)
+                for r, inst in [(rule, i) for rule in rules for i in instances(rule.for_each)]:
+                    view = RuleView(r, inst)
+                    prev = old.get(_key(r.id, inst))
+                    ist = instance_rows.get((r.id, inst)) if inst else None
+                    db_state: RuleState | RuleInstance | None = ist if inst else persisted.get(r.id)
                     persisted_row: tuple[int, int, int] | None = None
                     if prev is not None:
                         # In-process reload — trust live counters, UNLESS
@@ -266,11 +305,12 @@ class RuleEngine:
                         # fresh (audit A17) — including its inhibition
                         # marker, dropped below.
                         reconfigured = (
-                            prev.rule.condition_expr != r.condition_expr
+                            prev.rule.condition_expr != view.condition_expr
                             or prev.state_epoch != (r.state_epoch or 0)
+                            or (prev.rule.for_each or None) != (r.for_each or None)
                             or (
                                 bool(prev.rule.incident_enabled or r.incident_enabled)
-                                and incidents.lifecycle_config(prev.rule) != incidents.lifecycle_config(r)
+                                and incidents.lifecycle_config(prev.rule) != incidents.lifecycle_config(view)
                             )
                         )
                         cmc = 0 if reconfigured else prev.consecutive_match_count
@@ -284,7 +324,7 @@ class RuleEngine:
                                prev.pending_transitions, prev.transition_times, prev.transitions_skipped,
                                reconfigured or prev.reconfigured)
                         if reconfigured:
-                            self._last_truthy.pop(r.name, None)
+                            self._last_truthy.pop(_tkey(r.name, inst), None)
                     else:
                         # Cold start — restore from rule_state row if
                         # any, fall back to Rule.consecutive_eval_errors
@@ -310,8 +350,11 @@ class RuleEngine:
                         # a since = changed and not evaluated yet, even across
                         # a restart (RV-04). A streak stored under an older
                         # epoch says the same.
-                        stored = (r.run_state, r.run_state_since, r.last_true_at)
-                        changed = (r.run_state is None and r.run_state_since is not None) or (
+                        if inst:
+                            stored = (ist.run_state, ist.run_state_since, ist.last_true_at) if ist else (None, None, None)
+                        else:
+                            stored = (r.run_state, r.run_state_since, r.last_true_at)
+                        changed = (stored[0] is None and stored[1] is not None) or (
                             db_state is not None and db_state.state_epoch != (r.state_epoch or 0))
                         run = (*stored, stored, [], deque(), 0, changed)
                         # last_match_at lives in DB as wall-clock UTC
@@ -324,11 +367,16 @@ class RuleEngine:
                         lma = None
                         cee = r.consecutive_eval_errors or 0
                         lee = r.last_eval_error
+                        if inst:
+                            # The rule row holds the instances' summary; the
+                            # instance's own message is on its row.
+                            lee = ist.last_eval_error if ist else None
+                            cee = cee if lee and not lee.startswith(eval_module.MISSING_INPUT_PREFIX) else 0
                         # Only real errors count; a missing-input gap
                         # leaves the counter at 0, so it opens no event.
                         eeo = cee > 0
-                    new[r.id] = _RuleRuntime(
-                        rule=r,
+                    new[_key(r.id, inst)] = _RuleRuntime(
+                        rule=view, instance=inst,
                         # Stagger initial evals so they don't all fire at t+0
                         next_eval_at=(prev.next_eval_at if prev else now + (r.id % 5)),
                         consecutive_match_count=cmc,
@@ -345,18 +393,18 @@ class RuleEngine:
                     )
                 self._rules = new
                 self._by_name = {rt.rule.name: rt for rt in new.values()}
-                # The history the enabled rules look back on (ADR-0004).
+                # The history the enabled rules look back on (ADR-0004), as
+                # each instance sees it.
                 from .history import get_history_store, merge_needs
                 get_history_store().set_needs("rules", merge_needs(
-                    e for r in rules for e in (r.condition_expr, r.recovery_expr)))
+                    e for rt in new.values() for e in (rt.rule.condition_expr, rt.rule.recovery_expr)))
                 # Drop truthy markers for rules that no longer exist
                 # (renamed/deleted) so they can't inhibit forever.
-                self._last_truthy = {
-                    k: v for k, v in self._last_truthy.items()
-                    if k in self._by_name
-                }
-                restored = sum(1 for r in rules
-                               if old.get(r.id) is None and persisted.get(r.id))
+                live = {_tkey(rt.rule.name, rt.instance) for rt in new.values()}
+                self._last_truthy = {k: v for k, v in self._last_truthy.items() if k in live}
+                restored = sum(1 for key in new
+                               if old.get(key) is None
+                               and (instance_rows.get(key) if isinstance(key, tuple) else persisted.get(key)))
                 logger.info(
                     "Engine: %d rules loaded (restored persist counters "
                     "for %d cold-start rules from rule_state)",
@@ -436,7 +484,7 @@ class RuleEngine:
         stale by the time we evaluate or fire it, so re-checking identity here
         stops a disabled/reconfigured rule from firing from stale work (B-05).
         """
-        return self._rules.get(rt.rule.id) is rt and rt.rule.enabled
+        return self._rules.get(_key(rt.rule.id, rt.instance)) is rt and rt.rule.enabled
 
     def _remove_runtime(self, rt: _RuleRuntime) -> None:
         """Drop a rule runtime from every index atomically (audit F10).
@@ -445,9 +493,12 @@ class RuleEngine:
         name-resolvable, or usable as an inhibitor. A later explicit
         re-enable goes through ``reload`` which rebuilds the indexes.
         """
-        self._rules.pop(rt.rule.id, None)
+        # Every instance: the rule as a whole is disabled.
+        for key in [k for k in self._rules if _rid(k) == rt.rule.id]:
+            self._rules.pop(key, None)
         self._by_name.pop(rt.rule.name, None)
-        self._last_truthy.pop(rt.rule.name, None)
+        for mark in [k for k in self._last_truthy if _tname(k) == rt.rule.name]:
+            self._last_truthy.pop(mark, None)
 
     async def _eval_rule(self, rt: _RuleRuntime, *, now: float, evaluator: Any = None) -> None:
         """Evaluate one rule against the current state cache. ``evaluator`` is
@@ -466,10 +517,7 @@ class RuleEngine:
         recovery_matches = result.ok and not bool(result.value)
         active_incident = False
         if rt.rule.incident_enabled and recovery_matches:
-            async with get_session_factory()() as session:
-                active_incident = (await session.execute(select(Incident.id).where(
-                    Incident.active_rule_id == rt.rule.id,
-                ))).scalar_one_or_none() is not None
+            active_incident = await self._incident_open(rt)
             if not self._is_current(rt):
                 return
         if active_incident and rt.rule.recovery_expr:
@@ -595,13 +643,13 @@ class RuleEngine:
             # explicit false, so a rule that just evaluated false must stop
             # inhibiting its dependents right away.
             await self._reset_match_streak(rt)
-            self._last_truthy.pop(rt.rule.name, None)
+            self._last_truthy.pop(_tkey(rt.rule.name, rt.instance), None)
             rt.false_since_fire = True
             await self._set_run_state(rt, RuleRunState.inactive)
             return
 
         # Match!
-        self._last_truthy[rt.rule.name] = now  # inhibition marker
+        self._last_truthy[_tkey(rt.rule.name, rt.instance)] = now  # inhibition marker
         rt.consecutive_match_count += 1
         rt.last_match_at = now
         await self._persist_state(rt)
@@ -676,7 +724,7 @@ class RuleEngine:
         if not self._is_current(rt):
             return
         if firing:
-            self._last_truthy[rt.rule.name] = now
+            self._last_truthy[_tkey(rt.rule.name, rt.instance)] = now
             rt.last_match_at = now
             rt.recovery_match_count = 0
             rt.consecutive_match_count += 1
@@ -692,7 +740,7 @@ class RuleEngine:
                     await incidents.fire_rule(
                         session, rt.rule, rt.state_epoch,
                         self._build_dispatch_context(rt.rule, context),
-                        self._active_inhibitor(rt, now),
+                        self._active_inhibitor(rt, now), instance=rt.instance,
                     )
                     await session.commit()
                     break
@@ -704,21 +752,21 @@ class RuleEngine:
         still_open = active
         if not active:
             rt.recovery_match_count = 0
-            self._last_truthy.pop(rt.rule.name, None)
+            self._last_truthy.pop(_tkey(rt.rule.name, rt.instance), None)
         else:
             # Hysteresis keeps the incident active between its two thresholds.
-            self._last_truthy[rt.rule.name] = now
+            self._last_truthy[_tkey(rt.rule.name, rt.instance)] = now
             rt.recovery_match_count = rt.recovery_match_count + 1 if recovery else 0
             if rt.recovery_match_count >= rt.rule.recovery_persist_n:
                 async for session in get_session():
                     await incidents.recover_rule(
                         session, rt.rule, rt.state_epoch,
-                        self._build_dispatch_context(rt.rule, context),
+                        self._build_dispatch_context(rt.rule, context), instance=rt.instance,
                     )
                     await session.commit()
                     break
                 rt.recovery_match_count = 0
-                self._last_truthy.pop(rt.rule.name, None)
+                self._last_truthy.pop(_tkey(rt.rule.name, rt.instance), None)
                 still_open = False
         await self._persist_state(rt)
         # Between the two thresholds the incident is still open: firing.
@@ -738,9 +786,7 @@ class RuleEngine:
 
     async def _incident_open(self, rt: _RuleRuntime) -> bool:
         async with get_session_factory()() as session:
-            return (await session.execute(select(Incident.id).where(
-                Incident.active_rule_id == rt.rule.id,
-            ))).scalar_one_or_none() is not None
+            return await incidents.has_active_incident(session, rt.rule.id, rt.instance)
 
     async def _set_run_state(self, rt: _RuleRuntime, state: RuleRunState, detail: str | None = None) -> None:
         """Note the rule's run state (review RL-32) and write it when it is not
@@ -787,15 +833,20 @@ class RuleEngine:
                 detail = (f"{note}; {detail}" if detail else note)[:255]
                 skipped = 0
             rows.append(RuleTransition(rule_id=rt.rule.id, at=at, from_state=from_state,
-                                       to_state=to_state, detail=detail))
+                                       to_state=to_state, detail=detail, instance=rt.instance))
+        summary = self._run_summary(rt) if rt.instance else current
         try:
             async with get_session_factory()() as s:
                 s.add_all(rows)
-                await s.execute(update(Rule).where(Rule.id == rt.rule.id).values(
-                    run_state=current[0], run_state_since=current[1], last_true_at=current[2],
-                    # Engine bookkeeping is not an edit of the rule.
-                    updated_at=Rule.updated_at,
-                ))
+                if rt.instance:
+                    row = await self._instance_row(s, rt)
+                    row.run_state, row.run_state_since, row.last_true_at = current
+                if summary != (rt.rule.run_state, rt.rule.run_state_since, rt.rule.last_true_at) or not rt.instance:
+                    await s.execute(update(Rule).where(Rule.id == rt.rule.id).values(
+                        run_state=summary[0], run_state_since=summary[1], last_true_at=summary[2],
+                        # Engine bookkeeping is not an edit of the rule.
+                        updated_at=Rule.updated_at,
+                    ))
                 await s.commit()
         except Exception:
             # Kept in memory: the next evaluation writes it again.
@@ -806,6 +857,22 @@ class RuleEngine:
         rt.transitions_skipped = skipped
         rt.pending_transitions.clear()
         rt.persisted_run = current
+        if rt.instance:
+            rt.rule.run_state, rt.rule.run_state_since, rt.rule.last_true_at = summary
+
+    # Most urgent first: the rule's summary of its instances (ADR-0005).
+    _URGENCY = ("error", "firing", "pending", "no_data", "inactive")
+
+    def _run_summary(self, rt: _RuleRuntime) -> tuple[str | None, datetime | None, datetime | None]:
+        """(state, since, last true) of a parametric rule: the most urgent
+        instance state, since when the summary has been that, and the latest
+        time any instance became true."""
+        siblings = self._siblings(rt)
+        states = [x.run_state for x in siblings if x.run_state in self._URGENCY]
+        state = min(states, key=self._URGENCY.index) if states else None
+        since = rt.rule.run_state_since if state == rt.rule.run_state else (rt.run_state_since or utc_now())
+        trues = [x.last_true_at for x in siblings if x.last_true_at]
+        return state, since, max(trues) if trues else None
 
     async def _template_throttled(self, template_type: str) -> bool:
         """True while the template's min_repeat window is still open."""
@@ -852,12 +919,14 @@ class RuleEngine:
             inhibitor = self._by_name.get(name)
             if inhibitor is None:
                 continue
-            t = self._last_truthy.get(name)
-            if t is None:
+            # Active if any of its instances is (ADR-0005).
+            marks = [v for k, v in self._last_truthy.items() if _tname(k) == name]
+            if not marks:
                 continue
+            t = max(marks)
             grace = 2 * inhibitor.rule.eval_interval_sec + 5
             if (now - t) <= grace:
-                return name
+                return str(name)
         return None
 
     async def _fire_meta_auto_disabled(
@@ -903,23 +972,33 @@ class RuleEngine:
 
     # ── Helpers ───────────────────────────────────────────────────
 
-    def _build_context(self, rule: Rule) -> dict[str, Any]:
+    def _build_context(self, rule: Rule | RuleView) -> dict[str, Any]:
         """The rule's evaluation context — see :func:`rule_context`. Rules
         that need graceful degradation use ``var_age("name")``, which reads
         the state cache directly (bypassing the context)."""
         return rule_context(self._cache, rule.vars_extract, rule.condition_expr, rule.recovery_expr)
 
-    def _build_dispatch_context(self, rule: Rule, eval_ctx: dict[str, Any]) -> dict[str, Any]:
-        """Context passed to the template renderer. Same as eval_ctx
-        for now; later we may add ``_meta`` fields like ``rule_id``,
-        ``fired_at``, ``state_age_sec``."""
-        return dict(eval_ctx)
+    def _build_dispatch_context(self, rule: Rule | RuleView, eval_ctx: dict[str, Any]) -> dict[str, Any]:
+        """Context passed to the template renderer: the evaluation context,
+        plus the instance's parameter (``{"n": "f1"}``, ADR-0005) — which also
+        keeps two instances' fires apart in de-duplication."""
+        return {**eval_ctx, **getattr(rule, "binding", {})}
 
     async def _persist_state(self, rt: _RuleRuntime) -> None:
         """Mirror in-memory runtime to ``rule_state`` — only when the counters
         or the epoch changed since the last write (review RL-12)."""
         key = (rt.consecutive_match_count, rt.recovery_match_count, rt.state_epoch)
         if rt.persisted == key:
+            return
+        if rt.instance:
+            async for s in get_session():
+                row = await self._instance_row(s, rt)
+                row.consecutive_match_count = rt.consecutive_match_count
+                row.recovery_match_count = rt.recovery_match_count
+                row.state_epoch = rt.state_epoch
+                await s.commit()
+                rt.persisted = key
+                break
             return
         async for s in get_session():
             existing = (
@@ -949,6 +1028,48 @@ class RuleEngine:
             rt.persisted = key
             break
 
+    @staticmethod
+    async def _instance_row(s: Any, rt: _RuleRuntime) -> RuleInstance:
+        """The ``rule_instances`` row of ``rt`` in session ``s`` (created)."""
+        row: RuleInstance | None = await s.get(RuleInstance, (rt.rule.id, rt.instance))
+        if row is None:
+            row = RuleInstance(rule_id=rt.rule.id, instance=rt.instance,
+                               consecutive_match_count=0, recovery_match_count=0, state_epoch=rt.state_epoch)
+            s.add(row)
+        return row
+
+    def _siblings(self, rt: _RuleRuntime) -> list[_RuleRuntime]:
+        """Every live instance of ``rt``'s rule (``rt`` included)."""
+        out = [x for k, x in self._rules.items() if _rid(k) == rt.rule.id]
+        return out if rt in out else [*out, rt]
+
+    async def _record_instance_error(self, rt: _RuleRuntime, error: str | None, *, real: bool) -> None:
+        """An instance's message goes on its row; the rule row gets the
+        summary: the highest error count of its instances and the first
+        failing instance's message, ``[f4] missing input: …`` (ADR-0005)."""
+        if rt.written_error == (rt.consecutive_eval_errors, error):
+            return
+        want_open = bool(error) and real
+        if want_open != rt.error_event_open:
+            from .activity import record_event
+            record_event(source_kind="rule", source_id=rt.rule.id, source_name=getattr(rt.rule, "display_name", rt.rule.name),
+                         event="eval_error" if want_open else "eval_recovered", detail=error if want_open else None)
+            rt.error_event_open = want_open
+        rt.last_eval_error = error
+        siblings = self._siblings(rt)
+        errors = max(x.consecutive_eval_errors for x in siblings)
+        failing = sorted((x.instance, x.last_eval_error) for x in siblings if x.last_eval_error)
+        summary = f"[{failing[0][0]}] {failing[0][1]}" if failing else None
+        rt.rule.consecutive_eval_errors = errors
+        async for s in get_session():
+            row = await self._instance_row(s, rt)
+            row.last_eval_error = error
+            await s.execute(update(Rule).where(Rule.id == rt.rule.id).values(
+                consecutive_eval_errors=errors, last_eval_error=summary, updated_at=Rule.updated_at))
+            await s.commit()
+            break
+        rt.written_error = (rt.consecutive_eval_errors, error)
+
     async def _record_eval_error(self, rt: _RuleRuntime, error: str | None, *, real: bool = True) -> None:
         """Record eval error count + last error message on the Rule row.
 
@@ -958,6 +1079,9 @@ class RuleEngine:
         the same text every tick). ``real=False`` is a missing-input gap:
         stored on the row but never an activity event (a restart would
         otherwise log an error/recovered pair for every rule)."""
+        if rt.instance:
+            await self._record_instance_error(rt, error, real=real)
+            return
         persisted = (rt.rule.consecutive_eval_errors or 0, rt.last_eval_error)
         if persisted == (rt.consecutive_eval_errors, error):
             return

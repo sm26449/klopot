@@ -13,6 +13,8 @@ from ..models.rule_run_state import RuleRunState
 from ..types import UNSET, Unset
 from typing import cast
 
+if TYPE_CHECKING:
+  from ..models.rule_read_for_each_type_0 import RuleReadForEachType0
 
 
 
@@ -38,6 +40,9 @@ class RuleRead:
             enabled (bool | Unset):  Default: True.
             eval_interval_sec (int | Unset):  Default: 10.
             fire_count_lifetime (int | Unset):  Default: 0.
+            for_each (None | RuleReadForEachType0 | Unset): Parametric rule (ADR-0005): one parameter and its values, {"n":
+                ["f1", "f2"]}. The rule runs once per value, {n} replaced in condition_expr, recovery_expr, vars_extract,
+                template_type and resolved_template_type; the template sees n. null = an ordinary rule.
             incident_enabled (bool | Unset):  Default: False.
             inhibited_by (list[str] | Unset):
             last_eval_error (None | str | Unset):
@@ -70,6 +75,7 @@ class RuleRead:
     enabled: bool | Unset = True
     eval_interval_sec: int | Unset = 10
     fire_count_lifetime: int | Unset = 0
+    for_each: None | RuleReadForEachType0 | Unset = UNSET
     incident_enabled: bool | Unset = False
     inhibited_by: list[str] | Unset = UNSET
     last_eval_error: None | str | Unset = UNSET
@@ -93,6 +99,7 @@ class RuleRead:
 
 
     def to_dict(self) -> dict[str, Any]:
+        from ..models.rule_read_for_each_type_0 import RuleReadForEachType0 # noqa: PLC0415
         condition_expr = self.condition_expr
 
         created_at: None | str
@@ -116,6 +123,14 @@ class RuleRead:
         eval_interval_sec = self.eval_interval_sec
 
         fire_count_lifetime = self.fire_count_lifetime
+
+        for_each: dict[str, Any] | None | Unset
+        if isinstance(self.for_each, Unset):
+            for_each = UNSET
+        elif isinstance(self.for_each, RuleReadForEachType0):
+            for_each = self.for_each.to_dict()
+        else:
+            for_each = self.for_each
 
         incident_enabled = self.incident_enabled
 
@@ -219,6 +234,8 @@ class RuleRead:
             field_dict["eval_interval_sec"] = eval_interval_sec
         if fire_count_lifetime is not UNSET:
             field_dict["fire_count_lifetime"] = fire_count_lifetime
+        if for_each is not UNSET:
+            field_dict["for_each"] = for_each
         if incident_enabled is not UNSET:
             field_dict["incident_enabled"] = incident_enabled
         if inhibited_by is not UNSET:
@@ -258,6 +275,7 @@ class RuleRead:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
+        from ..models.rule_read_for_each_type_0 import RuleReadForEachType0 # noqa: PLC0415
         d = dict(src_dict)
         condition_expr = d.pop("condition_expr")
 
@@ -295,6 +313,26 @@ class RuleRead:
         eval_interval_sec = d.pop("eval_interval_sec", UNSET)
 
         fire_count_lifetime = d.pop("fire_count_lifetime", UNSET)
+
+        def _parse_for_each(data: object) -> None | RuleReadForEachType0 | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            try:
+                if not isinstance(data, dict):
+                    raise TypeError()
+                for_each_type_0 = RuleReadForEachType0.from_dict(data)
+
+
+
+                return for_each_type_0
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
+            return cast(None | RuleReadForEachType0 | Unset, data)
+
+        for_each = _parse_for_each(d.pop("for_each", UNSET))
+
 
         incident_enabled = d.pop("incident_enabled", UNSET)
 
@@ -432,6 +470,7 @@ class RuleRead:
             enabled=enabled,
             eval_interval_sec=eval_interval_sec,
             fire_count_lifetime=fire_count_lifetime,
+            for_each=for_each,
             incident_enabled=incident_enabled,
             inhibited_by=inhibited_by,
             last_eval_error=last_eval_error,

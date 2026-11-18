@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.eval import display_names
+from ..core.parametric import RuleView, instances
 from ..db.models import Rule, Variable, VariableSource
 
 
@@ -36,7 +37,12 @@ def vars_read(vars_extract: list[str] | None, *expressions: str | None) -> set[s
 
 
 def rule_vars(rule: Rule) -> set[str]:
-    return vars_read(rule.vars_extract, rule.condition_expr, rule.recovery_expr)
+    """What the rule reads — every instance of a parametric rule (ADR-0005)."""
+    names: set[str] = set()
+    for inst in instances(rule.for_each):
+        view = RuleView(rule, inst)
+        names |= vars_read(view.vars_extract, view.condition_expr, view.recovery_expr)
+    return names
 
 
 def computed_vars(var: Variable) -> set[str]:

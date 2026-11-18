@@ -673,6 +673,19 @@ sărite (`run_state` e mereu la zi). După editarea condiției, starea următoar
 se înregistrează ca schimbare cu `detail: "rule changed"`, iar noua condiție
 trece prin `pending` înainte de `firing`.
 
+### Reguli parametrice (`for_each`, [ADR-0005](adr/0005-parametric-rules.md))
+
+`"for_each": {"n": ["f1", "f2", "f3", "f4"]}` pe o regulă o rulează o dată
+pentru fiecare valoare: `{n}` se înlocuiește în `condition_expr`,
+`recovery_expr`, `vars_extract`, `template_type` și `resolved_template_type`,
+iar contextul template-ului primește `n`. Un parametru, cel mult 50 de valori;
+expresia fiecărei instanțe se verifică la salvare și la import. Fiecare
+instanță are contor, stare, incident și notificări proprii; `run_state` al
+regulii e cea mai urgentă stare a instanțelor.
+`GET /v1/rules/{id}/instances`, `transitions?instance=`, `eval-now?instance=`,
+`validate` cu `for_each` și `instance`. Schimbarea lui `for_each` e o
+reconfigurare: instanțele o iau de la capăt.
+
 ### „Ce-ar fi dacă”: `POST /v1/rules/validate` cu `context`
 
 `context` (opțional, cel mult 200 de chei / 64 KB) se pune peste valorile live

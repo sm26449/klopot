@@ -33,12 +33,14 @@ class RuleTransitionRead:
                 its incident is open) and still holds.
             detail (None | str | Unset):
             from_state (None | RuleRunState | Unset):
+            instance (str | Unset): The instance of a parametric rule; "" otherwise. Default: ''.
      """
 
     at: None | str
     to_state: RuleRunState
     detail: None | str | Unset = UNSET
     from_state: None | RuleRunState | Unset = UNSET
+    instance: str | Unset = ''
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
 
@@ -65,6 +67,8 @@ class RuleTransitionRead:
         else:
             from_state = self.from_state
 
+        instance = self.instance
+
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
@@ -76,6 +80,8 @@ class RuleTransitionRead:
             field_dict["detail"] = detail
         if from_state is not UNSET:
             field_dict["from_state"] = from_state
+        if instance is not UNSET:
+            field_dict["instance"] = instance
 
         return field_dict
 
@@ -127,11 +133,14 @@ class RuleTransitionRead:
         from_state = _parse_from_state(d.pop("from_state", UNSET))
 
 
+        instance = d.pop("instance", UNSET)
+
         rule_transition_read = cls(
             at=at,
             to_state=to_state,
             detail=detail,
             from_state=from_state,
+            instance=instance,
         )
 
 

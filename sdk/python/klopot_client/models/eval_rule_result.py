@@ -31,6 +31,7 @@ class EvalRuleResult:
             context (EvalRuleResultContext):
             matched (bool):
             error (None | str | Unset):
+            instance (str | Unset):  Default: ''.
             missing_vars (list[str] | None | Unset):
      """
 
@@ -38,6 +39,7 @@ class EvalRuleResult:
     context: EvalRuleResultContext
     matched: bool
     error: None | str | Unset = UNSET
+    instance: str | Unset = ''
     missing_vars: list[str] | None | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
@@ -59,6 +61,8 @@ class EvalRuleResult:
         else:
             error = self.error
 
+        instance = self.instance
+
         missing_vars: list[str] | None | Unset
         if isinstance(self.missing_vars, Unset):
             missing_vars = UNSET
@@ -79,6 +83,8 @@ class EvalRuleResult:
         })
         if error is not UNSET:
             field_dict["error"] = error
+        if instance is not UNSET:
+            field_dict["instance"] = instance
         if missing_vars is not UNSET:
             field_dict["missing_vars"] = missing_vars
 
@@ -109,6 +115,8 @@ class EvalRuleResult:
         error = _parse_error(d.pop("error", UNSET))
 
 
+        instance = d.pop("instance", UNSET)
+
         def _parse_missing_vars(data: object) -> list[str] | None | Unset:
             if data is None:
                 return data
@@ -132,6 +140,7 @@ class EvalRuleResult:
             context=context,
             matched=matched,
             error=error,
+            instance=instance,
             missing_vars=missing_vars,
         )
 

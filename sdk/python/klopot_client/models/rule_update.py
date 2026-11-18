@@ -11,6 +11,8 @@ from ..types import UNSET, Unset
 from ..types import UNSET, Unset
 from typing import cast
 
+if TYPE_CHECKING:
+  from ..models.rule_update_for_each_type_0 import RuleUpdateForEachType0
 
 
 
@@ -27,6 +29,7 @@ class RuleUpdate:
             condition_expr (None | str | Unset):
             enabled (bool | None | Unset):
             eval_interval_sec (int | None | Unset):
+            for_each (None | RuleUpdateForEachType0 | Unset):
             incident_enabled (bool | None | Unset):
             inhibited_by (list[str] | None | Unset):
             persist_n (int | None | Unset):
@@ -43,6 +46,7 @@ class RuleUpdate:
     condition_expr: None | str | Unset = UNSET
     enabled: bool | None | Unset = UNSET
     eval_interval_sec: int | None | Unset = UNSET
+    for_each: None | RuleUpdateForEachType0 | Unset = UNSET
     incident_enabled: bool | None | Unset = UNSET
     inhibited_by: list[str] | None | Unset = UNSET
     persist_n: int | None | Unset = UNSET
@@ -61,6 +65,7 @@ class RuleUpdate:
 
 
     def to_dict(self) -> dict[str, Any]:
+        from ..models.rule_update_for_each_type_0 import RuleUpdateForEachType0 # noqa: PLC0415
         condition_expr: None | str | Unset
         if isinstance(self.condition_expr, Unset):
             condition_expr = UNSET
@@ -78,6 +83,14 @@ class RuleUpdate:
             eval_interval_sec = UNSET
         else:
             eval_interval_sec = self.eval_interval_sec
+
+        for_each: dict[str, Any] | None | Unset
+        if isinstance(self.for_each, Unset):
+            for_each = UNSET
+        elif isinstance(self.for_each, RuleUpdateForEachType0):
+            for_each = self.for_each.to_dict()
+        else:
+            for_each = self.for_each
 
         incident_enabled: bool | None | Unset
         if isinstance(self.incident_enabled, Unset):
@@ -164,6 +177,8 @@ class RuleUpdate:
             field_dict["enabled"] = enabled
         if eval_interval_sec is not UNSET:
             field_dict["eval_interval_sec"] = eval_interval_sec
+        if for_each is not UNSET:
+            field_dict["for_each"] = for_each
         if incident_enabled is not UNSET:
             field_dict["incident_enabled"] = incident_enabled
         if inhibited_by is not UNSET:
@@ -193,6 +208,7 @@ class RuleUpdate:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
+        from ..models.rule_update_for_each_type_0 import RuleUpdateForEachType0 # noqa: PLC0415
         d = dict(src_dict)
         def _parse_condition_expr(data: object) -> None | str | Unset:
             if data is None:
@@ -222,6 +238,26 @@ class RuleUpdate:
             return cast(int | None | Unset, data)
 
         eval_interval_sec = _parse_eval_interval_sec(d.pop("eval_interval_sec", UNSET))
+
+
+        def _parse_for_each(data: object) -> None | RuleUpdateForEachType0 | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            try:
+                if not isinstance(data, dict):
+                    raise TypeError()
+                for_each_type_0 = RuleUpdateForEachType0.from_dict(data)
+
+
+
+                return for_each_type_0
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
+            return cast(None | RuleUpdateForEachType0 | Unset, data)
+
+        for_each = _parse_for_each(d.pop("for_each", UNSET))
 
 
         def _parse_incident_enabled(data: object) -> bool | None | Unset:
@@ -354,6 +390,7 @@ class RuleUpdate:
             condition_expr=condition_expr,
             enabled=enabled,
             eval_interval_sec=eval_interval_sec,
+            for_each=for_each,
             incident_enabled=incident_enabled,
             inhibited_by=inhibited_by,
             persist_n=persist_n,

@@ -228,6 +228,11 @@ class Rule(Base):
     run_state: Mapped[str | None] = mapped_column(String(16))
     run_state_since: Mapped[datetime | None] = mapped_column(DateTime)
     last_true_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # Parametric rule (ADR-0005, migration 0046): {"n": ["f1", "f2"]} makes one
+    # instance per value, {n} replaced in the condition, recovery,
+    # vars_extract and template types. NULL = an ordinary rule. With
+    # instances, run_state above is the most urgent of theirs.
+    for_each: Mapped[dict[str, list[str]] | None] = mapped_column(JSON)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.current_timestamp()
@@ -970,6 +975,26 @@ class ActivityRule(Base):
     __table_args__ = (Index("ix_activity_rules_position", "position"),)
 
 
+class RuleInstance(Base):
+    """The runtime state of one instance of a parametric rule (ADR-0005,
+    migration 0046): what ``rule_state`` and the rule's own run-state columns
+    hold for an ordinary rule."""
+
+    __tablename__ = "rule_instances"
+
+    rule_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("rules.id", ondelete="CASCADE"), primary_key=True,
+    )
+    instance: Mapped[str] = mapped_column(String(32), primary_key=True)
+    consecutive_match_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    recovery_match_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    state_epoch: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    run_state: Mapped[str | None] = mapped_column(String(16))
+    run_state_since: Mapped[datetime | None] = mapped_column(DateTime)
+    last_true_at: Mapped[datetime | None] = mapped_column(DateTime)
+    last_eval_error: Mapped[str | None] = mapped_column(Text)
+
+
 class RuleTransition(Base):
     """A change of a rule's run state (rules review RL-32): one row per
     change, never per tick; pruned with the log (ALERTD_LOG_RETENTION_DAYS)."""
@@ -984,6 +1009,8 @@ class RuleTransition(Base):
     from_state: Mapped[str | None] = mapped_column(String(16))
     to_state: Mapped[str] = mapped_column(String(16), nullable=False)
     detail: Mapped[str | None] = mapped_column(String(255))
+    # The instance of a parametric rule ("" for an ordinary rule; 0046).
+    instance: Mapped[str] = mapped_column(String(32), nullable=False, default="", server_default="")
 
     __table_args__ = (
         Index("ix_rule_transitions_rule", "rule_id", "id"),

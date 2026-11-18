@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_serializer, field_validator
 
 from ..core.eval import MISSING_INPUT_PREFIX
+from ..core.parametric import normalize_for_each
 from ..enums import RuleRunState
 from .log import _as_utc_iso
 
@@ -28,6 +29,18 @@ class RuleBase(BaseModel):
     trigger_logic_md: str | None = None
     enabled: bool = True
     sort_order: int = 100
+    for_each: dict[str, list[str]] | None = Field(
+        default=None,
+        description='Parametric rule (ADR-0005): one parameter and its values, {"n": ["f1", "f2"]}. '
+                    "The rule runs once per value, {n} replaced in condition_expr, recovery_expr, "
+                    "vars_extract, template_type and resolved_template_type; the template sees n. "
+                    "null = an ordinary rule.",
+    )
+
+    @field_validator("for_each")
+    @classmethod
+    def _for_each(cls, v: object) -> dict[str, list[str]] | None:
+        return normalize_for_each(v)
 
 
 class RuleCreate(RuleBase):
@@ -49,6 +62,12 @@ class RuleUpdate(BaseModel):
     trigger_logic_md: str | None = None
     enabled: bool | None = None
     sort_order: int | None = None
+    for_each: dict[str, list[str]] | None = None
+
+    @field_validator("for_each")
+    @classmethod
+    def _for_each(cls, v: object) -> dict[str, list[str]] | None:
+        return normalize_for_each(v)
 
     @field_validator("incident_enabled", "recovery_persist_n")
     @classmethod
@@ -112,6 +131,7 @@ class RuleTransitionRead(BaseModel):
     from_state: RuleRunState | None = None
     to_state: RuleRunState
     detail: str | None = None
+    instance: str = Field(default="", description="The instance of a parametric rule; \"\" otherwise.")
 
     model_config = ConfigDict(from_attributes=True)
 

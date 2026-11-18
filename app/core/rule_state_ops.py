@@ -20,10 +20,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..db.models import Rule, RuleState
-from .incidents import active_incident, lifecycle_config, resolve
+from ..db.models import Rule, RuleInstance, RuleState
+from .incidents import active_incident, instance_incidents, lifecycle_config, resolve
 
 
 async def reset_streak_on_reconfig(
@@ -32,6 +33,7 @@ async def reset_streak_on_reconfig(
     *,
     previous_condition_expr: str | None,
     previous_lifecycle: tuple[Any, ...] | None = None,
+    previous_for_each: Any = None,
 ) -> bool:
     """Bump the rule's state epoch and zero its persisted streak when the
     condition expression changed, within the caller's transaction.
@@ -48,8 +50,10 @@ async def reset_streak_on_reconfig(
         and bool(previous_lifecycle[0] or rule.incident_enabled)
         and previous_lifecycle != lifecycle_config(rule)
     )
+    # A new set of instances is a new rule for each of them (ADR-0005).
+    for_each_changed = previous_condition_expr is not None and (previous_for_each or None) != (rule.for_each or None)
     if previous_condition_expr is None or (
-        rule.condition_expr == previous_condition_expr and not lifecycle_changed
+        rule.condition_expr == previous_condition_expr and not lifecycle_changed and not for_each_changed
     ):
         return False
 
@@ -71,4 +75,10 @@ async def reset_streak_on_reconfig(
     if incident is not None:
         # A config edit does not prove that the original problem recovered.
         await resolve(session, incident, {}, reason="rule_reconfigured")
+    # The instances of a parametric rule start over: their streaks and run
+    # states described the old rule, and their open episodes close the same
+    # way (ADR-0005, RV-04).
+    await session.execute(delete(RuleInstance).where(RuleInstance.rule_id == rule.id))
+    for inst_incident in await instance_incidents(session, rule.id):
+        await resolve(session, inst_incident, {}, reason="rule_reconfigured")
     return True

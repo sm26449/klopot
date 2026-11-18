@@ -210,6 +210,7 @@ CREATE TABLE rules (
     run_state VARCHAR(16),                     -- inactive | pending | firing | no_data | error (0045)
     run_state_since TIMESTAMP,
     last_true_at TIMESTAMP,                    -- the condition last became true
+    for_each JSON,                             -- {"n": ["f1", "f2"]}: one instance per value (0046, ADR-0005)
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         ON UPDATE CURRENT_TIMESTAMP,
@@ -237,6 +238,35 @@ CREATE TABLE rules (
   change only, with `run_state_since`; `last_true_at` = when it last went from
   not true to `pending` / `firing`. History: `rule_transitions`.
 
+### `rule_instances`
+
+The runtime state of one instance of a parametric rule (`0046`,
+[ADR-0005](adr/0005-parametric-rules.md)): what `rule_state` and the rule's own
+`run_state` / `run_state_since` / `last_true_at` / `last_eval_error` hold for an
+ordinary rule. With instances, the rule's `run_state` is the most urgent of
+theirs (error > firing > pending > no_data > inactive), `last_eval_error` the
+first failing instance's message as `[f4] …` and `consecutive_eval_errors` their
+highest count. An instance's open incident is
+`incidents.active_source_key = 'rule:<id>:<instance>'` (`active_rule_id` stays
+NULL), with `rule_name` `name[instance]`. A change of `for_each`, like an edit
+of the condition, deletes the rows and closes the instances' incidents.
+
+```sql
+CREATE TABLE rule_instances (
+    rule_id BIGINT NOT NULL,
+    instance VARCHAR(32) NOT NULL,
+    consecutive_match_count INT NOT NULL DEFAULT 0,
+    recovery_match_count INT NOT NULL DEFAULT 0,
+    state_epoch INT NOT NULL DEFAULT 0,
+    run_state VARCHAR(16),
+    run_state_since TIMESTAMP,
+    last_true_at TIMESTAMP,
+    last_eval_error TEXT,
+    PRIMARY KEY (rule_id, instance),
+    FOREIGN KEY (rule_id) REFERENCES rules(id) ON DELETE CASCADE
+);
+```
+
 ### `rule_transitions`
 
 One row per change of a rule's `run_state` (`0045`), never per tick. At most
@@ -252,6 +282,7 @@ CREATE TABLE rule_transitions (
     from_state VARCHAR(16),            -- NULL: first state recorded
     to_state VARCHAR(16) NOT NULL,
     detail VARCHAR(255),               -- the error / missing input, or skipped changes
+    instance VARCHAR(32) NOT NULL DEFAULT '',  -- the parametric rule's instance (0046); '' otherwise
     FOREIGN KEY (rule_id) REFERENCES rules(id) ON DELETE CASCADE,
     INDEX ix_rule_transitions_rule (rule_id, id),
     INDEX ix_rule_transitions_at (at)

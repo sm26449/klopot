@@ -19,12 +19,15 @@ from ...core import eval as eval_module
 from ...core.engine import get_engine, rule_context, settings_evaluator
 from ...core.eval import MISSING_INPUT_PREFIX
 from ...core.incidents import lifecycle_config
+from ...core.parametric import RuleView, check_expressions, expand, instances, normalize_for_each
 from ...core.rule_state_ops import reset_streak_on_reconfig
 from ...core.state_cache import get_state_cache
 from ...db import get_session
-from ...db.models import Rule, RuleState, RuleTransition, Template
+from ...db.models import Rule, RuleInstance, RuleState, RuleTransition, Template
+from ...enums import RuleRunState
 from ...schemas.common import Page
 from ...schemas.fire import FireResponse
+from ...schemas.log import _as_utc_iso
 from ...schemas.rule import (
     EvalStatus,
     RuleBulkEnabled,
@@ -61,6 +64,9 @@ class TestRuleBody(BaseModel):
     """``POST /v1/rules/{id}/test`` body — supply mock context."""
 
     context: dict[str, Any] = Field(default_factory=dict)
+    # A parametric rule's instance (ADR-0005): its template, and its value in
+    # the context. Default: the first.
+    instance: str | None = None
 
 
 class EvalRuleResult(BaseModel):
@@ -71,6 +77,7 @@ class EvalRuleResult(BaseModel):
     missing_vars: list[str] | None = None
     context: dict[str, Any]
     consecutive_match_count: int
+    instance: str = ""
 
 
 class ValidateRuleBody(BaseModel):
@@ -80,10 +87,19 @@ class ValidateRuleBody(BaseModel):
     # amplifies a pathological regex (audit R08).
     condition_expr: str = Field(min_length=1, max_length=2000)
     vars_extract: list[str] | None = None
+    # A parametric rule being edited (ADR-0005): the expression is checked as
+    # every instance sees it and evaluated as ``instance`` (default: the first).
+    for_each: dict[str, list[str]] | None = None
+    instance: str | None = None
     # "What if": values laid over the live ones for this evaluation only
     # (review RL-31) — e.g. {"battery.soc": 12}; null = the input is missing.
     # var_age / fresh / has and the clock still read the live state.
     context: dict[str, Any] | None = Field(default=None, max_length=200)
+
+    @field_validator("for_each")
+    @classmethod
+    def _for_each(cls, v: object) -> dict[str, list[str]] | None:
+        return normalize_for_each(v)
 
     @field_validator("context")
     @classmethod
@@ -112,11 +128,12 @@ class ValidateRuleResult(BaseModel):
     unknown_vars: list[str] = Field(default_factory=list)
 
 
-def _validate_expr_or_422(expr: str) -> None:
+def _validate_expr_or_422(expr: str | None, for_each: dict[str, list[str]] | None = None) -> None:
     """Refuse an expression outside the language contract at write time, so a
-    dangerous one is never stored (audit A-01)."""
+    dangerous one is never stored (audit A-01) — as every instance of a
+    parametric rule sees it (ADR-0005)."""
     try:
-        eval_module.validate_expression(expr)
+        check_expressions(for_each, eval_module.validate_expression, expr)
     except eval_module.ExpressionError as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -200,9 +217,8 @@ async def create_rule(
     session: AsyncSession = Depends(get_session),
     actor: Actor = Depends(require_scope("admin")),
 ) -> RuleRead:
-    _validate_expr_or_422(body.condition_expr)
-    if body.recovery_expr:
-        _validate_expr_or_422(body.recovery_expr)
+    _validate_expr_or_422(body.condition_expr, body.for_each)
+    _validate_expr_or_422(body.recovery_expr, body.for_each)
     await enforce_create_cap(session, Rule, get_settings().max_rules, entity="Rule")
     obj = Rule(**body.model_dump())
     session.add(obj)
@@ -257,6 +273,64 @@ async def get_rule(
     return RuleRead.model_validate(obj)
 
 
+def _instance_or_404(rule: Rule, instance: str | None) -> str:
+    """The instance a request names, or the rule's first (``""`` for an
+    ordinary rule); 404 for a value the rule does not have."""
+    names = instances(rule.for_each)
+    if instance is None or (instance == "" and names == [""]):
+        return names[0]
+    if instance not in names:
+        raise HTTPException(status_code=404, detail=f"Rule {rule.name} has no instance {instance!r}")
+    return instance
+
+
+class RuleInstanceRead(BaseModel):
+    """One instance of a rule (``GET /v1/rules/{id}/instances``)."""
+
+    instance: str
+    run_state: RuleRunState | None = None
+    run_state_since: str | None = None
+    last_true_at: str | None = None
+    last_eval_error: str | None = None
+    consecutive_match_count: int = 0
+
+
+@router.get(
+    "/{rule_id}/instances",
+    response_model=list[RuleInstanceRead],
+    summary="The instances of a rule and their state",
+    description=(
+        "A parametric rule (``for_each``, ADR-0005) runs once per value: each "
+        "instance has its own run state, streak and last message. An ordinary "
+        "rule has one instance, ``\"\"``."
+    ),
+)
+async def rule_instances(
+    rule_id: int,
+    session: AsyncSession = Depends(get_session),
+    actor: Actor = Depends(require_scope("read")),
+) -> list[RuleInstanceRead]:
+    rule = await crud_get_or_404(session, Rule, rule_id)
+    if not rule.for_each:
+        st = await session.get(RuleState, rule.id)
+        return [RuleInstanceRead(
+            instance="", run_state=RuleRunState(rule.run_state) if rule.run_state else None, run_state_since=_as_utc_iso(rule.run_state_since),
+            last_true_at=_as_utc_iso(rule.last_true_at), last_eval_error=rule.last_eval_error,
+            consecutive_match_count=st.consecutive_match_count if st else 0)]
+    rows = {r.instance: r for r in (await session.execute(
+        select(RuleInstance).where(RuleInstance.rule_id == rule.id))).scalars().all()}
+    out = []
+    for inst in instances(rule.for_each):
+        row = rows.get(inst)
+        out.append(RuleInstanceRead(
+            instance=inst, run_state=RuleRunState(row.run_state) if row and row.run_state else None,
+            run_state_since=_as_utc_iso(row.run_state_since) if row else None,
+            last_true_at=_as_utc_iso(row.last_true_at) if row else None,
+            last_eval_error=row.last_eval_error if row else None,
+            consecutive_match_count=row.consecutive_match_count if row else 0))
+    return out
+
+
 @router.get(
     "/{rule_id}/transitions",
     response_model=list[RuleTransitionRead],
@@ -271,14 +345,16 @@ async def get_rule(
 async def rule_transitions(
     rule_id: int,
     limit: int = Query(default=100, ge=1, le=1000),
+    instance: str | None = Query(default=None, max_length=32,
+                                 description="Only this instance of a parametric rule"),
     session: AsyncSession = Depends(get_session),
     actor: Actor = Depends(require_scope("read")),
 ) -> list[RuleTransitionRead]:
     await crud_get_or_404(session, Rule, rule_id)
-    rows = (await session.execute(
-        select(RuleTransition).where(RuleTransition.rule_id == rule_id)
-        .order_by(RuleTransition.id.desc()).limit(limit)
-    )).scalars().all()
+    query = select(RuleTransition).where(RuleTransition.rule_id == rule_id)
+    if instance is not None:
+        query = query.where(RuleTransition.instance == instance)
+    rows = (await session.execute(query.order_by(RuleTransition.id.desc()).limit(limit))).scalars().all()
     return [RuleTransitionRead.model_validate(r) for r in rows]
 
 
@@ -299,10 +375,12 @@ async def update_rule(
     prev_expr = obj.condition_expr
     prev_lifecycle = lifecycle_config(obj)
     fields = body.model_dump(exclude_unset=True)
-    if "condition_expr" in fields:
-        _validate_expr_or_422(fields["condition_expr"])
-    if fields.get("recovery_expr"):
-        _validate_expr_or_422(fields["recovery_expr"])
+    for_each = fields["for_each"] if "for_each" in fields else obj.for_each
+    if "condition_expr" in fields or "for_each" in fields:
+        _validate_expr_or_422(fields.get("condition_expr", obj.condition_expr), for_each)
+    if fields.get("recovery_expr") or ("for_each" in fields and obj.recovery_expr):
+        _validate_expr_or_422(fields.get("recovery_expr", obj.recovery_expr), for_each)
+    prev_for_each = obj.for_each
     for k, v in fields.items():
         setattr(obj, k, v)
     # Durably reset the match streak if the condition expression changed, in
@@ -310,6 +388,7 @@ async def update_rule(
     # against the old expression (audit B-06).
     await reset_streak_on_reconfig(
         session, obj, previous_condition_expr=prev_expr, previous_lifecycle=prev_lifecycle,
+        previous_for_each=prev_for_each,
     )
     await flush_or_409(session, "Rule update")
     await session.refresh(obj)
@@ -398,9 +477,10 @@ async def test_rule(
     actor: Actor = Depends(require_scope("admin")),
 ) -> FireResponse:
     rule = await crud_get_or_404(session, Rule, rule_id)
+    view = RuleView(rule, _instance_or_404(rule, body.instance))
     envelope = dispatcher_module.FireEnvelope(
-        type=rule.template_type,
-        context=dict(body.context),
+        type=view.template_type,
+        context={**body.context, **view.binding},
         test=True,
         override_silencing=True,      # admin-only route
         source=f"test:{actor.name}",
@@ -423,21 +503,22 @@ async def test_rule(
 )
 async def eval_now(
     rule_id: int,
+    instance: str | None = Query(default=None, max_length=32,
+                                 description="The instance of a parametric rule (default: the first)"),
     session: AsyncSession = Depends(get_session),
     actor: Actor = Depends(require_scope("read")),
 ) -> EvalRuleResult:
-    rule = await crud_get_or_404(session, Rule, rule_id)
+    rule_row = await crud_get_or_404(session, Rule, rule_id)
+    inst = _instance_or_404(rule_row, instance)
+    rule = RuleView(rule_row, inst)
     cache = get_state_cache()
     # Exactly what the engine tick sees, staleness filtering included.
     ctx = rule_context(cache, rule.vars_extract, rule.condition_expr, rule.recovery_expr)
 
     res = eval_module.evaluate(rule.condition_expr, ctx, evaluator=settings_evaluator(cache))
 
-    state = (
-        await session.execute(
-            select(RuleState).where(RuleState.rule_id == rule.id)
-        )
-    ).scalar_one_or_none()
+    state: RuleState | RuleInstance | None = (
+        await session.get(RuleInstance, (rule_row.id, inst)) if inst else await session.get(RuleState, rule_row.id))
     counter = state.consecutive_match_count if state else 0
 
     return EvalRuleResult(
@@ -446,6 +527,7 @@ async def eval_now(
         missing_vars=res.missing_vars,
         context=ctx,
         consecutive_match_count=counter,
+        instance=inst,
     )
 
 
@@ -467,9 +549,22 @@ async def validate_rule(
 ) -> ValidateRuleResult:
     cache = get_state_cache()
     snap = cache.snapshot()
+    # A parametric rule: every instance's expression must pass, and this one
+    # is evaluated as one instance sees it (ADR-0005).
+    names = instances(body.for_each)
+    if body.instance is not None and body.instance not in names:
+        raise HTTPException(status_code=422, detail=f"for_each has no value {body.instance!r}")
+    inst = body.instance if body.instance is not None else names[0]
+    if body.for_each:
+        try:
+            check_expressions(body.for_each, eval_module.validate_expression, body.condition_expr)
+        except eval_module.ExpressionError as e:
+            return ValidateRuleResult(ok=False, error=str(e))
+    expr = expand(body.condition_expr, body.for_each, inst) or body.condition_expr
+    vars_extract = [expand(v, body.for_each, inst) or v for v in (body.vars_extract or [])]
     # The context the engine would build for a rule with this
     # ``vars_extract`` (review RL-02: it was ignored here).
-    ctx = rule_context(cache, body.vars_extract, body.condition_expr)
+    ctx = rule_context(cache, vars_extract, expr)
     if body.context:
         ctx = {**ctx, **body.context}
 
@@ -481,7 +576,7 @@ async def validate_rule(
         res = await asyncio.wait_for(
             asyncio.to_thread(
                 eval_module.evaluate,
-                body.condition_expr, ctx, evaluator=settings_evaluator(cache),
+                expr, ctx, evaluator=settings_evaluator(cache),
             ),
             timeout=_VALIDATE_EVAL_BUDGET_SEC,
         )
@@ -493,7 +588,7 @@ async def validate_rule(
 
     referenced: list[ReferencedVar] = []
     unknown: list[str] = []
-    for name in eval_module.display_names(body.condition_expr):
+    for name in eval_module.display_names(expr):
         vs = snap.get(name)
         if vs is None:
             unknown.append(name)

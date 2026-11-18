@@ -19,6 +19,7 @@ def _get_kwargs(
     rule_id: int,
     *,
     limit: int | Unset = 100,
+    instance: None | str | Unset = UNSET,
 
 ) -> dict[str, Any]:
     
@@ -28,6 +29,13 @@ def _get_kwargs(
     params: dict[str, Any] = {}
 
     params["limit"] = limit
+
+    json_instance: None | str | Unset
+    if isinstance(instance, Unset):
+        json_instance = UNSET
+    else:
+        json_instance = instance
+    params["instance"] = json_instance
 
 
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
@@ -84,6 +92,7 @@ def sync_detailed(
     *,
     client: AuthenticatedClient,
     limit: int | Unset = 100,
+    instance: None | str | Unset = UNSET,
 
 ) -> Response[HTTPValidationError | list[RuleTransitionRead]]:
     """ Run-state history of a rule, newest first
@@ -95,6 +104,7 @@ def sync_detailed(
     Args:
         rule_id (int):
         limit (int | Unset):  Default: 100.
+        instance (None | str | Unset): Only this instance of a parametric rule
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -108,6 +118,7 @@ def sync_detailed(
     kwargs = _get_kwargs(
         rule_id=rule_id,
 limit=limit,
+instance=instance,
 
     )
 
@@ -122,6 +133,7 @@ def sync(
     *,
     client: AuthenticatedClient,
     limit: int | Unset = 100,
+    instance: None | str | Unset = UNSET,
 
 ) -> HTTPValidationError | list[RuleTransitionRead] | None:
     """ Run-state history of a rule, newest first
@@ -133,6 +145,7 @@ def sync(
     Args:
         rule_id (int):
         limit (int | Unset):  Default: 100.
+        instance (None | str | Unset): Only this instance of a parametric rule
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -147,6 +160,7 @@ def sync(
         rule_id=rule_id,
 client=client,
 limit=limit,
+instance=instance,
 
     ).parsed
 
@@ -155,6 +169,7 @@ async def asyncio_detailed(
     *,
     client: AuthenticatedClient,
     limit: int | Unset = 100,
+    instance: None | str | Unset = UNSET,
 
 ) -> Response[HTTPValidationError | list[RuleTransitionRead]]:
     """ Run-state history of a rule, newest first
@@ -166,6 +181,7 @@ async def asyncio_detailed(
     Args:
         rule_id (int):
         limit (int | Unset):  Default: 100.
+        instance (None | str | Unset): Only this instance of a parametric rule
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -179,6 +195,7 @@ async def asyncio_detailed(
     kwargs = _get_kwargs(
         rule_id=rule_id,
 limit=limit,
+instance=instance,
 
     )
 
@@ -193,6 +210,7 @@ async def asyncio(
     *,
     client: AuthenticatedClient,
     limit: int | Unset = 100,
+    instance: None | str | Unset = UNSET,
 
 ) -> HTTPValidationError | list[RuleTransitionRead] | None:
     """ Run-state history of a rule, newest first
@@ -204,6 +222,7 @@ async def asyncio(
     Args:
         rule_id (int):
         limit (int | Unset):  Default: 100.
+        instance (None | str | Unset): Only this instance of a parametric rule
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -218,5 +237,6 @@ async def asyncio(
         rule_id=rule_id,
 client=client,
 limit=limit,
+instance=instance,
 
     )).parsed

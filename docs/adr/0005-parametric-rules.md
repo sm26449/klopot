@@ -2,6 +2,7 @@
 
 Status: Accepted
 Date: 2026-11-18
+Amended: 2026-11-18 — storage: an additive table `rule_instances` instead of re-keying `rule_state`, and an instance's open incident in the existing unique `incidents.active_source_key` (`rule:<id>:<instance>`) instead of an `incidents.rule_instance` column — no primary-key or unique-constraint change on MySQL
 
 ## Context
 

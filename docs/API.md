@@ -670,6 +670,30 @@ changes an hour, and the next entry's `detail` says how many were skipped
 the next state as a change with `detail: "rule changed"`, and the new
 condition goes through `pending` before `firing`.
 
+### Parametric rules (`for_each`, [ADR-0005](adr/0005-parametric-rules.md))
+
+`"for_each": {"n": ["f1", "f2", "f3", "f4"]}` on a rule runs it once per
+value: `{n}` is replaced in `condition_expr`, `recovery_expr`,
+`vars_extract`, `template_type` and `resolved_template_type`, and the
+template's context gets `n`. One parameter, at most 50 values of
+`[A-Za-z0-9_.-]{1,32}`; every instance's expression is checked when the rule
+is saved or imported (`422` names the instance, `[f2] …`). Each instance has
+its own streak, run state, incident (`rule_name` `name[f2]`) and
+notifications; inhibition, persistence, interval and auto-disable stay
+per rule. The rule's `run_state` is the most urgent of its instances
+(error > firing > pending > no_data > inactive), its `last_eval_error` the
+first failing instance's message as `[f4] missing input: …`.
+
+- `GET /v1/rules/{id}/instances` (`read`): `[{instance, run_state,
+  run_state_since, last_true_at, last_eval_error, consecutive_match_count}]`
+  (one row `""` for an ordinary rule).
+- `GET /v1/rules/{id}/transitions?instance=f2` — each entry carries `instance`.
+- `POST /v1/rules/{id}/eval-now?instance=f2`, `POST /v1/rules/{id}/test`
+  with `"instance"`, and `POST /v1/rules/validate` with `for_each` and
+  `instance` (default: the first value).
+- Changing `for_each` is a reconfiguration: every instance starts over and
+  open instance incidents close (`rule_reconfigured`).
+
 ### "What if": `POST /v1/rules/validate` with `context`
 
 `context` (optional, at most 200 keys / 64 KB) is laid over the live values

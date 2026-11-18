@@ -23,9 +23,10 @@ from ..db.models import (
 )
 from ..utils.time import utc_now
 from . import dispatcher, gating, outbox, rendering
+from .parametric import RuleView
 
 
-def lifecycle_config(rule: Rule) -> tuple[Any, ...]:
+def lifecycle_config(rule: Any) -> tuple[Any, ...]:
     return (
         rule.incident_enabled, rule.recovery_expr, rule.recovery_persist_n,
         rule.resolved_template_type, rule.template_type,
@@ -42,13 +43,39 @@ def escalation_allowed() -> ColumnElement[bool]:
     return or_(NotificationLog.incident_id.is_(None), live_incident)
 
 
-async def active_incident(session: AsyncSession, rule_id: int) -> Incident | None:
+def instance_key(rule_id: int, instance: str) -> str:
+    """The open-episode key of one instance of a parametric rule (ADR-0005):
+    it uses the unique ``active_source_key`` external episodes use."""
+    return f"rule:{rule_id}:{instance}"
+
+
+def _active_filter(rule_id: int, instance: str) -> ColumnElement[bool]:
+    if instance:
+        return Incident.active_source_key == instance_key(rule_id, instance)
+    return Incident.active_rule_id == rule_id
+
+
+async def active_incident(session: AsyncSession, rule_id: int, instance: str = "") -> Incident | None:
     return (await session.execute(
-        select(Incident).where(Incident.active_rule_id == rule_id).with_for_update()
+        select(Incident).where(_active_filter(rule_id, instance)).with_for_update()
     )).scalar_one_or_none()
 
 
-async def _current_rule(session: AsyncSession, rule: Rule, epoch: int) -> Rule | None:
+async def has_active_incident(session: AsyncSession, rule_id: int, instance: str = "") -> bool:
+    """Read-only: is the rule's (instance's) episode open?"""
+    return (await session.execute(
+        select(Incident.id).where(_active_filter(rule_id, instance))
+    )).scalar_one_or_none() is not None
+
+
+async def instance_incidents(session: AsyncSession, rule_id: int) -> list[Incident]:
+    """The open episodes of a parametric rule's instances."""
+    return list((await session.execute(
+        select(Incident).where(Incident.active_source_key.like(f"rule:{rule_id}:%")).with_for_update()
+    )).scalars().all())
+
+
+async def _current_rule(session: AsyncSession, rule: Any, epoch: int) -> Rule | None:
     current = (await session.execute(
         select(Rule).where(Rule.id == rule.id).with_for_update()
         .execution_options(populate_existing=True)
@@ -70,21 +97,26 @@ def _context(incident: Incident, values: dict[str, Any], event: str) -> dict[str
 
 
 async def fire_rule(
-    session: AsyncSession, rule: Rule, epoch: int, context: dict[str, Any],
-    inhibitor: str | None = None,
+    session: AsyncSession, rule: Any, epoch: int, context: dict[str, Any],
+    inhibitor: str | None = None, instance: str = "",
 ) -> dispatcher.DispatchResult | None:
-    current = await _current_rule(session, rule, epoch)
-    if current is None:
+    current_row = await _current_rule(session, rule, epoch)
+    if current_row is None:
         return None
-    incident = await active_incident(session, current.id)
+    # One instance of a parametric rule sees its own template types (ADR-0005).
+    current: Any = RuleView(current_row, instance)
+    incident = await active_incident(session, current.id, instance)
     if incident is None:
         template = await dispatcher._load_template(session, current.template_type)
+        key = instance_key(current.id, instance) if instance else None
         incident = Incident(
-            id="inc_" + uuid.uuid4().hex, rule_id=current.id, active_rule_id=current.id,
-            rule_name=current.name, template_type=current.template_type,
+            id="inc_" + uuid.uuid4().hex, rule_id=current.id,
+            active_rule_id=None if instance else current.id,
+            source_key=key, active_source_key=key,
+            rule_name=current.display_name[:128], template_type=current.template_type,
             resolved_template_type=current.resolved_template_type,
             severity=template.severity if template else Severity.info,
-            title=rendering.render(template.title_template, context)[:255] if template else current.name,
+            title=rendering.render(template.title_template, context)[:255] if template else current.display_name,
             # MySQL DATETIME has second precision. Keep metadata stable across
             # the initial commit, subsequent evaluations and process restarts.
             opened_at=utc_now().replace(microsecond=0), opening_context=dispatcher._json_safe(context),
@@ -210,11 +242,11 @@ async def resolve(
 
 
 async def recover_rule(
-    session: AsyncSession, rule: Rule, epoch: int, context: dict[str, Any],
+    session: AsyncSession, rule: Any, epoch: int, context: dict[str, Any], instance: str = "",
 ) -> bool:
     if await _current_rule(session, rule, epoch) is None:
         return False
-    incident = await active_incident(session, rule.id)
+    incident = await active_incident(session, rule.id, instance)
     if incident is None:
         return False
     return await resolve(session, incident, context, reason="recovered")

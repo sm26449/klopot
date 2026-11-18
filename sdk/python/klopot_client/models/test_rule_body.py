@@ -28,9 +28,11 @@ class TestRuleBody:
 
         Attributes:
             context (TestRuleBodyContext | Unset):
+            instance (None | str | Unset):
      """
 
     context: TestRuleBodyContext | Unset = UNSET
+    instance: None | str | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
 
@@ -43,6 +45,12 @@ class TestRuleBody:
         if not isinstance(self.context, Unset):
             context = self.context.to_dict()
 
+        instance: None | str | Unset
+        if isinstance(self.instance, Unset):
+            instance = UNSET
+        else:
+            instance = self.instance
+
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
@@ -50,6 +58,8 @@ class TestRuleBody:
         })
         if context is not UNSET:
             field_dict["context"] = context
+        if instance is not UNSET:
+            field_dict["instance"] = instance
 
         return field_dict
 
@@ -69,8 +79,19 @@ class TestRuleBody:
 
 
 
+        def _parse_instance(data: object) -> None | str | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(None | str | Unset, data)
+
+        instance = _parse_instance(d.pop("instance", UNSET))
+
+
         test_rule_body = cls(
             context=context,
+            instance=instance,
         )
 
 

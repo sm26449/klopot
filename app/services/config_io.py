@@ -40,6 +40,7 @@ from ..channels import sms_config
 from ..core.eval import ExpressionError as _ExpressionError
 from ..core.eval import validate_expression as _validate_expression
 from ..core.incidents import lifecycle_config
+from ..core.parametric import check_expressions, normalize_for_each
 from ..core.rule_state_ops import reset_streak_on_reconfig
 from ..db.models import (
     Channel,
@@ -229,6 +230,7 @@ async def _export_rules(session: AsyncSession) -> list[dict[str, Any]]:
             "trigger_logic_md": r.trigger_logic_md,
             "enabled": r.enabled,
             "sort_order": r.sort_order,
+            **({"for_each": r.for_each} if r.for_each else {}),
         }
         for r in rows
     ]
@@ -486,16 +488,22 @@ async def import_config(
                 f"{r['template_type']!r} (rule will fire but won't dispatch)"
             )
         # Reject an imported condition outside the language contract (audit
-        # A-01) — the same validator the REST create/update uses.
+        # A-01) — the same validator the REST create/update uses, as every
+        # instance of a parametric rule sees it (ADR-0005).
+        try:
+            for_each = normalize_for_each(r.get("for_each"))
+        except ValueError as e:
+            plan.errors.append(f"rule {r.get('name')!r}: {e}")
+            continue
         expr = r.get("condition_expr")
         if expr:
             try:
-                _validate_expression(expr)
+                check_expressions(for_each, _validate_expression, expr)
             except _ExpressionError as e:
                 plan.errors.append(f"rule {r.get('name')!r}: invalid expression — {e}")
         if r.get("recovery_expr"):
             try:
-                _validate_expression(r["recovery_expr"])
+                check_expressions(for_each, _validate_expression, r["recovery_expr"])
             except _ExpressionError as e:
                 plan.errors.append(f"rule {r.get('name')!r}: invalid recovery expression — {e}")
 
@@ -827,6 +835,7 @@ async def _import_rules(session: AsyncSession, items: list[dict[str, Any]], plan
             "trigger_logic_md": item.get("trigger_logic_md"),
             "enabled": _coerce_bool(item.get("enabled"), True),
             "sort_order": item.get("sort_order", 100),
+            "for_each": normalize_for_each(item.get("for_each")),
         }
         if existing is None:
             session.add(Rule(name=item["name"], **attrs))
@@ -834,6 +843,7 @@ async def _import_rules(session: AsyncSession, items: list[dict[str, Any]], plan
         else:
             prev_expr = existing.condition_expr
             prev_lifecycle = lifecycle_config(existing)
+            prev_for_each = existing.for_each
             for k, v in attrs.items():
                 setattr(existing, k, v)
             # Same durable streak reset as the REST PATCH path: an import that
@@ -841,6 +851,7 @@ async def _import_rules(session: AsyncSession, items: list[dict[str, Any]], plan
             # streak recoverable on restart (audit B-06).
             await reset_streak_on_reconfig(
                 session, existing, previous_condition_expr=prev_expr, previous_lifecycle=prev_lifecycle,
+                previous_for_each=prev_for_each,
             )
             plan.updates.setdefault("rules", []).append(item["name"])
 

@@ -1529,6 +1529,11 @@
             ],
             "title": "Error"
           },
+          "instance": {
+            "default": "",
+            "title": "Instance",
+            "type": "string"
+          },
           "matched": {
             "title": "Matched",
             "type": "boolean"
@@ -4485,6 +4490,24 @@
             "title": "Eval Interval Sec",
             "type": "integer"
           },
+          "for_each": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Parametric rule (ADR-0005): one parameter and its values, {\"n\": [\"f1\", \"f2\"]}. The rule runs once per value, {n} replaced in condition_expr, recovery_expr, vars_extract, template_type and resolved_template_type; the template sees n. null = an ordinary rule.",
+            "title": "For Each"
+          },
           "incident_enabled": {
             "default": false,
             "title": "Incident Enabled",
@@ -4593,6 +4616,68 @@
         "title": "RuleCreate",
         "type": "object"
       },
+      "RuleInstanceRead": {
+        "description": "One instance of a rule (``GET /v1/rules/{id}/instances``).",
+        "properties": {
+          "consecutive_match_count": {
+            "default": 0,
+            "title": "Consecutive Match Count",
+            "type": "integer"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "last_eval_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Eval Error"
+          },
+          "last_true_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last True At"
+          },
+          "run_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RuleRunState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "run_state_since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run State Since"
+          }
+        },
+        "required": [
+          "instance"
+        ],
+        "title": "RuleInstanceRead",
+        "type": "object"
+      },
       "RulePreview": {
         "properties": {
           "checked": {
@@ -4674,6 +4759,24 @@
             "default": 0,
             "title": "Fire Count Lifetime",
             "type": "integer"
+          },
+          "for_each": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Parametric rule (ADR-0005): one parameter and its values, {\"n\": [\"f1\", \"f2\"]}. The rule runs once per value, {n} replaced in condition_expr, recovery_expr, vars_extract, template_type and resolved_template_type; the template sees n. null = an ordinary rule.",
+            "title": "For Each"
           },
           "id": {
             "title": "Id",
@@ -4913,6 +5016,12 @@
               }
             ]
           },
+          "instance": {
+            "default": "",
+            "description": "The instance of a parametric rule; \"\" otherwise.",
+            "title": "Instance",
+            "type": "string"
+          },
           "to_state": {
             "$ref": "#/components/schemas/RuleRunState"
           }
@@ -4960,6 +5069,23 @@
               }
             ],
             "title": "Eval Interval Sec"
+          },
+          "for_each": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "For Each"
           },
           "incident_enabled": {
             "anyOf": [
@@ -6238,6 +6364,17 @@
             "additionalProperties": true,
             "title": "Context",
             "type": "object"
+          },
+          "instance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instance"
           }
         },
         "title": "TestRuleBody",
@@ -6309,6 +6446,34 @@
               }
             ],
             "title": "Context"
+          },
+          "for_each": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "For Each"
+          },
+          "instance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instance"
           },
           "vars_extract": {
             "anyOf": [
@@ -11545,6 +11710,25 @@
               "title": "Rule Id",
               "type": "integer"
             }
+          },
+          {
+            "description": "The instance of a parametric rule (default: the first)",
+            "in": "query",
+            "name": "instance",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 32,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The instance of a parametric rule (default: the first)",
+              "title": "Instance"
+            }
           }
         ],
         "responses": {
@@ -11575,6 +11759,59 @@
           }
         ],
         "summary": "Force evaluate rule against current state cache (no fire)",
+        "tags": [
+          "rules"
+        ],
+        "x-required-scope": "read"
+      }
+    },
+    "/v1/rules/{rule_id}/instances": {
+      "get": {
+        "description": "A parametric rule (``for_each``, ADR-0005) runs once per value: each instance has its own run state, streak and last message. An ordinary rule has one instance, ``\"\"``.",
+        "operationId": "rule_instances_v1_rules__rule_id__instances_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "title": "Rule Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RuleInstanceRead"
+                  },
+                  "title": "Response Rule Instances V1 Rules  Rule Id  Instances Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "The instances of a rule and their state",
         "tags": [
           "rules"
         ],
@@ -11664,6 +11901,25 @@
               "minimum": 1,
               "title": "Limit",
               "type": "integer"
+            }
+          },
+          {
+            "description": "Only this instance of a parametric rule",
+            "in": "query",
+            "name": "instance",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 32,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only this instance of a parametric rule",
+              "title": "Instance"
             }
           }
         ],

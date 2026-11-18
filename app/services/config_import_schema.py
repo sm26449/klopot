@@ -158,6 +158,8 @@ class ImportRule(BaseModel):
     trigger_logic_md: str | None = None
     enabled: bool = True
     sort_order: int = 100
+    # Parametric rule (ADR-0005); checked by config_io (normalize_for_each).
+    for_each: dict[str, list[str]] | None = None
 
 
 class ImportRoute(BaseModel):
