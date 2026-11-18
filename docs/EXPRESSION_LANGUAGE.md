@@ -169,6 +169,22 @@ N checks" the rule's own persistence is still the tool.
 
 ---
 
+### Parametric rules: `{n}`
+
+A rule with `for_each` (`{"n": ["f1", "f2", "f3", "f4"]}`,
+[ADR-0005](adr/0005-parametric-rules.md)) runs once per value; write `{n}`
+where the value goes — `fresh("ov.{n}.state", 600) AND ov.{n}.state ==
+"Moderate"`. The placeholder is replaced before anything else, in the
+condition, the recovery, `vars_extract` and the template types, and every
+instance's expression is checked when the rule is saved. Templates see `n`.
+
+### A missing input that should alert
+
+A missing input waits for data (`no_data`) — including `NOT x` (since
+1.3.0-rc.7: before, `NOT` of a missing value was `True`). When "the data is
+missing" is itself the problem, say so: `NOT has("feed.ok") OR NOT feed.ok`,
+or `coalesce(feed.ok, false) == false`, or a `var_age("x") > N` guard.
+
 ## Realistic examples
 
 ### Simple threshold

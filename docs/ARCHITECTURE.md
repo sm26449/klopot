@@ -299,6 +299,36 @@ Any successful evaluation clears the message, and an unchanged message is
 not rewritten every tick. The API exposes the result as `eval_status`
 (`ok` / `no_data` / `error`).
 
+**Run state** (rules review RL-32, migration 0045): after each evaluation the
+engine notes where the rule is — `inactive`, `pending` (true, `persist_n` not
+reached), `firing` (fired and still true; an incident rule: its incident is
+open), `no_data`, `error` — and writes `rules.run_state` / `run_state_since` /
+`last_true_at` plus one `rule_transitions` row **only when it changes**. The
+history is capped at 60 rows an hour per rule (the current state is always
+written); a failed write is retried at the next evaluation; a condition edit
+clears `run_state` in its own transaction (`rule_state_ops`), so a restart
+before the first tick does not carry the old condition's `firing`.
+
+**Parametric rules** (ADR-0005, migration 0046): a rule with `for_each`
+(`{"n": ["f1", "f2"]}`) is one runtime per value. `app/core/parametric.py`
+`RuleView` is the rule as one instance sees it (`{n}` replaced in the
+condition, recovery, `vars_extract` and template types; everything else reads
+and writes the rule). Runtimes are keyed by the rule id for an ordinary rule and
+by `(id, instance)` for an instance; inhibition markers by name or
+`(name, instance)` — so every caller and test that uses `engine._rules[rule.id]`
+still works. An instance's counters, run state and message live in
+`rule_instances`; the rule row holds their summary (the most urgent state,
+`[f4] …` as message, the highest error count). The dispatch context gets the
+parameter (`n`), which also keeps instances apart in de-duplication. Errors and
+auto-disable stay per rule; a missing input stays per instance.
+
+**History** (ADR-0004): `app/core/history.py` keeps, in memory, the variables
+and windows the enabled rules (each instance) and computed formulas ask for —
+the engine and the input manager pass their needs at every reload
+(`set_needs("rules" | "computed", …)`); it subscribes to the state cache's
+writes. Until a window is covered the history functions raise
+`MissingHistory`, a missing input (`no_data`).
+
 Which rules and computed variables read a variable is derived on demand by
 `app/services/references.py` (expressions, `vars_extract`, and names passed as
 strings to helpers such as `var_age("x")`), for the admin UI and the `used`
@@ -370,7 +400,10 @@ Retention protects notifications with any pending delivery, including escalation
 ### Rule incident lifecycle
 
 Rules opt in with `incident_enabled`. `incidents.active_rule_id` is a nullable
-unique FK: one open episode per rule, with resolved history. Rule-row locks
+unique FK: one open episode per rule, with resolved history. An instance of a
+parametric rule (ADR-0005) keeps `active_rule_id` NULL and uses the unique
+`active_source_key` external episodes use, as `rule:<id>:<instance>`
+(`incidents.instance_key`); its `rule_name` is `name[instance]`. Rule-row locks
 serialise opening against other opens and configuration edits. Incident locks
 serialise ack/resolve. `app/core/incidents.py` commits transitions together with
 outbox intents through `dispatcher.fire(background_only=True)`; no transport

@@ -53,6 +53,6 @@ layout of the code are in the repository-root `CONTRIBUTING.md`;
 
 | Directory | Contents |
 |-----------|----------|
-| [adr/](adr/) | Architecture Decision Records (ADR-0001 fixes the Klopot name, logo and colour tokens; ADR-0002 the optional OS-native theme families; ADR-0003 Kurier watching Klopot). |
+| [adr/](adr/) | Architecture Decision Records (ADR-0001 fixes the Klopot name, logo and colour tokens; ADR-0002 the optional OS-native theme families; ADR-0003 Kurier watching Klopot; ADR-0004 history functions in rule expressions; ADR-0005 parametric rules). |
 | [brand/](brand/) | Identity assets — marks, favicon, colour concepts. |
 

@@ -36,6 +36,12 @@ Expression errors or missing-input evaluation failures break the confirmation
 streak and keep the incident open. Open incidents and recovery counters survive
 restart. In the hysteresis band a live incident remains an active inhibitor.
 
+A **parametric rule** (`for_each`, [ADR-0005](adr/0005-parametric-rules.md))
+opens one incident per instance: `ov_active_v2[f2]` and `ov_active_v2[f3]` are
+separate episodes, each with its own recovery. Changing `for_each` (like
+changing the condition) closes the open ones as `rule_reconfigured`. The
+rule's `run_state` is `firing` while any instance's incident is open.
+
 ## Recovery notifications
 
 Null `resolved_template_type` resolves silently. Otherwise the chosen template
