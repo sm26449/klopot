@@ -120,10 +120,12 @@ async def test_a_new_key_is_found_without_bcrypt(db_client, admin_key, db_sessio
     # The bucket is the first 8 characters ("alertd_" + one). If the new key
     # shared the fixture admin key's bucket — a key without a digest — a wrong
     # key there would rightly be bcrypt-checked against it (1 run in 64).
-    for n in range(10):
+    # Compared without case: MySQL's utf8mb4_unicode_ci puts "alertd_a" and
+    # "alertd_A" in the same bucket (the gate failed on it once in ~30 runs).
+    for n in range(20):
         created = (await db_client.post("/v1/api_keys", headers=_h(admin_key),
                                         json={"name": f"fast{n}", "scopes": ["read"]})).json()
-        if created["key"][:8] != admin_key[:8]:
+        if created["key"][:8].lower() != admin_key[:8].lower():
             break
     row = (await db_session.execute(select(ApiKey).where(ApiKey.id == created["id"]))).scalar_one()
     assert row.key_digest == auth.key_digest(created["key"])
