@@ -313,6 +313,27 @@ SCENARIOS: list[Scenario] = [
              f"sim_run_state transitions: {s.transitions('sim_run_state')}"))],
     ),
     Scenario(
+        "history_avg", "avg_over(): a time-weighted mean over 4 s — 10 stays quiet (ok, covered), 100 fires (ADR-0004)",
+        [mvar("sim.ha", "sim/ha")],
+        [rule("sim_history_avg", 'avg_over("sim.ha", "4s") > 50')],
+        [Phase([("sim/ha", 10, 0)], silent("sim_history_avg", "ok")),
+         Phase([("sim/ha", 100, 0)], fired("sim_history_avg"))],
+    ),
+    Scenario(
+        "history_delta", "delta() / changed(): a jump of +40 inside 4 s fires; a steady value does not (ADR-0004)",
+        [mvar("sim.hd", "sim/hd")],
+        [rule("sim_history_delta", 'delta("sim.hd", "4s") > 20 AND changed("sim.hd", "4s")')],
+        [Phase([("sim/hd", 10, 0)], silent("sim_history_delta", "ok")),
+         Phase([("sim/hd", 50, 0)], fired("sim_history_delta"))],
+    ),
+    Scenario(
+        "history_prev", "prev(): fires on the change run → fault, not on fault alone (ADR-0004)",
+        [mvar("sim.hp", "sim/hp", "string")],
+        [rule("sim_history_prev", 'prev("sim.hp") == "run" AND sim.hp == "fault"')],
+        [Phase([("sim/hp", "fault", 1.5), ("sim/hp", "idle", 0)], silent("sim_history_prev")),
+         Phase([("sim/hp", "run", 1.5), ("sim/hp", "fault", 0)], fired("sim_history_prev"))],
+    ),
+    Scenario(
         "render", "the template renders the rule's values into the title",
         [mvar("sim.rv", "sim/rv")],
         [rule("sim_render", "sim.rv > 0", template="sim_render")],
@@ -372,6 +393,9 @@ def write_time_checks() -> None:
     expect(r.status_code == 422 and "unknown function" in r.text, f"unknown function not refused: {r.status_code} {r.text[:200]}")
     v = api.post("/v1/rules/validate", json={"condition_expr": "contains(sim.peers, 'STATUS') and sim.temp > 1"}).json()
     expect("STATUS" not in v["unknown_vars"], f"validate reports string contents as variables: {v['unknown_vars']}")
+    # ADR-0004: a history function of an unsaved rule's variable says why it waits.
+    h = api.post("/v1/rules/validate", json={"condition_expr": 'avg_over("sim.not_tracked", "1m") > 1'}).json()
+    expect(not h["ok"] and "not used by a saved" in (h["error"] or ""), f"validate of an untracked history: {h}")
     # RL-31: "what if" values laid over the live ones.
     w = api.post("/v1/rules/validate", json={"condition_expr": "sim.whatif > 5", "context": {"sim.whatif": 9}}).json()
     expect(w["ok"] and w["result"] is True, f"validate with a context: {w}")
@@ -427,7 +451,7 @@ def main() -> int:
     failures: dict[str, str] = {}
     try:
         write_time_checks()
-        print("  ok   write-time checks (lookahead and unknown function refused, validate ignores string contents, what-if context)")
+        print("  ok   write-time checks (lookahead and unknown function refused, validate ignores string contents, what-if context, untracked history)")
     except CheckFailed as e:
         failures["write_time"] = str(e)
         print(f"  FAIL write-time checks: {e}")
