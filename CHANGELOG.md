@@ -34,6 +34,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 - **`avg()` of no values** no longer returns `0` (which matched every "below
   threshold" rule while its inputs were missing): the rule waits for data.
 - `true` / `false` / `null` / `none` (any case) are literals in expressions.
+- **A call to an unknown function is refused when a rule is saved or
+  imported** (`422`, "unknown function: fersh()"), as are computed-variable
+  formulas: a typo failed every evaluation until auto-disable. A stored one
+  still fails at run time, as before.
+- **Computed variables use `ALERTD_TZ`**: `hour_now()`, `in_window()` and the
+  other time functions in a formula used UTC, unlike rules.
 
 ### Upgrade notes
 
@@ -86,8 +92,22 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **New expression functions** (rules review, stage 2; reference in
+  docs/EXPRESSION_LANGUAGE.md):
+  - `fresh("x", 120)` for `var_age("x") < 120`, `has("x")` (a value that is not
+    stale), `coalesce(x, default)` for an input that may be missing,
+    `between(x, lo, hi)`, `any([...])` / `all([...])` instead of long `OR` /
+    `AND` chains;
+  - `in_window("22:30", "06:15")` takes minutes (hours still work),
+    `month_now()`, `is_weekend()`;
+  - `is_daylight()` and `sun_elevation()` from the place of the install, new
+    settings `ALERTD_LATITUDE` / `ALERTD_LONGITUDE` (computed locally, no
+    dependency) — instead of a fixed `in_window(8, 20)` for "daytime".
+- Rule editor: the condition and recovery fields **complete variable and
+  function names** (↑ / ↓, Enter or Tab, Escape closes the list only), and the
+  expression cheat-sheet lists every function.
 - `scripts/rules_sim.sh`: the rule engine end to end over a real MQTT broker —
-  a throwaway install + Mosquitto, 19 scenarios (20 rules, 46 messages) checked
+  a throwaway install + Mosquitto, 23 scenarios (24 rules, 55 messages) checked
   through the API. Part of the release-candidate gate.
 - Rule editor: **Trigger logic** (the rule's Markdown notes, `trigger_logic_md`,
   so far only settable through the API), **Validate** for the recovery
