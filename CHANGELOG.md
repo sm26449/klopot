@@ -31,6 +31,10 @@ adheres to [Semantic Versioning](https://semver.org/).
   is a variable whose value is `None` (an MQTT `null`) — before, `temp > 5`
   with no `temp`, or `x.v > 5` with `x.v = null`, counted as evaluation errors
   towards auto-disable. An unknown function is still an error.
+- **`NOT x` of a missing input waits for data** (`no_data`) instead of being
+  `True`: a rule such as `NOT infra.docker.x.running` counted a match at
+  every start, before the variable's first message (with `persist_n = 1` it
+  would fire). `NOT` of `false`, `0` or an empty string is unchanged.
 - **`avg()` of no values** no longer returns `0` (which matched every "below
   threshold" rule while its inputs were missing): the rule waits for data.
 - `true` / `false` / `null` / `none` (any case) are literals in expressions.
@@ -122,7 +126,7 @@ adheres to [Semantic Versioning](https://semver.org/).
   function names** (↑ / ↓, Enter or Tab, Escape closes the list only), and the
   expression cheat-sheet lists every function.
 - `scripts/rules_sim.sh`: the rule engine end to end over a real MQTT broker —
-  a throwaway install + Mosquitto, 24 scenarios (25 rules, 58 messages) checked
+  a throwaway install + Mosquitto, 25 scenarios (26 rules, 60 messages) checked
   through the API. Part of the release-candidate gate.
 - Rule editor: **Trigger logic** (the rule's Markdown notes, `trigger_logic_md`,
   so far only settable through the API), **Validate** for the recovery
