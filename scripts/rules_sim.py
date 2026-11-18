@@ -334,6 +334,20 @@ SCENARIOS: list[Scenario] = [
          Phase([("sim/hp", "run", 1.5), ("sim/hp", "fault", 0)], fired("sim_history_prev"))],
     ),
     Scenario(
+        "parametric", "for_each: one rule, two instances — only p2 fires, with its own title and state (ADR-0005)",
+        [mvar("sim.par.p1", "sim/par/p1"), mvar("sim.par.p2", "sim/par/p2")],
+        [rule("sim_parametric", "sim.par.{n} > 50", template="sim_param", for_each={"n": ["p1", "p2"]})],
+        [Phase([("sim/par/p1", 10, 0), ("sim/par/p2", 10, 0)], silent("sim_parametric", "ok")),
+         Phase([("sim/par/p2", 60, 0)], both(fired("sim_parametric"), lambda s: (
+             expect({i["instance"]: i["run_state"] for i in api.get(
+                 f"/v1/rules/{s.rule('sim_parametric')['id']}/instances").json()} == {"p1": "inactive", "p2": "firing"},
+                 "sim_parametric: instance states"),
+             expect([e.get("title") for e in s.log("sim_parametric")][:1] == ["Param p2"],
+                    f"sim_parametric: titles {[e.get('title') for e in s.log('sim_parametric')]}"))))],
+        templates=[{"type": "sim_param", "severity": "warning", "title_template": "Param {n}",
+                    "message_template": "sim", "min_repeat_min": 0}],
+    ),
+    Scenario(
         "render", "the template renders the rule's values into the title",
         [mvar("sim.rv", "sim/rv")],
         [rule("sim_render", "sim.rv > 0", template="sim_render")],
