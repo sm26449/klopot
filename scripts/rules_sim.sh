@@ -73,6 +73,7 @@ docker run -d --name "$APP" --network "$NET" -p "127.0.0.1:$APP_PORT:5090" \
   -e ALERTD_DATABASE_URL="mysql+aiomysql://alertd:sim-db@$DB:3306/alertd" \
   -e ALERTD_MQTT_HOST="$MQ" -e ALERTD_MQTT_PORT=1883 \
   -e ALERTD_EVAL_ERROR_DISABLE_THRESHOLD=5 \
+  -e ALERTD_LATITUDE=44.43 -e ALERTD_LONGITUDE=26.10 \
   -e ALERTD_BOOTSTRAP_ADMIN_KEY="$SIM_ADMIN_KEY" \
   "$IMAGE" >/dev/null
 for _ in $(seq 1 90); do

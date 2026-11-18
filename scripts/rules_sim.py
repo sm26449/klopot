@@ -6,8 +6,10 @@ phase publishes its MQTT messages, waits, and checks what the engine did —
 through the public API only (rules, log, incidents). A scenario covers one
 behaviour: thresholds and persistence, strings, JSON paths, regexes, literals,
 missing / stale / null inputs, computed and aggregate variables, hysteresis
-incidents, inhibition, auto-disable, template rendering, and the write-time
-checks (a regex RE2 cannot run is refused).
+incidents, inhibition, auto-disable, template rendering, the stage-2
+functions (fresh / has / coalesce / between / any / all, minutes in
+in_window, the sun), and the write-time checks (a regex RE2 cannot run and an
+unknown function are refused).
 
 Environment (set by rules_sim.sh): SIM_URL, SIM_ADMIN_KEY, SIM_MQTT_PORT,
 SIM_BROKER_HOST; SIM_ONLY=<substring> runs only matching scenarios.
@@ -243,10 +245,42 @@ SCENARIOS: list[Scenario] = [
          Phase([("sim/agg/b", 80, 0)], fired("sim_aggregate"))],
     ),
     Scenario(
-        "time_window", "time helpers that are always true (in_window over the whole day, dow_now)",
+        "time_window", "time helpers that are always true (in_window over the whole day, hours and HH:MM, month, weekend)",
         [mvar("sim.tw", "sim/tw")],
-        [rule("sim_time_window", "in_window(0, 24) AND dow_now() >= 0 AND hour_now() < 24 AND sim.tw == 1")],
+        [rule("sim_time_window", 'in_window(0, 24) AND in_window("00:00", "24:00") AND dow_now() >= 0 AND hour_now() < 24 '
+              "AND month_now() >= 1 AND (is_weekend() OR NOT is_weekend()) AND sim.tw == 1")],
         [Phase([("sim/tw", 1, 0)], fired("sim_time_window"))],
+    ),
+    Scenario(
+        "sun", "sun_elevation() / is_daylight() with ALERTD_LATITUDE / ALERTD_LONGITUDE set (RL-25)",
+        [mvar("sim.sun", "sim/sun")],
+        [rule("sim_sun", "sun_elevation() > -90 AND (is_daylight() OR NOT is_daylight()) AND sim.sun == 1")],
+        [Phase([("sim/sun", 0, 0)], silent("sim_sun", "ok")),
+         Phase([("sim/sun", 1, 0)], fired("sim_sun"))],
+    ),
+    Scenario(
+        "fresh_has", "fresh() / has(): fires on new data, goes quiet (status ok) once it is older than 4 s (RL-20, RL-21)",
+        [mvar("sim.fr", "sim/fr")],
+        [rule("sim_fresh_has", 'fresh("sim.fr", 4) AND has("sim.fr") AND sim.fr > 5')],
+        [Phase([], silent("sim_fresh_has", "ok")),
+         Phase([("sim/fr", 9, 0)], fired("sim_fresh_has")),
+         Phase([], both(lambda s: time.sleep(1), lambda s: s.mark("sim_fresh_has"))),
+         Phase([], silent("sim_fresh_has", "ok"))],
+    ),
+    Scenario(
+        "coalesce_between", "coalesce() gives a missing input a default (status ok, not no_data); between() (RL-21, RL-22)",
+        [mvar("sim.cb", "sim/cb")],
+        [rule("sim_coalesce_between", "between(coalesce(sim.cb, 50), 10, 20)")],
+        [Phase([], silent("sim_coalesce_between", "ok")),
+         Phase([("sim/cb", 25, 0)], silent("sim_coalesce_between", "ok")),
+         Phase([("sim/cb", 15, 0)], fired("sim_coalesce_between"))],
+    ),
+    Scenario(
+        "any_all", "any() / all() over a list instead of OR / AND chains (RL-23)",
+        [mvar("sim.s1", "sim/s1"), mvar("sim.s2", "sim/s2"), mvar("sim.s3", "sim/s3")],
+        [rule("sim_any_all", "any([sim.s1 == 7, sim.s2 == 7, sim.s3 == 7]) AND all([sim.s1 > 0, sim.s2 > 0, sim.s3 > 0])")],
+        [Phase([("sim/s1", 1, 0), ("sim/s2", 1, 0), ("sim/s3", 1, 0)], silent("sim_any_all", "ok")),
+         Phase([("sim/s2", 7, 0)], fired("sim_any_all"))],
     ),
     Scenario(
         "render", "the template renders the rule's values into the title",
@@ -287,7 +321,7 @@ SCENARIOS: list[Scenario] = [
     Scenario(
         "auto_disable", "a rule that keeps failing is auto-disabled (threshold 5 in this stack) and announced",
         [mvar("sim.ad", "sim/ad")],
-        [rule("sim_auto_disable", "no_such_function(sim.ad) > 1")],
+        [rule("sim_auto_disable", "sim.ad / 0 > 1")],
         [Phase([("sim/ad", 1, 0)], lambda s: time.sleep(1)),
          Phase([], lambda s: (
              expect(s.rule("sim_auto_disable")["enabled"] is False, "sim_auto_disable still enabled"),
@@ -298,10 +332,14 @@ SCENARIOS: list[Scenario] = [
 
 
 def write_time_checks() -> None:
-    """RL-01: a regex RE2 cannot run is refused when the rule is saved."""
+    """RL-01 / RL-26: a regex RE2 cannot run and an unknown function are
+    refused when the rule is saved."""
     r = api.post("/v1/rules", json={"name": "sim_lookahead", "template_type": "sim_alert",
                                     "condition_expr": 'regex_match(sim.peers, "x(?!y)")'})
     expect(r.status_code == 422 and "lookahead" in r.text, f"lookahead rule not refused: {r.status_code} {r.text[:200]}")
+    r = api.post("/v1/rules", json={"name": "sim_typo", "template_type": "sim_alert",
+                                    "condition_expr": 'fersh("sim.fr", 4)'})
+    expect(r.status_code == 422 and "unknown function" in r.text, f"unknown function not refused: {r.status_code} {r.text[:200]}")
     v = api.post("/v1/rules/validate", json={"condition_expr": "contains(sim.peers, 'STATUS') and sim.temp > 1"}).json()
     expect("STATUS" not in v["unknown_vars"], f"validate reports string contents as variables: {v['unknown_vars']}")
 
@@ -356,7 +394,7 @@ def main() -> int:
     failures: dict[str, str] = {}
     try:
         write_time_checks()
-        print("  ok   write-time checks (lookahead refused, validate ignores string contents)")
+        print("  ok   write-time checks (lookahead and unknown function refused, validate ignores string contents)")
     except CheckFailed as e:
         failures["write_time"] = str(e)
         print(f"  FAIL write-time checks: {e}")
