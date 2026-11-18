@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Awaitable, Callable
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from typing import Any
 
@@ -85,6 +86,9 @@ class StateCache:
     def __init__(self) -> None:
         self._values: dict[str, VarSnapshot] = {}
         self._subscribers: list[SubscribeFn] = []
+        # Called with the names dropped by clear() (None = everything), so
+        # derived state (the rule history, ADR-0004) follows an invalidation.
+        self._clear_listeners: list[Callable[[AbstractSet[str] | None], None]] = []
         # Optional convenience: track the last MQTT message ts (any
         # topic). /v1/health uses this for an MQTT freshness gauge.
         self._last_mqtt_ts: float | None = None
@@ -217,9 +221,18 @@ class StateCache:
 
     # ── Reset (tests / admin reload) ────────────────────────────────
 
+    def subscribe_clear(self, fn: Callable[[AbstractSet[str] | None], None]) -> None:
+        """Call ``fn(names)`` whenever :meth:`clear` drops values."""
+        self._clear_listeners.append(fn)
+
     def clear(self, *, only: set[str] | None = None) -> int:
         """Drop entries (entire cache or a subset). Used when input
         config changes invalidate previously-cached values."""
+        for fn in list(self._clear_listeners):
+            try:
+                fn(None if only is None else set(only))
+            except Exception:  # pragma: no cover — never break the clear
+                logger.exception("clear listener raised; ignoring")
         if only is None:
             n = len(self._values)
             self._values.clear()

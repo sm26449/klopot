@@ -7,10 +7,10 @@ derived from their expressions at every reload, nothing to configure — and
 answers the window queries.
 
 Values are a step function: a value holds until the next one (our producers
-publish on change), so averages are time-weighted. Each variable keeps at most
-``BUCKETS`` buckets over its longest window; samples closer than one bucket
-are merged (the bucket keeps its last value as the level and the min / max it
-saw), so min and max stay exact and the average is exact to a bucket.
+publish on change), so averages are time-weighted. Each variable keeps its
+exact change points over its longest window — at most ``MAX_POINTS``; nothing
+is merged, so every answer is exact or a missing input (rc.9 review RC-02:
+merged buckets gave a max of 1 for a peak of 100).
 
 Until the history covers a window the query raises :class:`MissingHistory`,
 which the evaluator reports as a missing input (the rule is ``no_data``).
@@ -21,13 +21,15 @@ import ast
 import logging
 import re
 import time
-from collections import deque
+from array import array
+from bisect import bisect_right
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
-BUCKETS = 2000
+MAX_POINTS = 10_000
 MAX_WINDOW_SEC = 24 * 3600
 # name, window (seconds) or None for prev()
 WINDOW_FUNCTIONS = frozenset({"avg_over", "min_over", "max_over", "delta", "rate", "changed"})
@@ -76,22 +78,28 @@ def history_problem(call: ast.Call) -> str | None:
 
 def needs_of(expr: str | None) -> dict[str, float]:
     """``{variable: longest window in seconds}`` an expression reads through
-    the history functions (0 for ``prev`` only)."""
-    out: dict[str, float] = {}
-    if not expr or not any(fn + "(" in expr for fn in HISTORY_FUNCTIONS):
-        return out
+    the history functions (0 for ``prev`` only) — from the same AST the
+    validator reads, so ``avg_over ("x", "5m")`` counts too (RC-05)."""
+    return dict(_needs(expr or ""))
+
+
+@lru_cache(maxsize=1024)
+def _needs(expr: str) -> tuple[tuple[str, float], ...]:
+    if not expr.strip():
+        return ()
     from .eval import _substitute_dots  # local: eval imports this module
     try:
         tree = ast.parse(_substitute_dots(expr, {})[0], mode="eval")
     except (SyntaxError, ValueError):
-        return out
+        return ()
+    out: dict[str, float] = {}
     for node in ast.walk(tree):
         if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
                 and node.func.id in HISTORY_FUNCTIONS and history_problem(node) is None):
             name = node.args[0].value  # type: ignore[attr-defined]
             win = 0.0 if node.func.id == "prev" else parse_window(node.args[1].value)  # type: ignore[attr-defined]
             out[name] = max(out.get(name, 0.0), win)
-    return out
+    return tuple(sorted(out.items()))
 
 
 def merge_needs(exprs: Any) -> dict[str, float]:
@@ -107,90 +115,88 @@ def _num(v: Any) -> bool:
     return isinstance(v, int | float) and not isinstance(v, bool)
 
 
-@dataclass
-class _Bucket:
-    t: float           # monotonic time of its first sample
-    v: Any             # its last value: the level from t until the next bucket
-    lo: Any            # min / max of the numeric values it saw (None if none)
-    hi: Any
-    changed: bool      # it saw a value different from the level before it
+def _same(a: Any, b: Any) -> bool:
+    """Equal and of the same kind (True is not 1 here)."""
+    return type(a) is type(b) and a == b
 
 
 @dataclass
 class Series:
+    """The exact change points of one variable: ``values[i]`` holds from
+    ``times[i]`` until ``times[i + 1]`` (or now). Equal consecutive values
+    are one point; nothing is merged, so every query is exact (RC-02). At
+    most :data:`MAX_POINTS` points: past it the oldest go, and a window they
+    no longer cover is a missing input — never an approximate answer."""
+
     window: float                       # longest window asked for (0 = prev only)
-    buckets: deque[_Bucket] = field(default_factory=deque)
+    times: array[float] = field(default_factory=lambda: array("d"))
+    values: list[Any] = field(default_factory=list)
     prev: Any = None                    # the value before the current one
     has_prev: bool = False
-
-    @property
-    def width(self) -> float:
-        return self.window / BUCKETS
+    capped: bool = False                # points were dropped for MAX_POINTS
 
     def add(self, t: float, v: Any) -> None:
-        last = self.buckets[-1] if self.buckets else None
-        if last is not None and v == last.v:
+        if self.values and _same(v, self.values[-1]):
             return                      # same level: the step function goes on
-        if last is not None:
-            self.prev, self.has_prev = last.v, True
-        if last is not None and t - last.t < self.width:
-            last.v = v
-            last.changed = True
-            if _num(v):
-                last.lo = v if last.lo is None else min(last.lo, v)
-                last.hi = v if last.hi is None else max(last.hi, v)
-        else:
-            self.buckets.append(_Bucket(t, v, v if _num(v) else None, v if _num(v) else None, last is not None))
+        if self.values:
+            self.prev, self.has_prev = self.values[-1], True
+            t = max(t, self.times[-1])
+        self.times.append(t)
+        self.values.append(v)
         self._trim(t)
 
     def _trim(self, now: float) -> None:
-        # Keep one bucket at or before the window's start: its level holds there.
-        horizon = now - self.window
-        while len(self.buckets) >= 2 and self.buckets[1].t <= horizon:
-            self.buckets.popleft()
-        while len(self.buckets) > BUCKETS + 1:
-            self.buckets.popleft()
+        # Keep the last point at or before the window's start: its value holds there.
+        i = bisect_right(self.times, now - self.window) - 1
+        if i > 0:
+            del self.times[:i]
+            del self.values[:i]
+        excess = len(self.times) - MAX_POINTS
+        if excess > 0:
+            del self.times[:excess]
+            del self.values[:excess]
+            self.capped = True
 
     # ── Queries ────────────────────────────────────────────────────
 
-    def _window(self, name: str, window: float, now: float) -> tuple[Any, list[_Bucket], float]:
-        """(level at the window's start, the buckets inside it, start)."""
+    def _start(self, name: str, window: float, now: float) -> int:
+        """Index of the point whose value holds at the window's start."""
         start = now - window
-        if not self.buckets or self.buckets[0].t > start:
-            have = now - self.buckets[0].t if self.buckets else 0.0
-            raise MissingHistory(name, f"history {_fmt(have)} of {_fmt(window)}")
-        before = [b for b in self.buckets if b.t <= start]
-        inside = [b for b in self.buckets if b.t > start]
-        return before[-1].v, inside, start
+        i = bisect_right(self.times, start) - 1
+        if i < 0:
+            have = now - self.times[0] if self.times else 0.0
+            why = f"history {_fmt(have)} of {_fmt(window)}"
+            if self.capped:
+                why += f" (the last {MAX_POINTS} changes are kept)"
+            raise MissingHistory(name, why)
+        return i
 
-    def numeric(self, name: str, window: float, now: float) -> tuple[float, list[_Bucket], float]:
-        level, inside, start = self._window(name, window, now)
-        if not _num(level) or not all(_num(b.v) for b in inside):
+    def _numbers(self, name: str, i: int) -> list[float]:
+        vals = self.values[i:]
+        if not all(_num(v) for v in vals):
             raise MissingHistory(name, "not a number")
-        return level, inside, start
+        return vals
 
     def avg(self, name: str, window: float, now: float) -> float:
-        level, inside, start = self.numeric(name, window, now)
-        area, t, cur = 0.0, start, level
-        for b in inside:
-            area += cur * (b.t - t)
-            t, cur = b.t, b.v
-        area += cur * (now - t)
+        i = self._start(name, window, now)
+        vals = self._numbers(name, i)
+        start = now - window
+        area = 0.0
+        for k, v in enumerate(vals):
+            t0 = max(self.times[i + k], start)
+            t1 = self.times[i + k + 1] if i + k + 1 < len(self.times) else now
+            area += v * max(0.0, min(t1, now) - t0)
         return area / window
 
     def extreme(self, name: str, window: float, now: float, pick: Any) -> float:
-        level, inside, _ = self.numeric(name, window, now)
-        values = [level] + [x for b in inside for x in (b.lo, b.hi, b.v) if x is not None]
-        return float(pick(values))
+        return float(pick(self._numbers(name, self._start(name, window, now))))
 
     def delta(self, name: str, window: float, now: float) -> float:
-        level, inside, _ = self.numeric(name, window, now)
-        current = inside[-1].v if inside else level
-        return float(current - level)
+        vals = self._numbers(name, self._start(name, window, now))
+        return float(vals[-1] - vals[0])
 
     def changed_in(self, name: str, window: float, now: float) -> bool:
-        _, inside, _ = self._window(name, window, now)
-        return any(b.changed for b in inside)
+        return self._start(name, window, now) < len(self.times) - 1
 
 
 def _fmt(sec: float) -> str:
@@ -204,7 +210,7 @@ def _fmt(sec: float) -> str:
 class HistoryStore:
     """The tracked variables. Needs come from named sources (``rules`` from
     the engine, ``computed`` from the input manager) and are merged; the
-    store subscribes to the state cache's writes."""
+    store follows the state cache's writes and its invalidations."""
 
     def __init__(self, cache: Any = None, max_vars: int = 200) -> None:
         self._series: dict[str, Series] = {}
@@ -214,35 +220,43 @@ class HistoryStore:
         self.dropped: list[str] = []    # needed but over max_vars
         if cache is not None:
             cache.subscribe(self._on_set)
+            if hasattr(cache, "subscribe_clear"):
+                cache.subscribe_clear(self._on_clear)
 
     def tracked(self) -> dict[str, float]:
         return {n: s.window for n, s in self._series.items()}
 
-    def set_needs(self, source: str, needs: dict[str, float]) -> None:
-        self._needs[source] = dict(needs)
+    def merged_needs(self, **replace: dict[str, float]) -> dict[str, float]:
+        """Every source's needs merged; ``replace`` swaps one source's
+        needs for a what-if (the write-time budget check, RC-03)."""
         merged: dict[str, float] = {}
-        for part in self._needs.values():
+        for part in {**self._needs, **replace}.values():
             for name, win in part.items():
                 merged[name] = max(merged.get(name, 0.0), win)
-        names = sorted(merged)
-        keep, self.dropped = names[: self.max_vars], names[self.max_vars:]
+        return merged
+
+    def set_needs(self, source: str, needs: dict[str, float]) -> None:
+        self._needs[source] = dict(needs)
+        merged = self.merged_needs()
+        # Over the budget, what is tracked already stays tracked: a new need
+        # never evicts a working rule's history (RC-03; saving over the budget
+        # is refused, this is the backstop).
+        names = [n for n in sorted(merged) if n in self._series] + [n for n in sorted(merged) if n not in self._series]
+        keep, self.dropped = names[: self.max_vars], sorted(names[self.max_vars:])
         if self.dropped:
             logger.warning("history: %d variable(s) over ALERTD_HISTORY_MAX_VARS=%d not tracked: %s",
                            len(self.dropped), self.max_vars, ", ".join(self.dropped[:10]))
         series: dict[str, Series] = {}
         for name in keep:
             old = self._series.get(name)
-            if old is not None and old.window == merged[name]:
+            if old is not None:
+                old.window = merged[name]
                 series[name] = old
                 continue
             fresh = Series(window=merged[name])
-            if old is not None:             # a new window: re-bucket what we have
-                for b in old.buckets:
-                    fresh.add(b.t, b.v)
-                fresh.prev, fresh.has_prev = old.prev, old.has_prev
-            elif self._cache is not None:   # the value now has held since its last update
+            if self._cache is not None:     # the value now has held since its last update
                 snap = self._cache.get(name)
-                if snap is not None:
+                if snap is not None and not snap.is_stale():
                     fresh.add(snap.ts, snap.value)
             series[name] = fresh
         self._series = series
@@ -254,6 +268,13 @@ class HistoryStore:
         if s is not None:
             s.add(snap.ts, snap.value)
 
+    def _on_clear(self, names: Any) -> None:
+        """The cache dropped values (an input reconfigured): their history
+        described the old binding — start it over (RC-04)."""
+        for name in list(self._series) if names is None else names:
+            if name in self._series:
+                self._series[name] = Series(window=self._series[name].window)
+
     def series(self, name: str) -> Series:
         s = self._series.get(name)
         if s is None:
@@ -262,7 +283,9 @@ class HistoryStore:
             raise MissingHistory(name, why)
         if self._cache is not None:
             snap = self._cache.get(name)
-            if snap is not None and snap.is_stale():
+            if snap is None:
+                raise MissingHistory(name, "no current value")
+            if snap.is_stale():
                 raise MissingHistory(name, "stale")
         return s
 

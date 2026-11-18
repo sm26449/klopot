@@ -583,6 +583,11 @@ async def import_config(
     await session.flush()
     await _import_variables(session, config.get("variables") or [], plan)
     await _import_rules(session, config.get("rules") or [], plan)
+    # The history the imported rules and formulas need (ADR-0004, RC-03).
+    from .history_budget import history_budget_problem
+    problem = await history_budget_problem(session)
+    if problem:
+        plan.errors.append(problem)
     await _import_routes(session, config.get("routes") or [], plan)
     await _import_schedules(session, config.get("schedules") or [], plan)
 

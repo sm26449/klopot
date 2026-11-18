@@ -46,6 +46,12 @@ def test_history_calls_need_literals(expr, why):
         validate_expression(expr)
 
 
+def test_needs_follow_the_ast_not_the_spelling():
+    """RC-05: a space before the parenthesis passed validation but tracked nothing."""
+    assert needs_of('avg_over ("sensor", "5m") > 40') == {"sensor": 300}
+    assert needs_of('max_over(\n  "a", "1m") > 1 AND prev ( "b" ) == 2') == {"a": 60, "b": 0}
+
+
 def test_needs_are_read_from_the_expressions():
     assert needs_of('avg_over("bat.t", "5m") > 40 AND delta("bat.t", "1h") < -3 AND prev("st") == 1') == {
         "bat.t": 3600, "st": 0}
@@ -83,11 +89,39 @@ def test_min_max_delta_rate():
     assert s.delta("x", 5, now=10) == -5                # level 25 at t=5 → 20
 
 
-def test_close_samples_merge_but_keep_their_extremes():
-    s = _series(2000, [(0, 1), (100, 5), (100.5, 9), (100.7, 7)])    # bucket width 1 s
-    assert len(s.buckets) == 2
+def test_every_change_is_kept_exactly():
+    s = _series(2000, [(0, 1), (100, 5), (100.5, 9), (100.7, 7)])
+    assert list(s.values) == [1, 5, 9, 7]
     assert s.extreme("x", 200, 200, max) == 9
     assert s.extreme("x", 200, 200, min) == 1
+
+
+# rc.9 review RC-02: one variable watched for 24 h by one rule and for a minute
+# by another — the merged buckets of the long window gave the short one wrong
+# answers.
+
+def test_a_short_window_on_a_long_tracked_variable_sees_the_peak():
+    s = _series(86400, [(0, 0), (100, 1), (110, 100), (120, 1)])
+    assert s.extreme("x", 60, 160, max) == 100
+
+
+def test_a_short_window_sees_a_change_and_back():
+    s = _series(86400, [(0, 0), (100, 1), (110, 2), (120, 1)])
+    assert s.changed_in("x", 60, 160) is True
+
+
+def test_the_average_weights_the_level_at_the_window_start():
+    s = _series(86400, [(0, 0), (40, 100)])
+    assert s.avg("x", 60, 60) == pytest.approx(100 / 3)
+
+
+def test_past_the_point_budget_a_window_is_missing_not_approximate(monkeypatch):
+    monkeypatch.setattr(history_module, "MAX_POINTS", 5)
+    s = _series(1000, [(t, t % 2) for t in range(20)])
+    assert len(s.times) == 5
+    with pytest.raises(MissingHistory, match="the last 5 changes are kept"):
+        s.avg("x", 10, 20)
+    assert s.changed_in("x", 3, 20) is True
 
 
 def test_changed_and_prev():
@@ -106,9 +140,9 @@ def test_text_in_a_numeric_function_is_missing():
         s.avg("x", 10, now=10)
 
 
-def test_old_buckets_are_dropped_but_the_level_at_the_start_is_kept():
+def test_old_points_are_dropped_but_the_level_at_the_start_is_kept():
     s = _series(10, [(t, t) for t in range(0, 100, 2)])
-    assert s.buckets[0].t <= 98 - 10 < s.buckets[1].t
+    assert s.times[0] <= 98 - 10 < s.times[1]
     assert s.avg("x", 10, now=100) == 94          # levels 90, 92 … 98, 2 s each
 
 
@@ -189,3 +223,29 @@ async def test_the_engine_reload_tells_the_store(db_engine, db_session, make_rul
     await db_session.commit()
     await RuleEngine().reload_rules()
     assert get_history_store().tracked() == {"bat.t": 900}
+
+
+
+def test_a_cleared_value_takes_its_history_with_it(clock):
+    """RC-04: the cache dropped x (an input rebound), the history kept answering."""
+    from app.core.state_cache import StateCache
+    cache = StateCache()
+    store = HistoryStore(cache)
+    store.set_needs("rules", {"x": 60})
+    store._series["x"].add(0, 50)
+    cache._values["x"] = Snap(0, 50)                    # a current value
+    assert store.series("x").avg("x", 60, 100) == 50
+    cache.clear(only={"x"})
+    with pytest.raises(MissingHistory, match="no current value"):
+        store.series("x")
+    assert list(store._series["x"].values) == []
+
+
+def test_a_new_need_never_evicts_a_tracked_one(clock):
+    """RC-03: with the budget full, a new rule's variable used to push out an
+    existing rule's (alphabetical order)."""
+    store = HistoryStore(max_vars=1)
+    store.set_needs("rules", {"z": 60})
+    store.set_needs("rules", {"z": 60, "a": 60})
+    assert store.tracked() == {"z": 60}
+    assert store.dropped == ["a"]

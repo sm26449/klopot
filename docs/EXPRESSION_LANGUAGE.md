@@ -157,12 +157,13 @@ on-change producers mean it — so the average is weighted by time.
 | `prev(name)` | `prev("inverter.state") == 7 AND inverter.state != 7` | the value before the current one (any type) |
 
 Only what saved, enabled rules and computed formulas ask for is kept — in
-memory, up to `ALERTD_HISTORY_MAX_VARS` variables (default 200), 2 000 buckets
-each over the longest window asked for (min and max exact, the mean exact to a
-bucket). Until the history covers the whole window — after a start, or for a
-variable no rule watched before — the function is a **missing input** (the
-rule is `no_data`, "history 2m of 5m"); so is a stale variable, and a
-non-numeric value in a numeric function. The history is not kept across a
+memory, up to `ALERTD_HISTORY_MAX_VARS` variables (default 200; saving a rule
+that needs more is refused), each with its exact change points over the
+longest window asked for — at most 10 000, so every answer is exact. Until the
+history covers the whole window — after a start, for a variable no rule watched
+before, or for one that changed more than 10 000 times in it — the function is
+a **missing input** (the rule is `no_data`, "history 2m of 5m"); so is a stale
+or invalidated variable, and a non-numeric value in a numeric function. The history is not kept across a
 restart: a 24 h window is `no_data` for 24 h after one. **Validate** in the
 editor knows the history only of saved rules. For "true at every check for
 N checks" the rule's own persistence is still the tool.

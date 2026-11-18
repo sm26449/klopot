@@ -196,7 +196,7 @@ class Settings(BaseSettings):
     # Where the install is, for sun_elevation() / is_daylight() in rule
     # conditions (degrees, east / north positive). Unset: those functions fail.
     # Variables kept for the history functions of rule expressions
-    # (avg_over, delta, …; ADR-0004), at most 2 000 buckets each.
+    # (avg_over, delta, …; ADR-0004), at most 10 000 exact change points each.
     history_max_vars: int = Field(default=200, ge=0, le=5000)
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)

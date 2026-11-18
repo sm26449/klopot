@@ -21,6 +21,16 @@ from ...services.references import Usage, variable_usage
 from ...utils.like import like_escape
 from ._crud import crud_list, flush_or_409
 
+
+async def _history_budget_or_422(session: AsyncSession) -> None:
+    """A computed formula's history needs count against ALERTD_HISTORY_MAX_VARS
+    too (ADR-0004, RC-03)."""
+    from ...services.history_budget import history_budget_problem
+    problem = await history_budget_problem(session)
+    if problem:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=problem)
+
 router = APIRouter()
 
 
@@ -161,6 +171,7 @@ async def create_variable(
     obj = Variable(**body.model_dump())
     session.add(obj)
     await flush_or_409(session, "Variable create")
+    await _history_budget_or_422(session)
     await session.refresh(obj)
     await record_change(
         session, actor, "variable.create",
@@ -210,6 +221,7 @@ async def update_variable(
     # committed (audit V09).
     _reject_uncompilable_config(obj.source, obj.config, obj.name, obj.input_id)
     await flush_or_409(session, "Variable update")
+    await _history_budget_or_422(session)
     await session.refresh(obj)
     await record_change(
         session, actor, "variable.update",
