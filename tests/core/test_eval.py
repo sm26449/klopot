@@ -136,11 +136,10 @@ def test_evaluator_reused_for_multiple_calls():
 
 
 def test_var_age_unbound_returns_inf():
-    """When state_cache=None, var_age isn't installed — calling it
-    yields a clean error rather than crashing."""
-    r = evaluate("var_age('battery.soc') > 60", {})
-    assert r.ok is False
-    assert "var_age" in (r.error or "")
+    """Without a state cache nothing is known: var_age is infinite, has() and
+    fresh() are false (the functions always exist, so saving checks names)."""
+    r = evaluate("var_age('battery.soc') > 60 and not has('battery.soc') and not fresh('battery.soc', 60)", {})
+    assert r.ok is True and r.value is True
 
 
 def test_var_age_with_cache():

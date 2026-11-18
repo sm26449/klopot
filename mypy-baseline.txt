@@ -2,7 +2,6 @@ app/db/migration_guard.py:0: error: Function is missing a type annotation for on
 app/core/state_cache.py:0: error: Function "app.core.state_cache.StateCache.set" is not valid as a type  [valid-type]
 app/core/state_cache.py:0: note: Perhaps you need "Callable[...]" or a callback protocol?
 app/core/state_cache.py:0: error: Statement is unreachable  [unreachable]
-app/core/eval.py:0: error: Returning Any from function declared to return "float"  [no-any-return]
 app/schemas/common.py:0: error: Missing type arguments for generic type "dict"  [type-arg]
 app/utils/egress.py:0: error: List comprehension has incompatible type List[str | int]; expected List[str]  [misc]
 app/config.py:0: error: Function is missing a type annotation  [no-untyped-def]

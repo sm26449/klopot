@@ -134,7 +134,9 @@ alert on coercion failures.
 **Q.** What timezone do time-based functions use?
 
 **A.** All time-based eval uses the **service-level timezone**
-from `ALERTD_TZ` (default `UTC`), NOT the operator's browser TZ.
+from `ALERTD_TZ` (default `UTC`), NOT the operator's browser TZ —
+rule conditions and computed-variable formulas alike (formulas used UTC
+before 1.3.0).
 (Compose also sets the container's `TZ` from it.)
 
 This is intentional: an alert evaluated in two different operator

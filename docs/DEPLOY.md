@@ -137,6 +137,7 @@ See `.env.example`. The main ones:
 | `ALERTD_LOG_LEVEL` | `INFO` | DEBUG/INFO/WARNING/ERROR |
 | `ALERTD_LOG_FORMAT` | `console` | `console` / `json` |
 | `ALERTD_TZ` | `UTC` | Timezone for hour_now()/in_window() |
+| `ALERTD_LATITUDE`, `ALERTD_LONGITUDE` | (empty) | Place of the install in degrees (north / east positive), for `sun_elevation()` and `is_daylight()` in rule conditions; without them those functions are an evaluation error |
 | `ALERTD_PV_POWER_VAR` | (empty) | **Deprecated.** Before migration 0030 every template's `require_pv_kw` compared against this one variable. Now each template names its own `gate_variable`; this value is read only by migration 0030 to convert existing templates, and when an old client writes `require_pv_kw` without a variable. |
 | `ALERTD_HASH_MAX_CONCURRENCY` | `4` | Max concurrent password/API-key hashing ops offloaded to threads (bounds CPU + argon2 memory on an auth burst). |
 | `ALERTD_MAX_AGGREGATE_MEMBERS` | `1000` | Per-aggregate member budget (audit D1-01). Expired members are evicted; at the budget a new member is refused and the aggregate output invalidated (surfaced by the `alertd_aggregate_overflow` metric), never silently trimmed. `0` = unbounded. |

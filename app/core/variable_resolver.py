@@ -213,12 +213,16 @@ class VariableResolver:
           presenting a value derived from a short-TTL input that has already
           expired. This holds transitively down a chain.
         """
+        from .engine import settings_evaluator
         from .eval import evaluate as _evaluate
         from .eval import referenced_names as _referenced_names
 
         computed = [m for m in self._mappings.values() if m.source == "computed"]
         if not computed:
             return
+        # The install's timezone and place, like rules (a formula's
+        # hour_now() was UTC).
+        evaluator = settings_evaluator(self._cache)
 
         now = time.monotonic()
         snap = self._cache.snapshot()
@@ -262,7 +266,7 @@ class VariableResolver:
             changed = False
             ctx = {**base_ctx, **results}
             for m in computed:
-                res = _evaluate(m.formula or "", ctx, state_cache=self._cache)
+                res = _evaluate(m.formula or "", ctx, evaluator=evaluator)
                 if not res.ok:
                     continue
                 new_val = _coerce(res.value, m.value_type)

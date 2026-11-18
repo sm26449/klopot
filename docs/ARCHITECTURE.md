@@ -409,8 +409,12 @@ Wraps `simpleeval`:
 
 - Names: the state cache, limited to the rule's `vars_extract` (plus the
   variables its expressions read) when set
-- Functions: a fixed whitelist (numeric, string, time, `var_age`) — see
-  [EXPRESSION_LANGUAGE.md](EXPRESSION_LANGUAGE.md)
+- Functions: a fixed whitelist (numeric, list, string, time, sun, data age)
+  — see [EXPRESSION_LANGUAGE.md](EXPRESSION_LANGUAGE.md); a call to any other
+  name is refused at write time. One evaluator per tick, built by
+  `engine.settings_evaluator` with `ALERTD_TZ` and the place
+  (`ALERTD_LATITUDE` / `ALERTD_LONGITUDE`) — the same for eval-now, validate
+  and computed variables
 - A default-deny AST allowlist checked before evaluation (and at write
   time): no attribute / method access, comprehensions, lambdas, slices or
   keyword arguments

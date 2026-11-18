@@ -83,6 +83,15 @@ These are always available in any expression:
 | `sum([a, b, ...], start=0)` | `sum([f1, f2, f3])` | sum (numbers only) |
 | `avg([a, b, ...])` | `avg([f1, f2, f3])` | mean of the values that are not `None`; with none left the rule waits for data (an empty literal list is an error) |
 | `int(x)`, `float(x)`, `bool(x)` | type coercion |  |
+| `between(x, lo, hi)` | `between(battery.soc, 20, 80)` | `lo <= x <= hi`; a missing `x` waits for data |
+| `coalesce(a, b, ...)` | `coalesce(battery.soc, 50) < 20` | the first value that is not `None` — a default for an input that may be missing |
+
+### Lists
+
+| Function | Example | Result |
+|----------|---------|--------|
+| `any([a, b, ...])` | `any([pv.f1_status == 7, pv.f2_status == 7])` | true if any element is true (instead of a long `OR` chain) |
+| `all([a, b, ...])` | `all([pv.f1_seen_ok, pv.f2_seen_ok])` | true if every element is true; `all([])` is true |
 
 ### String
 
@@ -102,9 +111,34 @@ These are always available in any expression:
 | `now()` | `now() > deadline` | UTC unix timestamp (seconds) |
 | `hour_now()` | `hour_now() >= 22` | local hour 0-23 (in `ALERTD_TZ`) |
 | `dow_now()` | `dow_now() in [5, 6]` | day-of-week 0=Mon to 6=Sun |
-| `in_window(start_h, end_h)` | `in_window(22, 6)` | bool, crosses midnight if end<start |
+| `is_weekend()` | `is_weekend()` | Saturday or Sunday (local) |
+| `month_now()` | `month_now() in [11, 12, 1]` | local month 1-12 |
+| `in_window(start, end)` | `in_window(22, 6)`, `in_window("22:30", "06:15")` | local time in `[start, end)`; each bound an hour (`8`, `7.5`) or `"HH:MM"`; crosses midnight if end < start |
 | `since_seconds(ts)` | `since_seconds(last_change_ts) > 300` | float seconds; `inf` for `None` |
+
+### Sun
+
+Needs the place of the install: `ALERTD_LATITUDE` and `ALERTD_LONGITUDE`
+(degrees, north / east positive). Without them these functions are an
+evaluation error. The position is computed locally (NOAA formulas, within a
+fraction of a degree: sunrise and sunset within a couple of minutes).
+
+| Function | Example | Notes |
+|----------|---------|-------|
+| `is_daylight()` | `is_daylight() AND pv.total_w < 50` | the sun is above the horizon (between standard sunrise and sunset) — instead of a fixed `in_window(8, 20)` |
+| `sun_elevation()` | `sun_elevation() > 15` | degrees above the horizon, negative at night |
+
+### Data age
+
+A variable name is passed **in quotes** to these functions.
+
+| Function | Example | Notes |
+|----------|---------|-------|
 | `var_age(name)` | `var_age('room.temperature') > 60` | seconds since last update of variable; `inf` if it has no value |
+| `fresh(name, sec)` | `fresh("battery.soc", 900) AND battery.soc < 20` | `var_age(name) < sec` — the data is recent enough to judge |
+| `has(name)` | `has("grid.voltage")` | the variable holds a value that is not stale |
+
+A call to any other function name is refused when the rule is saved.
 
 ### Not available
 
@@ -149,6 +183,13 @@ api.requests_per_min > 100 AND api.error_ratio > 0.05
 room.temperature > 28 AND in_window(9, 18)
 ```
 (Server room too warm during office hours only.)
+
+### Daytime, any of several inverters
+
+```
+is_daylight() AND fresh("pv.f1_status", 120)
+AND any([pv.f1_status == 7, pv.f2_status == 7, pv.f3_status == 7, pv.f4_status == 7])
+```
 
 ### SMS keyword
 

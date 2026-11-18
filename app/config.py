@@ -193,6 +193,10 @@ class Settings(BaseSettings):
 
     # ── Localization ──────────────────────────────────────────
     tz: str = "UTC"
+    # Where the install is, for sun_elevation() / is_daylight() in rule
+    # conditions (degrees, east / north positive). Unset: those functions fail.
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
 
     # ── Bootstrap ─────────────────────────────────────────────
     # Plaintext API key with admin scope to seed on first run if the
@@ -321,14 +325,21 @@ class Settings(BaseSettings):
         _admin_allow(v)         # fail closed at startup, like the trusted proxies
         return v
 
-    @field_validator("docs_enabled", "metrics_require_auth", mode="before")
+    @field_validator("docs_enabled", "metrics_require_auth", "latitude", "longitude", mode="before")
     @classmethod
     def _blank_is_auto(cls, v: object) -> object:
         # docker-compose passes these as ${VAR:-} (empty when unset); an empty
-        # string isn't a valid bool, so treat blank as "auto" (None).
+        # string isn't a valid bool / number, so treat blank as unset (None).
         if isinstance(v, str) and v.strip() == "":
             return None
         return v
+
+    @property
+    def location(self) -> tuple[float, float] | None:
+        """(latitude, longitude) when both are set."""
+        if self.latitude is None or self.longitude is None:
+            return None
+        return (self.latitude, self.longitude)
 
     @property
     def docs_enabled_effective(self) -> bool:

@@ -15,7 +15,7 @@ from ...auth import Actor, require_scope
 from ...config import get_settings
 from ...core import dispatcher as dispatcher_module
 from ...core import eval as eval_module
-from ...core.engine import get_engine, rule_context
+from ...core.engine import get_engine, rule_context, settings_evaluator
 from ...core.eval import MISSING_INPUT_PREFIX
 from ...core.incidents import lifecycle_config
 from ...core.rule_state_ops import reset_streak_on_reconfig
@@ -390,11 +390,7 @@ async def eval_now(
     # Exactly what the engine tick sees, staleness filtering included.
     ctx = rule_context(cache, rule.vars_extract, rule.condition_expr, rule.recovery_expr)
 
-    settings = get_settings()
-    res = eval_module.evaluate(
-        rule.condition_expr, ctx,
-        timezone=settings.tz, state_cache=cache,
-    )
+    res = eval_module.evaluate(rule.condition_expr, ctx, evaluator=settings_evaluator(cache))
 
     state = (
         await session.execute(
@@ -434,7 +430,6 @@ async def validate_rule(
     # ``vars_extract`` (review RL-02: it was ignored here).
     ctx = rule_context(cache, body.vars_extract, body.condition_expr)
 
-    settings = get_settings()
     # User regexes compile under RE2 (audit V10), which matches in linear time,
     # so a catastrophic pattern can no longer block the loop. This off-thread
     # wall-clock budget stays as defense-in-depth for any other costly
@@ -443,8 +438,7 @@ async def validate_rule(
         res = await asyncio.wait_for(
             asyncio.to_thread(
                 eval_module.evaluate,
-                body.condition_expr, ctx,
-                timezone=settings.tz, state_cache=cache,
+                body.condition_expr, ctx, evaluator=settings_evaluator(cache),
             ),
             timeout=_VALIDATE_EVAL_BUDGET_SEC,
         )

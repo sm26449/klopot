@@ -113,6 +113,15 @@ def rule_context(
     return {n: v.value for n, v in items if not v.is_stale()}
 
 
+def settings_evaluator(cache: StateCache | None) -> Any:
+    """An evaluator with the install's timezone and place (``ALERTD_TZ``,
+    ``ALERTD_LATITUDE`` / ``ALERTD_LONGITUDE``): one for the engine tick,
+    eval-now, validate and computed variables, so all four see the same
+    ``hour_now()`` and sun."""
+    s = get_settings()
+    return eval_module.make_evaluator(timezone=s.tz, state_cache=cache, location=s.location)
+
+
 class RuleEngine:
     """Single instance per process. Owned by the input manager."""
 
@@ -354,7 +363,7 @@ class RuleEngine:
         ]
         if not due:
             return
-        evaluator = eval_module.make_evaluator(timezone=get_settings().tz, state_cache=self._cache)
+        evaluator = settings_evaluator(self._cache)
         for rt in due:
             # A reload earlier in this same tick (e.g. an admin disabling or
             # editing another due rule) can have swapped this runtime out or
@@ -393,8 +402,8 @@ class RuleEngine:
         """Evaluate one rule against the current state cache. ``evaluator`` is
         the tick's shared one (built here when called alone, e.g. in tests)."""
         ctx = self._build_context(rt.rule)
+        evaluator = evaluator or settings_evaluator(self._cache)
 
-        settings = get_settings()
         from ..metrics import RULE_EVAL_DURATION_MS, RULE_EVAL_ERRORS_TOTAL
 
         eval_started = _time.monotonic()
@@ -402,8 +411,6 @@ class RuleEngine:
             rt.rule.condition_expr,
             ctx,
             evaluator=evaluator,
-            timezone=settings.tz,
-            state_cache=self._cache,
         )
         recovery_matches = result.ok and not bool(result.value)
         active_incident = False
@@ -417,7 +424,6 @@ class RuleEngine:
         if active_incident and rt.rule.recovery_expr:
             recovery = eval_module.evaluate(
                 rt.rule.recovery_expr, ctx, evaluator=evaluator,
-                timezone=settings.tz, state_cache=self._cache,
             )
             if not recovery.ok:
                 # Unknown/missing data is never evidence of recovery. Reuse
@@ -461,7 +467,7 @@ class RuleEngine:
                     "reason=%s",
                     rt.rule.name, result.error or "unknown",
                 )
-            disable_threshold = settings.eval_error_disable_threshold
+            disable_threshold = get_settings().eval_error_disable_threshold
             if (disable_threshold > 0
                     and rt.consecutive_eval_errors == disable_threshold):
                 # Closes the silent-failure class that bit us twice

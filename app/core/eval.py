@@ -35,6 +35,8 @@ from zoneinfo import ZoneInfo
 import re2
 from simpleeval import EvalWithCompoundTypes, FunctionNotDefined, NameNotDefined
 
+from ..utils.sun import SUNRISE_ELEVATION, sun_elevation
+
 logger = logging.getLogger(__name__)
 
 
@@ -145,6 +147,8 @@ def _expr_rejection(transformed: str) -> str | None:
                 return "only direct calls to named functions are allowed"
             if node.keywords:
                 return "keyword arguments are not allowed in function calls"
+            if node.func.id not in FUNCTION_NAMES:
+                return f"unknown function: {node.func.id}()"
             if (node.func.id == "regex_match" and len(node.args) >= 2
                     and isinstance(node.args[1], ast.Constant) and isinstance(node.args[1].value, str)):
                 problem = _regex_problem(node.args[1].value)
@@ -222,10 +226,15 @@ def referenced_names(expr: str) -> frozenset[str]:
     return frozenset((simple - func_names) | set(dotted))
 
 
+# Functions whose first argument is a variable name in quotes.
+_NAME_ARG_FUNCTIONS = frozenset({"var_age", "fresh", "has"})
+
+
 def display_names(expr: str) -> list[str]:
     """Variables an expression reads, for the editor (review RL-04): the
     names of :func:`referenced_names` plus the string arguments of
-    ``var_age("…")``, in order of first appearance. Text inside other string
+    ``var_age("…")``, ``fresh("…", s)`` and ``has("…")``, in order of first
+    appearance. Text inside other string
     literals (``contains(x, 'STATUS')``) is never reported."""
     names = set(referenced_names(expr))
     try:
@@ -235,7 +244,7 @@ def display_names(expr: str) -> list[str]:
         tree = None
     if tree is not None:
         for n in ast.walk(tree):
-            if (isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "var_age"
+            if (isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in _NAME_ARG_FUNCTIONS
                     and n.args and isinstance(n.args[0], ast.Constant) and isinstance(n.args[0].value, str)):
                 names.add(n.args[0].value)
     return sorted(names, key=lambda n: (expr.find(n) if n in expr else len(expr), n))
@@ -487,6 +496,32 @@ def _endswith(s: Any, suffix: Any) -> bool:
     return str(s or "").endswith(str(suffix))
 
 
+def _between(x: Any, lo: Any, hi: Any) -> bool:
+    """``lo <= x <= hi``. ``None`` is a missing input (the rule waits)."""
+    if x is None:
+        raise TypeError("between() of None")
+    return bool(lo <= x <= hi)
+
+
+def _coalesce(*values: Any) -> Any:
+    """The first value that is not ``None`` (a missing input is ``None``)."""
+    return next((v for v in values if v is not None), None)
+
+
+def _sequence(values: Any, fn: str) -> list[Any] | tuple[Any, ...]:
+    if not isinstance(values, list | tuple):
+        raise ExpressionError(f"{fn}() takes a list: {fn}([a, b, …])")
+    return values
+
+
+def _any(values: Any) -> bool:
+    return any(_sequence(values, "any"))
+
+
+def _all(values: Any) -> bool:
+    return all(_sequence(values, "all"))
+
+
 # User-supplied regexes run through RE2, not Python's `re` (audit R08/V10).
 # RE2 matches in time linear in the subject with NO catastrophic backtracking,
 # so a pathological pattern like `(a+)+$` can't hold the GIL and freeze the
@@ -542,8 +577,24 @@ def _regex_match(s: Any, pattern: str) -> bool:
     return bool(_compile_re2(pat).search(subj))
 
 
-def _build_time_helpers(tz_name: str) -> dict[str, Any]:
-    """Time helpers bound to a specific timezone (configured in settings)."""
+def _minute_of_day(t: Any, fn: str) -> int:
+    """An hour (``8``, ``8.5``) or ``"HH:MM"`` as minutes after midnight."""
+    if isinstance(t, str):
+        m = re.fullmatch(r"\s*(\d{1,2}):(\d{2})\s*", t)
+        if m is None or int(m.group(1)) > 24 or int(m.group(2)) > 59:
+            raise ExpressionError(f"{fn}(): time must be an hour or 'HH:MM', got {t!r}")
+        minutes = int(m.group(1)) * 60 + int(m.group(2))
+    elif _is_number(t) and not isinstance(t, bool):
+        minutes = round(float(t) * 60)
+    else:
+        raise ExpressionError(f"{fn}(): time must be an hour or 'HH:MM', got {t!r}")
+    if not 0 <= minutes <= 24 * 60:
+        raise ExpressionError(f"{fn}(): time out of range: {t!r}")
+    return minutes
+
+
+def _build_time_helpers(tz_name: str, location: tuple[float, float] | None) -> dict[str, Any]:
+    """Time helpers bound to a timezone and, for the sun, a place (settings)."""
     tz = ZoneInfo(tz_name)
 
     def now() -> float:
@@ -555,35 +606,69 @@ def _build_time_helpers(tz_name: str) -> dict[str, Any]:
     def dow_now() -> int:
         return datetime.now(tz).weekday()
 
-    def in_window(start_h: int, end_h: int) -> bool:
-        h = datetime.now(tz).hour
-        if start_h <= end_h:
-            return start_h <= h < end_h
-        # Crosses midnight (e.g., 22..6)
-        return h >= start_h or h < end_h
+    def month_now() -> int:
+        return datetime.now(tz).month
+
+    def is_weekend() -> bool:
+        return datetime.now(tz).weekday() >= 5
+
+    def in_window(start: Any, end: Any) -> bool:
+        """``[start, end)`` in local time; an hour or ``"HH:MM"``. Crosses
+        midnight when ``end < start`` (``in_window("22:30", "06:15")``)."""
+        lo, hi = _minute_of_day(start, "in_window"), _minute_of_day(end, "in_window")
+        t = datetime.now(tz)
+        cur = t.hour * 60 + t.minute
+        if lo <= hi:
+            return lo <= cur < hi
+        return cur >= lo or cur < hi
 
     def since_seconds(ts: float | None) -> float:
         if ts is None:
             return float("inf")
         return now() - float(ts)
 
+    def _elevation(fn: str) -> float:
+        if location is None:
+            raise ExpressionError(f"{fn}() needs the place: set ALERTD_LATITUDE and ALERTD_LONGITUDE")
+        return sun_elevation(location[0], location[1], datetime.now(tz))
+
+    def sun_elevation_now() -> float:
+        return round(_elevation("sun_elevation"), 2)
+
+    def is_daylight() -> bool:
+        return _elevation("is_daylight") > SUNRISE_ELEVATION
+
     return {
         "now": now,
         "hour_now": hour_now,
         "dow_now": dow_now,
+        "month_now": month_now,
+        "is_weekend": is_weekend,
         "in_window": in_window,
         "since_seconds": since_seconds,
+        "sun_elevation": sun_elevation_now,
+        "is_daylight": is_daylight,
     }
 
 
-def _build_var_age(state_cache: Any) -> Any:
-    """Returns a ``var_age(name)`` function bound to the state cache."""
+def _build_cache_helpers(state_cache: Any) -> dict[str, Any]:
+    """Functions that read the state cache by name (no cache: nothing known)."""
     def var_age(name: str) -> float:
         snap = state_cache.get(name) if state_cache else None
         if snap is None:
             return float("inf")
-        return snap.age_sec()
-    return var_age
+        return float(snap.age_sec())
+
+    def fresh(name: str, max_age_sec: float) -> bool:
+        """``var_age(name) < max_age_sec``."""
+        return var_age(name) < max_age_sec
+
+    def has(name: str) -> bool:
+        """The variable holds a value that is not stale."""
+        snap = state_cache.get(name) if state_cache else None
+        return snap is not None and snap.value is not None and not snap.is_stale()
+
+    return {"var_age": var_age, "fresh": fresh, "has": has}
 
 
 # ── Public surface ────────────────────────────────────────────────
@@ -593,13 +678,15 @@ def make_evaluator(
     *,
     timezone: str = "UTC",
     state_cache: Any = None,
+    location: tuple[float, float] | None = None,
 ) -> EvalWithCompoundTypes:
     """Construct a simpleeval instance with our function whitelist.
 
     Reused across many evals (cheap to construct, but repeated work
-    if every rule rebuilds it). Engine builds one per tick.
+    if every rule rebuilds it). Engine builds one per tick. ``location`` is
+    (latitude, longitude) for the sun functions.
     """
-    funcs = {
+    funcs: dict[str, Any] = {
         # Numeric
         "abs": abs,
         "min": min,
@@ -611,6 +698,10 @@ def make_evaluator(
         "int": int,
         "float": float,
         "bool": bool,
+        "between": _between,
+        "coalesce": _coalesce,
+        "any": _any,
+        "all": _all,
         # String
         "contains": _contains,
         "startswith": _startswith,
@@ -620,9 +711,8 @@ def make_evaluator(
         "upper": str.upper,
         "regex_match": _regex_match,
     }
-    funcs.update(_build_time_helpers(timezone))
-    if state_cache is not None:
-        funcs["var_age"] = _build_var_age(state_cache)
+    funcs.update(_build_time_helpers(timezone, location))
+    funcs.update(_build_cache_helpers(state_cache))
 
     e = EvalWithCompoundTypes(functions=funcs)
     # Bound `**`, `*` and `%` at runtime — operand sizes come from the context
@@ -635,6 +725,11 @@ def make_evaluator(
     return e
 
 
+# Every function an expression may call; a call to any other name is refused
+# when the rule is saved (a typo would otherwise fail on every evaluation).
+FUNCTION_NAMES: frozenset[str] = frozenset(make_evaluator().functions)
+
+
 def evaluate(
     expr: str,
     ctx: dict[str, Any],
@@ -642,6 +737,7 @@ def evaluate(
     evaluator: EvalWithCompoundTypes | None = None,
     timezone: str = "UTC",
     state_cache: Any = None,
+    location: tuple[float, float] | None = None,
 ) -> EvalResult:
     """Evaluate a single expression against a context.
 
@@ -684,7 +780,7 @@ def evaluate(
     # on them is the rule waiting for data too (review RL-06).
     no_value = sorted(n for n in referenced_names(expr) if n in ctx and ctx[n] is None)
 
-    eva = evaluator or make_evaluator(timezone=timezone, state_cache=state_cache)
+    eva = evaluator or make_evaluator(timezone=timezone, state_cache=state_cache, location=location)
     eva.names = eva_names
 
     budget = _alloc_left.set(_MAX_ALLOC)

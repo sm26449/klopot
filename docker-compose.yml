@@ -58,6 +58,9 @@ services:
       ALERTD_BIND_HOST: 0.0.0.0
       ALERTD_BIND_PORT: 5090
       ALERTD_TZ: ${ALERTD_TZ:-UTC}
+      # Place of the install, for sun_elevation() / is_daylight() in rules.
+      ALERTD_LATITUDE: ${ALERTD_LATITUDE:-}
+      ALERTD_LONGITUDE: ${ALERTD_LONGITUDE:-}
       # OS-level TZ — naive datetime.now() in quiet-hours evaluation must
       # return local time, not UTC.
       TZ: ${TZ:-${ALERTD_TZ:-UTC}}
