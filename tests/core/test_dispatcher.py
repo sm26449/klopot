@@ -438,3 +438,25 @@ async def test_unknown_type_row_also_gets_trace_id(db_session):
     await db_session.commit()  # the endpoint commits after fire (autoflush=False)
     row = (await db_session.execute(select(NotificationLog))).scalars().one()
     assert row.trace_id is not None
+
+
+async def test_two_rules_sharing_a_template_are_not_merged(template_with_channel, db_session, fake_dispatch_ok, make_rule):
+    """RL-13: two rules with the same template and the same context (e.g. both
+    with an empty vars_extract) each get their notification; before, the
+    second was merged into the first one's row without a trace."""
+    t, _ = template_with_channel
+    r1, r2 = make_rule(template_type=t.type), make_rule(template_type=t.type)
+    db_session.add_all([r1, r2])
+    await db_session.commit()
+    ctx = {"name": "shared", "value": 1}
+    with patch("app.channels.manager.ChannelManager.dispatch", new=fake_dispatch_ok):
+        a = await fire(FireEnvelope(type=t.type, context=ctx, rule_id=r1.id, source="engine"), db_session)
+        await db_session.commit()
+        b = await fire(FireEnvelope(type=t.type, context=ctx, rule_id=r2.id, source="engine"), db_session)
+        await db_session.commit()
+        again = await fire(FireEnvelope(type=t.type, context=ctx, rule_id=r2.id, source="engine"), db_session)
+        await db_session.commit()
+    assert a.id != b.id and a.dispatched and b.dispatched
+    assert again.id == b.id          # the same rule still de-duplicates
+    rows = (await db_session.execute(select(NotificationLog).where(NotificationLog.type == t.type))).scalars().all()
+    assert {r.rule_id for r in rows} == {r1.id, r2.id}

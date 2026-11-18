@@ -136,6 +136,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Two rules sharing a template no longer swallow each other's notifications.**
+  The de-duplication key was (template, context): two rules with the same
+  template that saw the same values — both with an empty `vars_extract`, or
+  the same variables — produced one key, and the second rule's fire was merged
+  into the first one's notification without a log row or a count. A rule's
+  fire is now keyed by the rule too; `/v1/fire` is unchanged. Found by the new
+  MQTT simulation (`scripts/rules_sim.sh`).
 - The rule engine writes a rule's `rule_state` row only when its counters
   change: an incident rule wrote it on every evaluation. One expression
   evaluator per tick, and a rule's context is read by name instead of copying

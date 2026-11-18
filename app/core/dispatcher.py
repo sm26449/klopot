@@ -615,7 +615,7 @@ async def _find_recent_dup(
     for r in rows:
         if r.vars_payload is None:
             continue
-        if _scoped_hash(r.vars_payload, r.incident_id, r.incident_event) != h:
+        if _scoped_hash(r.vars_payload, r.incident_id, r.incident_event, r.rule_id) != h:
             continue
         if not should_coalesce(r, this_suppressed_reason):
             continue
@@ -640,12 +640,22 @@ def _incident_fields(envelope: FireEnvelope) -> dict[str, Any]:
 
 
 def _envelope_hash(envelope: FireEnvelope) -> str:
-    return _scoped_hash(_json_safe(envelope.context), envelope.incident_id, envelope.incident_event)
+    return _scoped_hash(
+        _json_safe(envelope.context), envelope.incident_id, envelope.incident_event, envelope.rule_id,
+    )
 
 
-def _scoped_hash(context: dict[str, Any], incident_id: str | None, event: str | None) -> str:
+def _scoped_hash(
+    context: dict[str, Any], incident_id: str | None, event: str | None, rule_id: int | None = None,
+) -> str:
+    """The de-duplication key of a fire. A rule's fire is scoped to the rule
+    (review RL-13): two rules sharing a template saw the same context (the
+    whole cache, or the same variables) and the second one's fire was merged
+    into the first one's notification — no log row, no count, nobody told."""
     if incident_id is not None:
         return _vars_hash({"context": context, "incident_id": incident_id, "event": event})
+    if rule_id is not None:
+        return _vars_hash({"context": context, "rule_id": rule_id})
     return _vars_hash(context)
 
 
