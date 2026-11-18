@@ -103,11 +103,25 @@ adheres to [Semantic Versioning](https://semver.org/).
   - `is_daylight()` and `sun_elevation()` from the place of the install, new
     settings `ALERTD_LATITUDE` / `ALERTD_LONGITUDE` (computed locally, no
     dependency) — instead of a fixed `in_window(8, 20)` for "daytime".
+- **Rule run state and history** (rules review, stage 3; migration `0045`):
+  every rule carries `run_state` — `inactive`, `pending` (true, `persist_n`
+  not reached), `firing`, `no_data`, `error` — with `run_state_since` and
+  `last_true_at`, and `GET /v1/rules/{id}/transitions` lists the changes (one
+  row per change, at most 60 an hour per rule, pruned with the log). The
+  rules list shows *firing* / *pending* and **Last true**; the editor shows the
+  **State history**. Before, a rule that never fired could not be told from
+  one that never even matched.
+- **"What if"**: `POST /v1/rules/validate` takes `context`, values laid over
+  the live ones for that check; in the editor, *Validate* → **Try other
+  values**.
+- Rule editor: **persistence as a duration** ("held for 5 minutes, checking
+  every 10 s" — the API still stores `persist_n`), and for a plain threshold
+  the incident recovery field offers a 5 % hysteresis.
 - Rule editor: the condition and recovery fields **complete variable and
   function names** (↑ / ↓, Enter or Tab, Escape closes the list only), and the
   expression cheat-sheet lists every function.
 - `scripts/rules_sim.sh`: the rule engine end to end over a real MQTT broker —
-  a throwaway install + Mosquitto, 23 scenarios (24 rules, 55 messages) checked
+  a throwaway install + Mosquitto, 24 scenarios (25 rules, 58 messages) checked
   through the API. Part of the release-candidate gate.
 - Rule editor: **Trigger logic** (the rule's Markdown notes, `trigger_logic_md`,
   so far only settable through the API), **Validate** for the recovery
