@@ -240,3 +240,23 @@ async def test_computed_formula_reads_the_local_hour_and_the_sun(monkeypatch, bu
     await resolver.recompute_computed()
     assert cache.value("h") == 0       # UTC would say 21
     assert cache.value("day") is False
+
+
+# ── RL-41 NOT of a missing input ─────────────────────────────────
+
+
+@pytest.mark.parametrize("ctx", [{}, {"infra.x.running": None}])
+def test_not_of_a_missing_input_waits_for_data(ctx):
+    """Before, ``NOT x`` was True until x's first message: every NOT rule
+    counted a match at each start."""
+    r = _ev("NOT infra.x.running", ctx)
+    assert not r.ok
+    assert r.missing_input
+
+
+def test_not_keeps_its_meaning_on_values():
+    assert _ev("NOT x", {"x": False}).value is True
+    assert _ev("NOT x", {"x": 0}).value is True
+    assert _ev("NOT x", {"x": "up"}).value is False
+    assert _ev('NOT has("y")').value is True
+    assert _ev("x OR NOT y", {"x": True}).value is True        # short-circuit: y never read

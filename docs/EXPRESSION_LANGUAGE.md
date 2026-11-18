@@ -236,7 +236,7 @@ If a rule's expression raises (undefined var, type error, rejected syntax):
 
 A **missing input** — a variable (dotted or not) with no value in the cache,
 or one whose value is `None`, used where a value is needed (a comparison,
-`lower(x)`, `avg` of nothing) — is not an error: it records
+`NOT x`, `lower(x)`, `avg` of nothing) — is not an error: it records
 `last_eval_error` (`missing input: …`, `eval_status = no_data` in the API),
 breaks the streak, and does not count towards auto-disable. A misspelt
 variable therefore shows as `no_data`; the editor's **Validate** lists it as

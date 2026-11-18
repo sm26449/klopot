@@ -496,6 +496,15 @@ def _endswith(s: Any, suffix: Any) -> bool:
     return str(s or "").endswith(str(suffix))
 
 
+def _not(x: Any) -> bool:
+    """``NOT x``. ``NOT`` of a missing input (``None``) is a missing input,
+    not ``True``: ``NOT infra.x.running`` matched at every start, before the
+    first message (review RL-41)."""
+    if x is None:
+        raise TypeError("NOT of None")
+    return not x
+
+
 def _between(x: Any, lo: Any, hi: Any) -> bool:
     """``lo <= x <= hi``. ``None`` is a missing input (the rule waits)."""
     if x is None:
@@ -722,6 +731,7 @@ def make_evaluator(
     e.operators[ast.Mult] = _bounded_mult
     e.operators[ast.Mod] = _bounded_mod
     e.operators[ast.Add] = _charged_add(e.operators[ast.Add])
+    e.operators[ast.Not] = _not
     return e
 
 
