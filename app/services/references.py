@@ -3,33 +3,28 @@
 
 A variable is read by a rule (its ``vars_extract``, ``condition_expr`` and
 ``recovery_expr``) and by computed variables (their ``formula``). Besides
-the names an expression evaluates, names passed as string arguments to the
-helpers — ``var_age("ac.actual_running")`` — count too: the rule depends on
-that variable even though ``eval.referenced_names`` deliberately skips
-string literals.
+the names an expression evaluates, names passed in quotes to the helpers
+that take one — ``var_age("ac.actual_running")``, ``fresh``, ``has`` — count
+too (``eval.display_names``): the rule depends on that variable even though
+``eval.referenced_names`` deliberately skips string literals.
 """
 from __future__ import annotations
 
-import re
 from collections import defaultdict
 from dataclasses import dataclass, field
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.eval import KEYWORD_WORDS, referenced_names
+from ..core.eval import display_names
 from ..db.models import Rule, Variable, VariableSource
-
-# helper("some.var") / helper('some_var', …)
-_STRING_ARG = re.compile(r"""\b[A-Za-z_]\w*\(\s*["']([A-Za-z_][\w.]*)["']""")
 
 
 def expression_vars(expr: str | None) -> set[str]:
     """Variable names an expression reads, including helper string args."""
     if not expr:
         return set()
-    names = set(referenced_names(expr)) | set(_STRING_ARG.findall(expr))
-    return {n for n in names if n.lower() not in KEYWORD_WORDS}
+    return set(display_names(expr))
 
 
 def vars_read(vars_extract: list[str] | None, *expressions: str | None) -> set[str]:
