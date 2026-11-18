@@ -207,6 +207,14 @@ SCENARIOS: list[Scenario] = [
          Phase([("sim/simple", 8, 0)], fired("sim_undotted_missing"))],
     ),
     Scenario(
+        "not_missing", "NOT of an input that never arrived is no_data, not a match (RL-41)",
+        [mvar("sim.nr", "sim/nr", "bool")],
+        [rule("sim_not_missing", "NOT sim.nr")],
+        [Phase([], silent("sim_not_missing", "no_data")),
+         Phase([("sim/nr", "true", 0)], silent("sim_not_missing", "ok")),
+         Phase([("sim/nr", "false", 0)], fired("sim_not_missing"))],
+    ),
+    Scenario(
         "null_value", "a JSON null is no_data, not an error (RL-06)",
         [mvar("sim.nul", "sim/nul", "json")],
         [rule("sim_null_value", "sim.nul > 5")],
