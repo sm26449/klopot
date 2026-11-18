@@ -278,6 +278,28 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: scripts/e2e.sh
 
+  # ── Rule engine end to end over MQTT ─────────────────────────────
+  # scripts/rules_sim.sh: a throwaway install + Mosquitto, every scenario of
+  # scripts/rules_sim.py checked through the API — the rule engine as it runs
+  # (rc.9 review RC-08: only the local release gate ran it).
+  rules-sim:
+    name: rules simulation (MQTT)
+    if: ${{ !github.event.repository.private || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: venv for the scenario driver (httpx, paho-mqtt)
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install -e .
+      - run: scripts/rules_sim.sh
+
   # ── Pytest with coverage gate (S12c) ─────────────────────────────
   # Runs the full test suite against an in-memory SQLite DB. No
   # MySQL service needed — the conftest patches the engine. The
@@ -486,7 +508,8 @@ jobs:
     name: publish image (GHCR)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: [smoke, lint, mypy, js-test, test, test-mysql, openapi, security, demo-smoke]
+    # Every gate, the browser e2e and the rule simulation included (RC-08).
+    needs: [smoke, lint, mypy, js-test, e2e, rules-sim, test, test-mysql, openapi, security, demo-smoke]
     if: >-
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
       && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))

@@ -96,7 +96,9 @@ exclude = ["tests*", "docs*"]
 # Admin UI static assets (HTML/JS/CSS/SVG) must ship with the package for
 # non-editable installs; the Docker image copies app/ directly anyway.
 [tool.setuptools.package-data]
-app = ["admin_ui/static/**/*"]
+# The pack catalog ships too (rc.9 review RC-12): a wheel install without it
+# listed no packs.
+app = ["admin_ui/static/**/*", "packs/*.yaml"]
 
 # ── Tooling ──────────────────────────────────────────────────────────
 

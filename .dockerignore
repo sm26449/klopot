@@ -38,6 +38,15 @@ README.md
 CLAUDE.md
 CLAUDE.local.md
 
+# Local-only data — .gitignore does not apply to the build context (rc.9
+# review RC-11): the production export, review reports, JS tooling.
+private/
+.audit/
+node_modules/
+test-results/
+playwright-report/
+mypy-report.txt
+
 # scripts/ is needed at runtime (seed) — DO NOT exclude
 
 # Local DB / backups

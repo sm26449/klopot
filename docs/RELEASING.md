@@ -67,7 +67,7 @@ scripts/version.py set 1.3.0-rc.1
 scripts/check.sh --fast
 git commit -am "chore(release): 1.3.0-rc.1"
 git tag -a v1.3.0-rc.1 -m "Klopot 1.3.0-rc.1"
-git push && git push origin v1.3.0-rc.1            # CI publishes :v1.3.0-rc.1
+git push && git push origin v1.3.0-rc.1            # CI publishes :v1.3.0-rc.1 (after every gate, e2e and rules-sim included)
 gh release create v1.3.0-rc.1 --prerelease --title "Klopot 1.3.0-rc.1" --notes-file <notes>
 scripts/deploy.sh 1.3.0-rc.1 --dry-run              # then without --dry-run
 ```
