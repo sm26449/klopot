@@ -126,6 +126,18 @@ before touching `app/admin_ui/static/`.
   list (`useEscapeLayer` puts it on the dialog stack without taking focus).
   `EXPR_FUNCTIONS` there is also the cheat-sheet; a Python test keeps it equal
   to the server's `FUNCTION_NAMES`.
+- Timing is a duration: "Send when the condition has held for [D] [unit],
+  checking every [S] seconds". The API still stores `persist_n` =
+  `floor(D / S) + 1` (`holdToChecks`); the hint names the checks and the
+  real delay, and says when D was rounded down. Changing S keeps D.
+- After **Validate**, **Try other values** opens a JSON box prefilled with the
+  live values the validation reported; it re-validates with `context`
+  ("what if"). Nothing is saved.
+- **State history** (saved rules): `GET /v1/rules/{id}/transitions`, newest
+  first. The list shows `firing` / `pending` in the state column and a
+  **Last true** column (`last_true_at`).
+- Incident mode stays opt-in; for a plain threshold (`x > 80`) the empty
+  recovery field offers a 5 % hysteresis (`x < 76`, `hysteresisFor`).
 - Timing reads as a sentence with the two numbers inline — "Send when the
   condition holds for [N] checks in a row, checking every [S] seconds" — and a
   hint with the resulting delay (`(N − 1) × S`).

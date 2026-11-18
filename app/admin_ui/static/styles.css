@@ -717,6 +717,11 @@ details.cheat { margin: 0 0 14px; border: 1px solid var(--border); border-radius
 details.cheat summary { cursor: pointer; font-weight: 600; font-size: 13px; }
 details.cheat table { margin-top: 8px; }
 details.cheat td { padding: 3px 8px; border: 0; }
+details.history { margin: 14px 0 0; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+details.history summary { cursor: pointer; font-weight: 600; font-size: 13px; }
+details.history table { margin-top: 8px; }
+.what-if { margin-top: 10px; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; }
+.what-if textarea { width: 100%; }
 
 /* Expression field with a completion list under it (lib/expr.js). */
 .expr-input { position: relative; }

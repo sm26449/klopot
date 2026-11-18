@@ -18,6 +18,37 @@ import { ExprInput, cheatRows } from "../lib/expr.js";
 
 const LIMIT = 500;
 
+// Persistence as a duration (review RL-30). The API keeps persist_n (checks
+// in a row, the first one counts): "holds for D" = floor(D / interval) + 1.
+const UNITS = [["h", 3600], ["min", 60], ["s", 1]];
+export function holdToChecks(holdSec, intervalSec) {
+  const s = Math.max(1, Number(intervalSec) || 1);
+  return Math.min(10000, Math.floor(Math.max(0, Number(holdSec) || 0) / s) + 1);
+}
+export function checksToHold(n, intervalSec) {
+  return (Math.max(1, Number(n) || 1) - 1) * Math.max(1, Number(intervalSec) || 1);
+}
+/** [value, unit] in the largest unit that divides ``sec`` (0 → [0, "min"]). */
+export function splitDuration(sec) {
+  if (!sec) return [0, "min"];
+  const [unit, size] = UNITS.find(([, n]) => sec % n === 0);
+  return [sec / size, unit];
+}
+/** For a plain threshold (``x > 80``) a recovery with a 5 % band
+ *  (``x < 76``), so a value hovering at the threshold does not open and close
+ *  the incident on every check (review RL-33). Null for anything else. */
+export function hysteresisFor(cond) {
+  const m = /^\s*([A-Za-z_][\w.]*)\s*(>=|<=|>|<)\s*(-?\d+(?:\.\d+)?)\s*$/.exec(cond || "");
+  if (!m) return null;
+  const [, name, op, raw] = m;
+  const x = Number(raw);
+  const band = Math.abs(x) * 0.05 || 1;
+  const decimals = (raw.split(".")[1] || "").length;
+  const round = (v) => Number(v.toFixed(Math.max(decimals, band < 1 ? 1 : 0)));
+  return op.startsWith(">") ? `${name} < ${round(x - band)}` : `${name} > ${round(x + band)}`;
+}
+const unitSec = (unit) => (UNITS.find(([u]) => u === unit) || UNITS[2])[1];
+
 // Outcome of POST /v1/rules/validate under an expression field: ok / error,
 // the variables it reads (with live value and age) and the unknown ones.
 function ValidationResult({ validation }) {
@@ -35,6 +66,8 @@ function ValidationResult({ validation }) {
 // One badge for the list: disabled rules show their last error as history
 // (audit V21); enabled ones distinguish a failing expression from a rule that
 // is only waiting for an input (eval_status).
+const runSince = (r) => (r.run_state_since ? t("rules.stateSince", { when: fmtDateTime(r.run_state_since) }) : "");
+
 export function RuleStatusBadge({ rule: r }) {
   if (!r.enabled) {
     return r.eval_status === "ok"
@@ -43,6 +76,9 @@ export function RuleStatusBadge({ rule: r }) {
   }
   if (r.eval_status === "error") return html`<span class="badge warning plain" title=${r.last_eval_error || ""}>${t("rules.badgeError")}</span>`;
   if (r.eval_status === "no_data") return html`<span class="badge plain" title=${r.last_eval_error || ""}>${t("rules.badgeNoData")}</span>`;
+  // Where the rule is in its cycle (review RL-32).
+  if (r.run_state === "firing") return html`<span class="badge critical plain" title=${runSince(r)}>${t("rules.badgeFiring")}</span>`;
+  if (r.run_state === "pending") return html`<span class="badge warning plain" title=${runSince(r)}>${t("rules.badgePending")}</span>`;
   return html`<span class="badge ok plain">${t("rules.badgeOn")}</span>`;
 }
 
@@ -244,7 +280,7 @@ function RuleGroup({ label, rules, open, onToggle, selected, onSelect, onOpen })
         <th class="sel"><input type="checkbox" aria-label=${t("rules.selectGroupAria", { group: label })}
           checked=${allSelected} onChange=${(e) => onSelect(ids, e.target.checked)} /></th>
         <th>${t("rules.colName")}</th><th>${t("rules.colTemplate")}</th><th>${t("rules.colState")}</th>
-        <th>${t("rules.colPersist")}</th><th>${t("rules.colLastFired")}</th><th>${t("rules.colFires")}</th>
+        <th>${t("rules.colPersist")}</th><th>${t("rules.colLastTrue")}</th><th>${t("rules.colLastFired")}</th><th>${t("rules.colFires")}</th>
       </tr></thead>
       <tbody>${rules.map((r) => html`<tr key=${r.id} class="row-link" onClick=${() => onOpen(r)}>
         <td class="sel" onClick=${(e) => e.stopPropagation()}>
@@ -257,6 +293,7 @@ function RuleGroup({ label, rules, open, onToggle, selected, onSelect, onOpen })
         <td class="mono small">${r.template_type}</td>
         <td><${RuleStatusBadge} rule=${r} /></td>
         <td class="small">${r.persist_n}× / ${r.eval_interval_sec}s</td>
+        <td title=${fmtDateTime(r.last_true_at)}>${r.last_true_at ? fmtRelative(r.last_true_at) : "—"}</td>
         <td title=${fmtDateTime(r.last_fired_at)}>${r.last_fired_at ? fmtRelative(r.last_fired_at) : "—"}</td>
         <td class="num">${r.fire_count_lifetime}</td>
       </tr>`)}</tbody></table></div>` : null}
@@ -284,6 +321,17 @@ function RuleEditor({ rule, templateRows = [], variables, rules, onClose, onSave
   const [evalRes, setEvalRes] = useState(null);
   const [fireRes, setFireRes] = useState(null);
   const [ctxText, setCtxText] = useState("{}");
+  // "What if": the condition with other values (review RL-31).
+  const [whatIfText, setWhatIfText] = useState(null);
+  const [whatIf, setWhatIf] = useState(null);
+  // Run-state history of a saved rule (review RL-32).
+  const [history, setHistory] = useState(null);
+  useEffect(() => {
+    if (isNew) return;
+    lookup(api.get(`/v1/rules/${rule.id}/transitions`, { limit: 50 }), []).then((rows) => setHistory(Array.isArray(rows) ? rows : []));
+  }, []);
+  // How long the condition must hold, kept while the interval changes (RL-30).
+  const [hold, setHold] = useState(() => splitDuration(checksToHold(rule.persist_n ?? 1, rule.eval_interval_sec ?? 10)));
   const [busy, setBusy] = useState(false);
   const fieldErrs = useFieldErrors();
   const [confirmDel, setConfirmDel] = useState(false);
@@ -296,7 +344,27 @@ function RuleEditor({ rule, templateRows = [], variables, rules, onClose, onSave
     try { setResult(await api.post("/v1/rules/validate", { condition_expr: expr, vars_extract: r.vars_extract })); }
     catch (e) { toast.error(e); }
   }
-  const validate = () => validateExpr(r.condition_expr, setValidation);
+  const validate = () => { setWhatIf(null); setWhatIfText(null); validateExpr(r.condition_expr, setValidation); };
+  // Start from the live values the validation reported (missing ones null).
+  function openWhatIf() {
+    const values = Object.fromEntries((validation?.referenced_vars || []).map((v) => [v.name, v.present ? v.live_value : null]));
+    setWhatIfText(JSON.stringify(values, null, 2));
+    setWhatIf(null);
+  }
+  async function runWhatIf() {
+    let context; try { context = JSON.parse(whatIfText || "{}"); } catch { return toast.error(t("rules.toastInvalidJson")); }
+    if (!context || typeof context !== "object" || Array.isArray(context)) return toast.error(t("rules.toastInvalidJson"));
+    try { setWhatIf(await api.post("/v1/rules/validate", { condition_expr: r.condition_expr, vars_extract: r.vars_extract, context })); }
+    catch (e) { toast.error(e); }
+  }
+  function setHoldPart(value, unit) {
+    setHold([value, unit]);
+    set("persist_n", holdToChecks(Number(value) * unitSec(unit), r.eval_interval_sec));
+  }
+  function setInterval_(v) {
+    set("eval_interval_sec", v);
+    set("persist_n", holdToChecks(Number(hold[0]) * unitSec(hold[1]), v));
+  }
 
   async function save() {
     fieldErrs.clear();
@@ -372,7 +440,7 @@ function RuleEditor({ rule, templateRows = [], variables, rules, onClose, onSave
   return html`<${Drawer} open=${true} width=${760} title=${isNew ? t("rules.newRule") : rule.name} onClose=${closeDraft} dirty=${dirty}>
       ${draft.recovered ? html`<${DraftBanner} onRestore=${restoreDraft} onDiscard=${draft.dismiss} />` : null}
       <${FieldErrorSummary} errors=${fieldErrs.errors}
-        idFor=${(f) => ({ name: "r-name", template_type: "r-tmpl", condition_expr: "r-cond", persist_n: "r-persistn", eval_interval_sec: "r-evalint", recovery_expr: "r-recovery", recovery_persist_n: "r-recovery-n", resolved_template_type: "r-resolved-tmpl" }[f.split(".").pop()] || "r-cond")} />
+        idFor=${(f) => ({ name: "r-name", template_type: "r-tmpl", condition_expr: "r-cond", persist_n: "r-hold", eval_interval_sec: "r-evalint", recovery_expr: "r-recovery", recovery_persist_n: "r-recovery-n", resolved_template_type: "r-resolved-tmpl" }[f.split(".").pop()] || "r-cond")} />
     <div class="editor">
       ${isNew ? html`<div class="field"><label for="r-name">${t("rules.nameLabel")} <span class="req">*</span></label>
         <input id="r-name" value=${name} onInput=${(e) => setName(e.target.value)}
@@ -400,8 +468,17 @@ function RuleEditor({ rule, templateRows = [], variables, rules, onClose, onSave
           placeholder=${t("rules.conditionPlaceholder")} />
         ${fieldErrs.msgFor("condition_expr") ? html`<div id=${fieldErrorId("condition_expr")} class="error small" role="alert">${fieldErrs.msgFor("condition_expr")}</div>` : null}
         <div class="form-actions"><button type="button" class="btn sm" onClick=${validate}>${t("rules.validate")}</button>
+          ${validation?.referenced_vars?.length && whatIfText === null ? html`<button type="button" class="btn sm" onClick=${openWhatIf}>${t("rules.whatIfOpen")}</button>` : null}
         </div>
         <${ValidationResult} validation=${validation} />
+        ${whatIfText !== null ? html`<div class="what-if">
+          <label for="r-whatif">${t("rules.whatIfLabel")}</label>
+          <textarea id="r-whatif" class="mono" rows=${Math.min(8, whatIfText.split("\n").length)} value=${whatIfText}
+            onInput=${(e) => { setWhatIfText(e.target.value); setWhatIf(null); }} aria-describedby="r-whatif-help" spellcheck="false"></textarea>
+          <p id="r-whatif-help" class="muted small">${t("rules.whatIfHelp")}</p>
+          <div class="form-actions"><button type="button" class="btn sm" onClick=${runWhatIf}>${t("rules.whatIfRun")}</button></div>
+          <${ValidationResult} validation=${whatIf} />
+        </div>` : null}
       </div>
 
       <details class="cheat"><summary>${t("rules.cheatSheet")}</summary>
@@ -410,14 +487,18 @@ function RuleEditor({ rule, templateRows = [], variables, rules, onClose, onSave
 
       <fieldset class="timing">
         <legend>${t("rules.timingLegend")}</legend>
-        <p class="timing-sentence">${t("rules.timingA")}
-          <input id="r-persistn" type="number" min="1" class="inline-num" value=${r.persist_n} aria-label=${t("rules.persistN")}
-            onInput=${(e) => set("persist_n", e.target.value)} ...${fieldErrs.attrs("persist_n")} />
-          ${t("rules.timingB")}
+        <p class="timing-sentence">${t("rules.timingHoldA")}
+          <input id="r-hold" type="number" min="0" class="inline-num" value=${hold[0]} aria-label=${t("rules.holdFor")}
+            onInput=${(e) => setHoldPart(e.target.value, hold[1])} ...${fieldErrs.attrs("persist_n")} />
+          <select id="r-hold-unit" class="inline-num" value=${hold[1]} aria-label=${t("rules.holdUnit")}
+            onChange=${(e) => setHoldPart(hold[0], e.target.value)}>
+            ${UNITS.map(([u]) => html`<option key=${u} value=${u}>${t("rules.unit_" + u)}</option>`)}</select>
+          ${t("rules.timingHoldB")}
           <input id="r-evalint" type="number" min="1" class="inline-num" value=${r.eval_interval_sec} aria-label=${t("rules.evalInterval")}
-            onInput=${(e) => set("eval_interval_sec", e.target.value)} ...${fieldErrs.attrs("eval_interval_sec")} />
+            onInput=${(e) => setInterval_(e.target.value)} ...${fieldErrs.attrs("eval_interval_sec")} />
           ${t("rules.timingC")}</p>
-        ${delaySec > 0 ? html`<p class="hint">${Number(r.persist_n) > 1 ? t("rules.timingDelay", { delay: fmtSeconds(delaySec) }) : t("rules.timingFirst")}</p>` : null}
+        <p class="hint">${Number(r.persist_n) > 1 ? t("rules.timingChecks", { count: r.persist_n, delay: fmtSeconds(delaySec) }) : t("rules.timingFirst")}
+          ${Number(hold[0]) * unitSec(hold[1]) !== delaySec && Number(r.persist_n) > 1 ? html` <span class="warn-text">${t("rules.timingRounded")}</span>` : null}</p>
       </fieldset>
 
       <div class="field"><label for="r-summary">${t("rules.triggerSummary")}</label><input id="r-summary" maxlength="500" value=${r.trigger_summary || ""} onInput=${(e) => set("trigger_summary", e.target.value)} /></div>
@@ -442,6 +523,9 @@ function RuleEditor({ rule, templateRows = [], variables, rules, onClose, onSave
           ${fieldErrs.msgFor("recovery_expr") ? html`<div class="error small" id=${fieldErrorId("recovery_expr")} role="alert">${fieldErrs.msgFor("recovery_expr")}</div>` : null}
           ${(r.recovery_expr || "").trim() ? html`<div class="form-actions"><button type="button" class="btn sm" onClick=${() => validateExpr(r.recovery_expr, setRecValidation)}>${t("rules.validate")}</button></div>
             <${ValidationResult} validation=${recValidation} />` : null}
+          ${!(r.recovery_expr || "").trim() && hysteresisFor(r.condition_expr) ? html`<div class="form-actions">
+            <button type="button" class="btn sm" onClick=${() => set("recovery_expr", hysteresisFor(r.condition_expr))}>
+              ${t("rules.recoverySuggest", { expr: hysteresisFor(r.condition_expr) })}</button></div>` : null}
           <p id="r-recovery-help" class="muted small">${t("rules.recoveryHelp")}</p></div>
         <div class="field"><label for="r-recovery-n">${t("rules.recoveryPersist")}</label>
           <input id="r-recovery-n" type="number" min="1" max="10000" value=${r.recovery_persist_n || 1} onInput=${(e) => set("recovery_persist_n", e.target.value)} /></div>
@@ -477,6 +561,17 @@ function RuleEditor({ rule, templateRows = [], variables, rules, onClose, onSave
         ${evalRes.error ? html`<span class="error small">${evalRes.error}</span>` : null}
         <div class="small muted">${t("rules.consecutiveMatches", { count: evalRes.consecutive_match_count })}</div><${Json} value=${evalRes.context} /></div>` : null}
       ${fireRes ? html`<div class="result"><b>${t("rules.firedResult")}</b> ${fireRes.dispatched ? html`<span class="badge ok plain">${t("rules.dispatched")}</span>` : html`<span class="badge warning plain">${fireRes.suppressed_reason || t("rules.notDispatched")}</span>`}<${Json} value=${fireRes} /></div>` : null}
+
+      ${!isNew ? html`<details class="history"><summary>${t("rules.historyTitle")}${rule.run_state ? html` · <span class="muted">${t("rules.state_" + rule.run_state)}</span>` : null}</summary>
+        ${history === null ? html`<p class="muted small">${t("common.loading")}</p>`
+          : history.length === 0 ? html`<p class="muted small">${t("rules.historyEmpty")}</p>`
+          : html`<table class="tbl small"><thead><tr><th>${t("rules.historyWhen")}</th><th>${t("rules.historyChange")}</th><th>${t("rules.historyDetail")}</th></tr></thead>
+            <tbody>${history.map((h, i) => html`<tr key=${i}>
+              <td title=${fmtDateTime(h.at)}>${fmtRelative(h.at)}</td>
+              <td>${h.from_state ? t("rules.state_" + h.from_state) + " → " : ""}<b>${t("rules.state_" + h.to_state)}</b></td>
+              <td class="muted small">${h.detail || ""}</td></tr>`)}</tbody></table>`}
+        <p class="muted small">${t("rules.historyHelp")}</p>
+      </details>` : null}
 
       <${KindHelp} help=${tnode("rules.help")} />
     </div>
