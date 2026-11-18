@@ -128,8 +128,10 @@ before touching `app/admin_ui/static/`.
   to the server's `FUNCTION_NAMES`.
 - Timing is a duration: "Send when the condition has held for [D] [unit],
   checking every [S] seconds". The API still stores `persist_n` =
-  `floor(D / S) + 1` (`holdToChecks`); the hint names the checks and the
-  real delay, and says when D was rounded down. Changing S keeps D.
+  `ceil(D / S) + 1` (`holdToChecks`) — at least D, never sooner; the hint
+  names the checks and the real delay, says when D was rounded up, and when
+  the 10 000-check cap cut it. Changing S keeps D; restoring a draft restores
+  its duration too.
 - After **Validate**, **Try other values** opens a JSON box prefilled with the
   live values the validation reported; it re-validates with `context`
   ("what if"). Nothing is saved.

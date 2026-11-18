@@ -10,7 +10,9 @@ const { RulesView, holdToChecks, checksToHold, splitDuration, hysteresisFor } = 
 test("a duration becomes checks in a row and back", () => {
   assert.equal(holdToChecks(300, 10), 31);            // 5 min every 10 s
   assert.equal(holdToChecks(0, 10), 1);               // at the first check
-  assert.equal(holdToChecks(25, 10), 3);              // rounded down to whole checks
+  assert.equal(holdToChecks(25, 10), 4);              // rounded up: at least 25 s (RV-06)
+  assert.equal(holdToChecks(5, 10), 2);               // shorter than a check is still a wait
+  assert.equal(holdToChecks(10 * 86400, 1), 10000);   // capped
   assert.equal(checksToHold(31, 10), 300);
   assert.deepEqual(splitDuration(300), [5, "min"]);
   assert.deepEqual(splitDuration(7200), [2, "h"]);
@@ -93,4 +95,36 @@ test("the editor shows the duration, the history and checks other values", async
     await flush(20);
     assert.match(document.querySelector("fieldset.timing .hint").textContent, /11 checks in a row/);
   } finally { unmount(); }
+});
+
+test("a restored draft brings its duration; a new interval keeps it (RV-01)", async () => {
+  const { draftKey } = await import("../../app/admin_ui/static/lib/draft.js");
+  const saved = { ...RULE, run_state: null, persist_n: 31, eval_interval_sec: 10 };          // 5 min
+  sessionStorage.setItem(draftKey("rules", 7), JSON.stringify({ name: "hot", r: { ...saved, persist_n: 61 } }));  // 10 min
+  const patches = [];
+  globalThis.fetch = async (url, options = {}) => {
+    const u = String(url);
+    if (options.method === "PATCH") patches.push(JSON.parse(options.body));
+    const body = u.includes("/transitions") ? [] : u.match(/\/v1\/rules\/7$/) ? saved
+      : { items: u.includes("/v1/rules") ? [saved] : [], total: 1, limit: 50, offset: 0 };
+    return { ok: true, status: 200, headers: { get: () => "application/json" }, json: async () => body };
+  };
+  window.fetch = globalThis.fetch;
+  try {
+    mount(html`<${RulesView} query=${{}} />`);
+    await flush(450);
+    [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "hot").click();
+    await until(() => [...document.querySelectorAll("button")].some((b) => b.textContent.trim() === "Restore draft"));
+    [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Restore draft").click();
+    await flush(30);
+    assert.equal(document.getElementById("r-hold").value, "10");
+    assert.equal(document.getElementById("r-hold-unit").value, "min");
+    const interval = document.getElementById("r-evalint");
+    interval.value = "30";
+    interval.dispatchEvent(new Event("input", { bubbles: true }));
+    await flush(20);
+    [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Save").click();
+    await until(() => patches.length === 1);
+    assert.equal(patches[0].persist_n, 21);                  // 10 min at 30 s, not 11 (5 min)
+  } finally { unmount(); sessionStorage.clear(); }
 });

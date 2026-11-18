@@ -19,11 +19,14 @@ import { ExprInput, cheatRows } from "../lib/expr.js";
 const LIMIT = 500;
 
 // Persistence as a duration (review RL-30). The API keeps persist_n (checks
-// in a row, the first one counts): "holds for D" = floor(D / interval) + 1.
+// in a row, the first one counts): "held for at least D" = ceil(D / interval)
+// + 1, so the alert never goes out sooner than asked (review RV-06: rounding
+// down made 5 s at a 10 s interval "at the first check").
 const UNITS = [["h", 3600], ["min", 60], ["s", 1]];
+export const MAX_CHECKS = 10000;
 export function holdToChecks(holdSec, intervalSec) {
   const s = Math.max(1, Number(intervalSec) || 1);
-  return Math.min(10000, Math.floor(Math.max(0, Number(holdSec) || 0) / s) + 1);
+  return Math.min(MAX_CHECKS, Math.ceil(Math.max(0, Number(holdSec) || 0) / s) + 1);
 }
 export function checksToHold(n, intervalSec) {
   return (Math.max(1, Number(n) || 1) - 1) * Math.max(1, Number(intervalSec) || 1);
@@ -413,7 +416,14 @@ function RuleEditor({ rule, templateRows = [], variables, rules, onClose, onSave
 
   const dirty = useDirty({ name, r });
   const draft = useDraft("rules", isNew ? null : rule.id, { name, r }, dirty);
-  const restoreDraft = () => { const d = draft.recovered; setName(d.name); setR(d.r); draft.restore(); };
+  // The duration follows the restored rule, or a later interval change would
+  // recompute persist_n from the saved one (review RV-01).
+  const restoreDraft = () => {
+    const d = draft.recovered;
+    setName(d.name); setR(d.r);
+    setHold(splitDuration(checksToHold(d.r.persist_n, d.r.eval_interval_sec)));
+    draft.restore();
+  };
   const closeDraft = () => { draft.clear(); onClose(); };
   // Templates as "icon type — severity", plus the current value if it is not
   // (or no longer) a template, so an existing rule never loses its setting.
@@ -498,7 +508,8 @@ function RuleEditor({ rule, templateRows = [], variables, rules, onClose, onSave
             onInput=${(e) => setInterval_(e.target.value)} ...${fieldErrs.attrs("eval_interval_sec")} />
           ${t("rules.timingC")}</p>
         <p class="hint">${Number(r.persist_n) > 1 ? t("rules.timingChecks", { count: r.persist_n, delay: fmtSeconds(delaySec) }) : t("rules.timingFirst")}
-          ${Number(hold[0]) * unitSec(hold[1]) !== delaySec && Number(r.persist_n) > 1 ? html` <span class="warn-text">${t("rules.timingRounded")}</span>` : null}</p>
+          ${Number(r.persist_n) >= MAX_CHECKS ? html` <span class="warn-text">${t("rules.timingCapped", { max: MAX_CHECKS })}</span>`
+            : Number(hold[0]) * unitSec(hold[1]) !== delaySec ? html` <span class="warn-text">${t("rules.timingRounded", { delay: fmtSeconds(delaySec) })}</span>` : null}</p>
       </fieldset>
 
       <div class="field"><label for="r-summary">${t("rules.triggerSummary")}</label><input id="r-summary" maxlength="500" value=${r.trigger_summary || ""} onInput=${(e) => set("trigger_summary", e.target.value)} /></div>
