@@ -682,7 +682,7 @@ its own streak, run state, incident (`rule_name` `name[f2]`) and
 notifications; inhibition, persistence, interval and auto-disable stay
 per rule. The rule's `run_state` is the most urgent of its instances
 (error > firing > pending > no_data > inactive), its `last_eval_error` the
-first failing instance's message as `[f4] missing input: …`.
+message of a failing instance (a real error first) as `missing input: … — instance f4`.
 
 - `GET /v1/rules/{id}/instances` (`read`): `[{instance, run_state,
   run_state_since, last_true_at, last_eval_error, consecutive_match_count}]`

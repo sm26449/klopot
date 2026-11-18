@@ -28,6 +28,7 @@ def test_normalize_for_each():
     ({"n": ["a b"]}, "a value must match"),
     ({"n": ["a", "a"]}, "listed twice"),
     ({"n": [str(i) for i in range(51)]}, "at most 50"),
+    ({"n": ["A", "a"]}, "differ only in case"),          # RC-06: one key on MySQL
     (["f1"], "one parameter"),
 ])
 def test_normalize_for_each_refuses(raw, why):
@@ -113,8 +114,12 @@ async def test_a_silent_instance_is_no_data_alone(db_engine, db_session, make_ru
     assert (rows["a"].run_state, rows["b"].run_state) == ("inactive", "no_data")
     assert rows["b"].last_eval_error.startswith("missing input: x.b")
     rule = (await db_session.execute(select(Rule).where(Rule.id == rid))).scalar_one()
-    assert rule.last_eval_error.startswith("[b] missing input: x.b")
+    assert rule.last_eval_error.startswith("missing input: x.b")
+    assert rule.last_eval_error.endswith("— instance b")
     assert rule.consecutive_eval_errors == 0
+    # RC-07: the API (and its filter) read it as no_data, not as an error.
+    from app.schemas.rule import RuleRead
+    assert RuleRead.model_validate(rule).eval_status == "no_data"
 
 
 async def test_an_incident_per_instance(db_engine, db_session, make_rule, make_template):
@@ -267,3 +272,56 @@ async def test_config_import_takes_and_checks_for_each(db_client, admin_key, db_
     body = resp.json()
     assert body["applied"] is False
     assert any("[a]" in e for e in body["errors"])
+
+
+
+async def test_a_real_error_wins_the_summary_over_a_missing_input(db_engine, db_session, make_rule, make_template):
+    """RC-07: instance a fails for real, b has no data — the rule is an error,
+    with a's message."""
+    cache = await _cache(x__a=5)
+    engine, rid = await _setup(db_session, make_rule, make_template, cache, condition_expr="x.{n} / 0 > 1")
+    await _tick(engine, rid)
+    await fresh(db_session)
+    rule = (await db_session.execute(select(Rule).where(Rule.id == rid))).scalar_one()
+    assert rule.consecutive_eval_errors == 1
+    assert rule.last_eval_error.startswith("ZeroDivisionError")
+    assert rule.last_eval_error.endswith("— instance a")
+
+
+async def test_saving_over_the_history_budget_is_refused(db_client, admin_key, db_session, make_template, monkeypatch):
+    """RC-03: a new rule used to push an existing rule's variable out of the
+    history budget (201, then that rule was no_data for ever)."""
+    from app.core.history import get_history_store
+
+    class _Reload:
+        async def reload_rules(self):
+            from app.core.engine import RuleEngine
+            await RuleEngine().reload_rules()
+    monkeypatch.setattr("app.api.v1.rules.get_engine", lambda: _Reload())
+    store = get_history_store()
+    monkeypatch.setattr(store, "max_vars", 1)
+    h = {"X-API-Key": admin_key}
+    db_session.add(make_template(type="pt"))
+    await db_session.commit()
+    ok = await db_client.post("/v1/rules", headers=h, json={
+        "name": "hz", "template_type": "pt", "condition_expr": 'avg_over("z", "1m") > 1'})
+    assert ok.status_code == 201, ok.text
+    over = await db_client.post("/v1/rules", headers=h, json={
+        "name": "ha", "template_type": "pt", "condition_expr": 'avg_over("a", "1m") > 1'})
+    assert over.status_code == 422
+    assert "ALERTD_HISTORY_MAX_VARS is 1" in over.text
+    assert store.tracked() == {"z": 60}
+
+
+async def test_the_category_filter_follows_the_instances_templates(db_client, admin_key, db_session, make_rule, make_template):
+    """RC-09: ?category=Sensors missed a rule whose template is audit_{n}."""
+    db_session.add_all([make_template(type="audit_a", category="Sensors"), make_template(type="audit_b", category="Sensors"),
+                        make_rule(name="pcat", template_type="audit_{n}", condition_expr="x.{n} > 1",
+                                  for_each={"n": ["a", "b"]}),
+                        make_rule(name="plain_none", template_type="nothing_here", condition_expr="x > 1")])
+    await db_session.commit()
+    h = {"X-API-Key": admin_key}
+    sensors = (await db_client.get("/v1/rules?category=sensors", headers=h)).json()["items"]
+    assert [r["name"] for r in sensors] == ["pcat"]
+    none = [r["name"] for r in (await db_client.get("/v1/rules?category=__none__", headers=h)).json()["items"]]
+    assert "plain_none" in none and "pcat" not in none

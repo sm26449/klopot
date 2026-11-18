@@ -2,6 +2,7 @@
 
 Status: Accepted
 Date: 2026-11-18
+Amended: 2026-11-18 — values that differ only in case refused; the rule's message keeps the "missing input" prefix first (rc.9 review RC-06, RC-07)
 Amended: 2026-11-18 — storage: an additive table `rule_instances` instead of re-keying `rule_state`, and an instance's open incident in the existing unique `incidents.active_source_key` (`rule:<id>:<instance>`) instead of an `incidents.rule_instance` column — no primary-key or unique-constraint change on MySQL
 
 ## Context
@@ -28,13 +29,19 @@ solves this with labels, Zabbix with low-level discovery. The rules review
 3. **Each value is an instance with its own life**: its own streak, recovery
    streak, run state and history, incident and de-duplication key. The engine
    keys runtimes by `(rule_id, instance)`; an ordinary rule is instance `""`.
-4. **Storage (migration `0046`)**: `rules.for_each` (JSON); `rule_state`
-   keyed by `(rule_id, instance)` and holding the instance's `run_state`,
-   `run_state_since`, `last_true_at`; `rule_transitions.instance`;
-   `incidents.rule_instance`. Existing rows get instance `""`. The rule's own
-   `run_state` becomes the summary of its instances (the most urgent:
-   error > firing > pending > no_data > inactive) so the list and filters
-   work unchanged.
+4. **Storage (migration `0046`)** *(amended — this is what was built)*:
+   `rules.for_each` (JSON); a table `rule_instances` (`rule_id`, `instance`)
+   holding each instance's streaks, epoch, run state and last message (an
+   ordinary rule keeps `rule_state` and its own columns, untouched);
+   `rule_transitions.instance` (`""` for an ordinary rule). An instance's open
+   incident uses the unique `incidents.active_source_key` as
+   `rule:<id>:<instance>` (`active_rule_id` NULL), no new incident column. The
+   rule's own `run_state` is the summary of its instances (the most urgent:
+   error > firing > pending > no_data > inactive), its `last_eval_error` one
+   failing instance's message — a real error first — as `… — instance f4`, so
+   the list, `eval_status` and the filters work unchanged. Values that differ
+   only in case (`A` / `a`) are refused: MySQL compares the instance key
+   without case (rc.9 review RC-06, RC-07).
 5. **Rule-level parts stay rule-level**: enabled, eval interval, persist,
    inhibition (an inhibitor rule is active if any of its instances is),
    `fire_count_lifetime`, `last_fired_at`. An expression error is the same in

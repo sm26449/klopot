@@ -211,6 +211,7 @@ class RuleEngine:
         # restart, inhibition kicks in again on the inhibitor's first
         # truthy tick (brief non-inhibited window, documented).
         self._by_name: dict[str, _RuleRuntime] = {}
+        self._by_rule: dict[int, list[_RuleRuntime]] = {}   # the instances of each rule
         self._last_truthy: dict[TruthyKey, float] = {}   # name, or (name, instance)
         self._reload_lock = asyncio.Lock()
         # Accumulates {rule_id: utc_now()} from _touch_evaluated_at;
@@ -239,6 +240,12 @@ class RuleEngine:
             except (asyncio.CancelledError, Exception):
                 pass
             self._task = None
+        # The cancel lands before the loop's own final flush (rc.9 review
+        # RC-10): write the last last_evaluated_at stamps here, bounded.
+        try:
+            await asyncio.wait_for(self._flush_touches(), timeout=5)
+        except Exception:
+            logger.exception("final flush failed")
 
     def is_alive(self) -> bool:
         """True if the ticker task started and is still running (audit F32)."""
@@ -393,6 +400,9 @@ class RuleEngine:
                     )
                 self._rules = new
                 self._by_name = {rt.rule.name: rt for rt in new.values()}
+                self._by_rule = {}
+                for key, rt in new.items():
+                    self._by_rule.setdefault(_rid(key), []).append(rt)
                 # The history the enabled rules look back on (ADR-0004), as
                 # each instance sees it.
                 from .history import get_history_store, merge_needs
@@ -496,6 +506,7 @@ class RuleEngine:
         # Every instance: the rule as a whole is disabled.
         for key in [k for k in self._rules if _rid(k) == rt.rule.id]:
             self._rules.pop(key, None)
+        self._by_rule.pop(rt.rule.id, None)
         self._by_name.pop(rt.rule.name, None)
         for mark in [k for k in self._last_truthy if _tname(k) == rt.rule.name]:
             self._last_truthy.pop(mark, None)
@@ -1039,14 +1050,16 @@ class RuleEngine:
         return row
 
     def _siblings(self, rt: _RuleRuntime) -> list[_RuleRuntime]:
-        """Every live instance of ``rt``'s rule (``rt`` included)."""
-        out = [x for k, x in self._rules.items() if _rid(k) == rt.rule.id]
+        """Every live instance of ``rt``'s rule (``rt`` included) — from an
+        index by rule id, not a sweep of every runtime per instance."""
+        out = self._by_rule.get(rt.rule.id, [])
         return out if rt in out else [*out, rt]
 
     async def _record_instance_error(self, rt: _RuleRuntime, error: str | None, *, real: bool) -> None:
         """An instance's message goes on its row; the rule row gets the
-        summary: the highest error count of its instances and the first
-        failing instance's message, ``[f4] missing input: …`` (ADR-0005)."""
+        summary: the highest error count of its instances and one failing
+        instance's message — a real error first — as ``missing input: … —
+        instance f4`` (ADR-0005)."""
         if rt.written_error == (rt.consecutive_eval_errors, error):
             return
         want_open = bool(error) and real
@@ -1058,8 +1071,12 @@ class RuleEngine:
         rt.last_eval_error = error
         siblings = self._siblings(rt)
         errors = max(x.consecutive_eval_errors for x in siblings)
-        failing = sorted((x.instance, x.last_eval_error) for x in siblings if x.last_eval_error)
-        summary = f"[{failing[0][0]}] {failing[0][1]}" if failing else None
+        # A real error before a missing input, and the message first: the API
+        # and its filter read "missing input: …" at the start as no_data
+        # (rc.9 review RC-07: "[b] missing input" read as an error).
+        failing = sorted(((x.last_eval_error or "").startswith(eval_module.MISSING_INPUT_PREFIX), x.instance,
+                          x.last_eval_error) for x in siblings if x.last_eval_error)
+        summary = f"{failing[0][2]} — instance {failing[0][1]}" if failing else None
         rt.rule.consecutive_eval_errors = errors
         async for s in get_session():
             row = await self._instance_row(s, rt)

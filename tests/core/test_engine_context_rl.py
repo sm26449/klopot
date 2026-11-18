@@ -79,3 +79,22 @@ async def test_an_idle_incident_rule_writes_rule_state_once(db_engine, db_sessio
         await engine._eval_rule(rt, now=float(i))
     # At most the state row and the first run-state transition (RL-32).
     assert len(calls) <= 2
+
+
+async def test_stop_flushes_the_last_evaluation_stamps(monkeypatch):
+    """rc.9 review RC-10: stop() cancelled the loop before its final flush."""
+    import asyncio
+    engine = RuleEngine()
+    flushed = []
+
+    async def tick():
+        await asyncio.sleep(3600)                 # a tick in progress
+
+    async def flush():
+        flushed.append(1)
+    monkeypatch.setattr(engine, "_tick", tick)
+    monkeypatch.setattr(engine, "_flush_touches", flush)
+    engine._task = asyncio.create_task(engine._run())
+    await asyncio.sleep(0.05)
+    await engine.stop()
+    assert flushed == [1]

@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import and_, func, not_, or_, select
+from sqlalchemy import and_, not_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -37,6 +37,7 @@ from ...schemas.rule import (
     RuleTransitionRead,
     RuleUpdate,
 )
+from ...services.history_budget import history_budget_problem
 from ...utils.like import like_escape
 from ._crud import crud_get_or_404, crud_list, enforce_create_cap, flush_or_409
 
@@ -180,13 +181,7 @@ async def list_rules(
     if eval_status is not None:
         filters.append(_status_clause(eval_status))
     if category is not None:
-        categorised = select(Template.type).where(Template.category.is_not(None))
-        if category == "__none__":
-            filters.append(Rule.template_type.not_in(categorised))
-        else:
-            filters.append(Rule.template_type.in_(
-                select(Template.type).where(func.lower(Template.category) == category.lower())
-            ))
+        filters.append(Rule.id.in_(await _rule_ids_in_category(session, category)))
     if never_fired is True:
         filters.append(Rule.last_fired_at.is_(None))
     elif never_fired is False:
@@ -223,6 +218,7 @@ async def create_rule(
     obj = Rule(**body.model_dump())
     session.add(obj)
     await flush_or_409(session, "Rule create")
+    await _history_budget_or_422(session)
     await session.refresh(obj)
     await record_change(
         session, actor, "rule.create",
@@ -271,6 +267,29 @@ async def get_rule(
 ) -> RuleRead:
     obj = await crud_get_or_404(session, Rule, rule_id)
     return RuleRead.model_validate(obj)
+
+
+async def _rule_ids_in_category(session: AsyncSession, category: str) -> list[int]:
+    """Rules whose template is in ``category`` (case-insensitive; ``__none__`` =
+    uncategorized). A parametric rule's template is ``ov_active_{n}``: it is in
+    a category when one of its instances' templates is (rc.9 review RC-09)."""
+    cats = {t: (c or "").lower() for t, c in (await session.execute(select(Template.type, Template.category))).all()}
+    want = category.lower()
+    out = []
+    for rid, ttype, for_each in (await session.execute(select(Rule.id, Rule.template_type, Rule.for_each))).all():
+        found = {cats.get(expand(ttype, for_each, inst) or ttype, "") for inst in instances(for_each)}
+        found.discard("")
+        if (want == "__none__" and not found) or want in found:
+            out.append(rid)
+    return out
+
+
+async def _history_budget_or_422(session: AsyncSession) -> None:
+    """Refuse a write whose history needs exceed ALERTD_HISTORY_MAX_VARS
+    (ADR-0004, RC-03) — before commit, so no other rule loses its history."""
+    problem = await history_budget_problem(session)
+    if problem:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=problem)
 
 
 def _instance_or_404(rule: Rule, instance: str | None) -> str:
@@ -391,6 +410,7 @@ async def update_rule(
         previous_for_each=prev_for_each,
     )
     await flush_or_409(session, "Rule update")
+    await _history_budget_or_422(session)
     await session.refresh(obj)
     await record_change(
         session, actor, "rule.update",
@@ -433,6 +453,8 @@ async def bulk_set_enabled(
             before=before, after=model_to_dict(obj),
         )
         result.updated.append(rule_id)
+    if body.enabled and result.updated:
+        await _history_budget_or_422(session)
     await session.commit()
     if result.updated:
         await get_engine().reload_rules()

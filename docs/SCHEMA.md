@@ -245,7 +245,7 @@ The runtime state of one instance of a parametric rule (`0046`,
 `run_state` / `run_state_since` / `last_true_at` / `last_eval_error` hold for an
 ordinary rule. With instances, the rule's `run_state` is the most urgent of
 theirs (error > firing > pending > no_data > inactive), `last_eval_error` the
-first failing instance's message as `[f4] …` and `consecutive_eval_errors` their
+message of a failing instance (a real error first) as `… — instance f4` and `consecutive_eval_errors` their
 highest count. An instance's open incident is
 `incidents.active_source_key = 'rule:<id>:<instance>'` (`active_rule_id` stays
 NULL), with `rule_name` `name[instance]`. A change of `for_each`, like an edit

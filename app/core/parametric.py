@@ -35,8 +35,12 @@ def normalize_for_each(raw: Any) -> dict[str, list[str]] | None:
     for v in values:
         if not isinstance(v, str) or not VALUE.match(v):
             raise ValueError(f"for_each: a value must match [A-Za-z0-9_.-]{{1,32}}, got {v!r}")
-        if v in out:
-            raise ValueError(f"for_each: {v!r} is listed twice")
+        # MySQL compares instance keys without case (utf8mb4_unicode_ci): "A"
+        # and "a" would share one stored state (rc.9 review RC-06).
+        clash = next((o for o in out if o.lower() == v.lower()), None)
+        if clash is not None:
+            raise ValueError(f"for_each: {v!r} is listed twice" if clash == v
+                             else f"for_each: {clash!r} and {v!r} differ only in case — use distinct values")
         out.append(v)
     return {param: out}
 

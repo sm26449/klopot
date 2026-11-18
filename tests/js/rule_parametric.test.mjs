@@ -89,3 +89,31 @@ test("a saved parametric rule lists its instances", async () => {
     assert.equal(document.getElementById("r-fe-param").value, "n");
   } finally { unmount(); }
 });
+
+test("a parametric template is grouped by its instances' category and not offered for creation (RC-09)", async () => {
+  const { expandedTypes, groupRules } = await import("../../app/admin_ui/static/views/rules.js");
+  assert.deepEqual(expandedTypes("audit_{n}", { n: ["a", "b"] }), ["audit_a", "audit_b"]);
+  assert.deepEqual(expandedTypes("plain", null), ["plain"]);
+  const templates = [{ type: "audit_a", category: "Sensors" }, { type: "audit_b", category: "Sensors" }];
+  const groups = groupRules([{ name: "p", template_type: "audit_{n}", for_each: { n: ["a", "b"] } }], templates);
+  assert.deepEqual(groups.map(([label]) => label), ["Sensors"]);
+  const RULE = { id: 5, name: "pa", template_type: "audit_{n}", condition_expr: "x.{n} > 1", persist_n: 1,
+    eval_interval_sec: 10, enabled: true, eval_status: "ok", vars_extract: [], inhibited_by: [],
+    fire_count_lifetime: 0, for_each: { n: ["a", "b"] } };
+  respond((u) => {
+    if (u.includes("/v1/templates")) return { items: [{ type: "audit_a", severity: "info", category: "Sensors" }, { type: "audit_b", severity: "info", category: "Sensors" }], total: 2, limit: 50, offset: 0 };
+    if (u.includes("/instances") || u.includes("/transitions")) return [];
+    if (u.match(/\/v1\/rules\/5$/)) return RULE;
+    if (u.includes("/v1/rules")) return { items: [RULE], total: 1, limit: 50, offset: 0 };
+    return null;
+  });
+  try {
+    mount(html`<${RulesView} query=${{}} />`);
+    await flush(450);
+    [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "pa").click();
+    await until(() => document.getElementById("r-tmpl"));
+    const option = [...document.getElementById("r-tmpl").options].find((o) => o.value === "audit_{n}");
+    assert.match(option.textContent, /for each: audit_a, audit_b/);
+    assert.doesNotMatch(option.textContent, /not a template/);
+  } finally { unmount(); }
+});

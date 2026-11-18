@@ -249,13 +249,22 @@ export function RulesView({ query, params }) {
 
 // [[label, rules]] grouped by the category of each rule's template (case-
 // insensitive, most used spelling), sorted by label with "Uncategorized" last.
+/** The template types a rule's ``type`` stands for: itself, or one per
+ *  ``for_each`` value when it holds the ``{param}`` placeholder (ADR-0005). */
+export function expandedTypes(type, forEach) {
+  const [param, values] = forEachParts(forEach);
+  if (!type || !values.length || !type.includes(`{${param}}`)) return type ? [type] : [];
+  return values.map((v) => type.split(`{${param}}`).join(v));
+}
+
 export function groupRules(rules, templateRows) {
   const labels = categoryLabels(templateRows);
   const categoryOf = new Map(templateRows.map((tt) => [tt.type, tt.category]));
   const none = t("rules.uncategorized");
   const groups = new Map();
   for (const r of rules) {
-    const c = categoryOf.get(r.template_type);
+    // A parametric rule takes its category from its instances' templates (RC-09).
+    const c = expandedTypes(r.template_type, r.for_each).map((x) => categoryOf.get(x)).find(Boolean);
     const label = c ? labels.get(c.toLowerCase()) || c : none;
     if (!groups.has(label)) groups.set(label, []);
     groups.get(label).push(r);
@@ -449,14 +458,25 @@ function RuleEditor({ rule, templateRows = [], variables, rules, onClose, onSave
   // (or no longer) a template, so an existing rule never loses its setting.
   const tmplOptions = templateRows.map((tt) => ({ type: tt.type, label: `${tt.icon ? tt.icon + " " : ""}${tt.type} — ${sevLabel(tt.severity)}` }))
     .sort((a, b) => a.type.localeCompare(b.type));
+  // A parametric type (ov_active_{n}) is valid when every instance's
+  // template exists — never offer to create the literal pattern (RC-09).
+  const templateNote = (type) => {
+    const types = expandedTypes(type, r.for_each);
+    if (types.length > 1 || (types[0] !== type && types.length)) {
+      const missing = types.filter((x) => !templateRows.some((tt) => tt.type === x));
+      return missing.length ? t("rules.patternMissing", { missing: missing.join(", ") })
+        : t("rules.patternOk", { types: types.join(", ") });
+    }
+    return t("rules.missingTemplate");
+  };
   if (r.template_type && !tmplOptions.some((o) => o.type === r.template_type)) {
-    tmplOptions.unshift({ type: r.template_type, label: `${r.template_type} — ${t("rules.missingTemplate")}` });
+    tmplOptions.unshift({ type: r.template_type, label: `${r.template_type} — ${templateNote(r.template_type)}` });
   }
   // The recovery template: same list, keeping a value that is not a template
   // (any more) so a save never drops it silently (review RL-10).
   const resolvedOptions = tmplOptions.filter((o) => templateRows.some((tt) => tt.type === o.type));
   if (r.resolved_template_type && !resolvedOptions.some((o) => o.type === r.resolved_template_type)) {
-    resolvedOptions.unshift({ type: r.resolved_template_type, label: `${r.resolved_template_type} — ${t("rules.missingTemplate")}` });
+    resolvedOptions.unshift({ type: r.resolved_template_type, label: `${r.resolved_template_type} — ${templateNote(r.resolved_template_type)}` });
   }
   // Inhibitors that name no rule are ignored by the engine (review RL-11).
   // Only once the list of rules has loaded, or every name would look unknown.

@@ -898,6 +898,8 @@ export default {
     forEachValuesPlaceholder: "adaugă o valoare (ex. f1)…",
     forEachHelp: "Fiecare valoare e o instanță cu stare, incident și notificări proprii. Scrie {param} acolo unde intră valoarea — în condiție, la revenire, în variabilele capturate sau în tipul de template (ov.{param}.state, ov_active_{param}); îl vede și template-ul. Lasă valorile goale pentru o regulă obișnuită.",
     forEachUnused: "{param} nu apare nicăieri: toate instanțele ar fi aceeași regulă.",
+    patternOk: "pentru fiecare: {types}",
+    patternMissing: "lipsește pentru: {missing}",
     instancesTitle: "Instanțe ({count})",
     instanceCol: "Instanța",
     historyTitle: "Istoricul stării",

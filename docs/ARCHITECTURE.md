@@ -318,7 +318,7 @@ by `(id, instance)` for an instance; inhibition markers by name or
 `(name, instance)` — so every caller and test that uses `engine._rules[rule.id]`
 still works. An instance's counters, run state and message live in
 `rule_instances`; the rule row holds their summary (the most urgent state,
-`[f4] …` as message, the highest error count). The dispatch context gets the
+`… — instance f4` as message, a real error first, the highest error count). The dispatch context gets the
 parameter (`n`), which also keeps instances apart in de-duplication. Errors and
 auto-disable stay per rule; a missing input stays per instance.
 

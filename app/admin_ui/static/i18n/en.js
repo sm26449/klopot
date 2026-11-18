@@ -901,6 +901,8 @@ export default {
     forEachValuesPlaceholder: "add a value (e.g. f1)…",
     forEachHelp: "Each value is an instance with its own state, incident and notifications. Write {param} where the value goes — in the condition, the recovery, the variables to capture or the template type (ov.{param}.state, ov_active_{param}); the template sees it too. Leave the values empty for an ordinary rule.",
     forEachUnused: "{param} appears nowhere: every instance would be the same rule.",
+    patternOk: "for each: {types}",
+    patternMissing: "missing for: {missing}",
     instancesTitle: "Instances ({count})",
     instanceCol: "Instance",
     historyTitle: "State history",
