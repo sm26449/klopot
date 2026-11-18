@@ -199,6 +199,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **`scripts/deploy.sh` warns about an old runtime `docker-compose.yml`.** In
+  runtime-dir mode the compose file is the runtime's own copy; an old one does
+  not pass the settings added since, so a value in `.env` for them never
+  reached the container (found on 2026-11-18: `ALERTD_LATITUDE` and four older
+  settings). The preflight now names every such setting and prints the command
+  to update the copy.
 - **Kurier watchdog**: an answer without the modem's state (`registered`
   missing or `null`) no longer closes an open "modem offline" episode — only
   `registered: true` does; a `200` that is not Kurier's JSON (a proxy page)
