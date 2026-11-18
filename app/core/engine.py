@@ -50,6 +50,11 @@ from .state_cache import StateCache, get_state_cache
 logger = logging.getLogger(__name__)
 
 
+# History rows kept in memory while the database cannot be written; past it
+# a change is only counted (the current state is always written).
+_MAX_PENDING_TRANSITIONS = 20
+
+
 @dataclass
 class _RuleRuntime:
     """Per-rule runtime state held in memory.
@@ -91,13 +96,25 @@ class _RuleRuntime:
     # that changes nothing writes nothing (review RL-12: incident rules wrote
     # the row on every evaluation). None = unknown, write on the next call.
     persisted: tuple[int, int, int] | None = None
-    # Where the rule is in its cycle (RuleRunState value; review RL-32), as
-    # last written to rules.run_state. None = unknown (never evaluated).
+    # Where the rule is in its cycle (RuleRunState value; review RL-32), since
+    # when, and when its condition last became true. None = unknown.
     run_state: str | None = None
-    # Monotonic times of the transitions recorded in the last hour, and the
-    # changes not recorded past the budget (a flapping condition).
+    run_state_since: datetime | None = None
+    last_true_at: datetime | None = None
+    # (run_state, run_state_since, last_true_at) as last COMMITTED to the
+    # rules row, and the history rows not written yet: a failed write is
+    # retried at the next evaluation (2026-11-18 review, RV-03).
+    persisted_run: tuple[str | None, datetime | None, datetime | None] | None = None
+    pending_transitions: list[tuple[datetime, str | None, str, str | None]] = field(default_factory=list)
+    # Monotonic times of the history rows written in the last hour, and the
+    # changes not written past the budget (a flapping condition). The budget
+    # limits the history only, never the current state (RV-02).
     transition_times: deque[float] = field(default_factory=deque)
     transitions_skipped: int = 0
+    # The condition (or incident lifecycle) changed since the last
+    # evaluation: the next state is recorded as a change even when equal, and
+    # a "firing" of the old expression is not carried over (RV-04).
+    reconfigured: bool = False
 
 
 def rule_context(
@@ -261,6 +278,9 @@ class RuleEngine:
                         lee = prev.last_eval_error
                         persisted_row = None if reconfigured else prev.persisted
                         eeo = prev.error_event_open
+                        run = (prev.run_state, prev.run_state_since, prev.last_true_at, prev.persisted_run,
+                               prev.pending_transitions, prev.transition_times, prev.transitions_skipped,
+                               reconfigured or prev.reconfigured)
                         if reconfigured:
                             self._last_truthy.pop(r.name, None)
                     else:
@@ -282,6 +302,12 @@ class RuleEngine:
                         else:
                             cmc = 0
                             rmc = 0
+                        # The stored run state; edited since its streak was
+                        # stored (a restart between PATCH and the first tick)
+                        # = reconfigured (RV-04).
+                        stored = (r.run_state, r.run_state_since, r.last_true_at)
+                        run = (*stored, stored, [], deque(), 0,
+                               db_state is not None and db_state.state_epoch != (r.state_epoch or 0))
                         # last_match_at lives in DB as wall-clock UTC
                         # but in-memory we use monotonic seconds.
                         # Approximate: if the row says "recent" (<24h
@@ -307,9 +333,9 @@ class RuleEngine:
                         error_event_open=eeo,
                         state_epoch=r.state_epoch or 0,
                         persisted=persisted_row,
-                        run_state=prev.run_state if prev else r.run_state,
-                        transition_times=prev.transition_times if prev else deque(),
-                        transitions_skipped=prev.transitions_skipped if prev else 0,
+                        run_state=run[0], run_state_since=run[1], last_true_at=run[2], persisted_run=run[3],
+                        pending_transitions=run[4], transition_times=run[5], transitions_skipped=run[6],
+                        reconfigured=run[7],
                     )
                 self._rules = new
                 self._by_name = {rt.rule.name: rt for rt in new.values()}
@@ -644,7 +670,13 @@ class RuleEngine:
             rt.last_match_at = now
             rt.recovery_match_count = 0
             rt.consecutive_match_count += 1
-            await self._set_run_state(rt, self._true_state(rt))
+            # Firing = its incident is open (RV-05: after a gap in the data
+            # the streak restarts, but the incident is still open).
+            reached = rt.consecutive_match_count >= rt.rule.persist_n
+            open_ = reached or await self._incident_open(rt)
+            await self._set_run_state(rt, RuleRunState.firing if open_ else RuleRunState.pending)
+            if not self._is_current(rt):
+                return
             if rt.consecutive_match_count >= rt.rule.persist_n:
                 async for session in get_session():
                     await incidents.fire_rule(
@@ -684,51 +716,86 @@ class RuleEngine:
 
     @staticmethod
     def _true_state(rt: _RuleRuntime) -> RuleRunState:
-        """The run state of a rule whose condition holds this tick: firing
-        once ``persist_n`` is reached (and while it keeps holding after the
-        fire, the streak counter restarting), pending before."""
-        if rt.consecutive_match_count >= rt.rule.persist_n or rt.run_state == RuleRunState.firing:
+        """The run state of a plain rule whose condition holds this tick:
+        firing once ``persist_n`` is reached, and while it keeps holding after
+        the fire (the streak counter restarts); pending before — and after a
+        reconfiguration, whose new condition has not fired yet (RV-04)."""
+        if rt.consecutive_match_count >= rt.rule.persist_n:
+            return RuleRunState.firing
+        if rt.run_state == RuleRunState.firing and not rt.reconfigured:
             return RuleRunState.firing
         return RuleRunState.pending
 
+    async def _incident_open(self, rt: _RuleRuntime) -> bool:
+        async with get_session_factory()() as session:
+            return (await session.execute(select(Incident.id).where(
+                Incident.active_rule_id == rt.rule.id,
+            ))).scalar_one_or_none() is not None
+
     async def _set_run_state(self, rt: _RuleRuntime, state: RuleRunState, detail: str | None = None) -> None:
-        """Record a change of the rule's run state (review RL-32): one
-        ``rule_transitions`` row and ``rules.run_state`` / ``run_state_since``
-        (``last_true_at`` when it becomes true). Nothing is written while the
-        state stays the same; past TRANSITIONS_PER_HOUR in the last hour the
-        change is only counted, and the next recorded row says so."""
-        if rt.run_state == state:
+        """Note the rule's run state (review RL-32) and write it when it is not
+        on disk yet: ``rules.run_state`` / ``run_state_since`` / ``last_true_at``
+        and a ``rule_transitions`` row per change. Nothing is written while the
+        state stays the same and is stored; a failed write is retried at the
+        next evaluation (RV-03). Past TRANSITIONS_PER_HOUR history rows in the
+        last hour a change is only counted, and the next row says so — the
+        current state is written regardless (RV-02)."""
+        if state != rt.run_state or rt.reconfigured:
+            at = utc_now()
+            previous = rt.run_state
+            if rt.reconfigured:
+                detail = f"rule changed; {detail}" if detail else "rule changed"
+            true_states = (RuleRunState.pending, RuleRunState.firing)
+            if state in true_states and (previous not in true_states or rt.reconfigured):
+                rt.last_true_at = at
+            rt.reconfigured = False
+            rt.run_state, rt.run_state_since = state.value, at
+            if len(rt.pending_transitions) < _MAX_PENDING_TRANSITIONS:
+                rt.pending_transitions.append((at, previous, state.value, detail[:255] if detail else None))
+            else:
+                rt.transitions_skipped += 1
+        current = (rt.run_state, rt.run_state_since, rt.last_true_at)
+        if current == rt.persisted_run and not rt.pending_transitions:
             return
-        previous = rt.run_state
-        rt.run_state = state
+        await self._write_run_state(rt, current)
+
+    async def _write_run_state(
+        self, rt: _RuleRuntime, current: tuple[str | None, datetime | None, datetime | None],
+    ) -> None:
         mono = _time.monotonic()
         window = rt.transition_times
         while window and mono - window[0] > 3600:
             window.popleft()
-        if len(window) >= self.TRANSITIONS_PER_HOUR:
-            rt.transitions_skipped += 1
-            return
-        window.append(mono)
-        if rt.transitions_skipped:
-            note = f"{rt.transitions_skipped} changes not recorded (flapping)"
-            detail = f"{note}; {detail}" if detail else note
-            rt.transitions_skipped = 0
-        at = utc_now()
-        true_states = (RuleRunState.pending, RuleRunState.firing)
-        values: dict[str, Any] = {"run_state": state.value, "run_state_since": at,
-                                  # Engine bookkeeping is not an edit of the rule.
-                                  "updated_at": Rule.updated_at}
-        if state in true_states and previous not in true_states:
-            values["last_true_at"] = at
+        rows: list[RuleTransition] = []
+        skipped = rt.transitions_skipped
+        for at, from_state, to_state, detail in rt.pending_transitions:
+            if len(window) + len(rows) >= self.TRANSITIONS_PER_HOUR:
+                skipped += 1
+                continue
+            if skipped:
+                note = f"{skipped} changes not recorded (flapping)"
+                detail = (f"{note}; {detail}" if detail else note)[:255]
+                skipped = 0
+            rows.append(RuleTransition(rule_id=rt.rule.id, at=at, from_state=from_state,
+                                       to_state=to_state, detail=detail))
         try:
-            async for s in get_session():
-                s.add(RuleTransition(rule_id=rt.rule.id, at=at, from_state=previous,
-                                     to_state=state.value, detail=detail[:255] if detail else None))
-                await s.execute(update(Rule).where(Rule.id == rt.rule.id).values(**values))
+            async with get_session_factory()() as s:
+                s.add_all(rows)
+                await s.execute(update(Rule).where(Rule.id == rt.rule.id).values(
+                    run_state=current[0], run_state_since=current[1], last_true_at=current[2],
+                    # Engine bookkeeping is not an edit of the rule.
+                    updated_at=Rule.updated_at,
+                ))
                 await s.commit()
-                break
         except Exception:
-            logger.exception("recording the run state of rule %s", rt.rule.name)
+            # Kept in memory: the next evaluation writes it again.
+            logger.warning("rule %s: run state not stored, retried at the next evaluation",
+                           rt.rule.name, exc_info=True)
+            return
+        window.extend([mono] * len(rows))
+        rt.transitions_skipped = skipped
+        rt.pending_transitions.clear()
+        rt.persisted_run = current
 
     async def _template_throttled(self, template_type: str) -> bool:
         """True while the template's min_repeat window is still open."""

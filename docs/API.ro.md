@@ -668,7 +668,9 @@ mai noi primele: `{at, from_state, to_state, detail}`. O intrare la fiecare
 schimbare, niciodată la fiecare evaluare, păstrată cât logul
 (`ALERTD_LOG_RETENTION_DAYS`); o regulă care oscilează înregistrează cel mult
 60 de schimbări pe oră, iar `detail` din intrarea următoare spune câte au fost
-sărite.
+sărite (`run_state` e mereu la zi). După editarea condiției, starea următoare
+se înregistrează ca schimbare cu `detail: "rule changed"`, iar noua condiție
+trece prin `pending` înainte de `firing`.
 
 ### „Ce-ar fi dacă”: `POST /v1/rules/validate` cu `context`
 

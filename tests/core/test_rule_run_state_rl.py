@@ -142,3 +142,84 @@ async def test_validate_with_a_what_if_context(db_client, admin_key):
                                    json={"condition_expr": "soc < 20", "context": {"s": "x" * 70000}})
     assert too_big.status_code == 422
     reset_state_cache_for_tests()
+
+
+# ── 2026-11-18 review of stage 3 (RV-02 … RV-05) ──────────────────
+
+
+async def _db_state(db_session, rid):
+    await fresh(db_session)
+    return (await db_session.execute(select(Rule.run_state).where(Rule.id == rid))).scalar_one()
+
+
+async def test_the_history_budget_never_freezes_the_current_state(db_engine, db_session, make_rule, make_template, monkeypatch):
+    """RV-02: past the budget the API kept showing an old state."""
+    monkeypatch.setattr(RuleEngine, "TRANSITIONS_PER_HOUR", 2)
+    cache = await _cache(a__x=1)
+    engine, rid = await _setup(db_session, make_rule, make_template, cache, condition_expr="a.x > 10", persist_n=5)
+    rt = engine._rules[rid]
+    for value in (1, 50, 1):
+        await cache.set("a.x", value, source_kind="mqtt", stale_after_sec=300)
+        await engine._eval_rule(rt, now=0.0)
+    assert len(await _states(db_session, rid)) == 2
+    assert await _db_state(db_session, rid) == "inactive"
+
+
+async def test_a_failed_write_is_retried_and_spends_no_budget(db_engine, db_session, make_rule, make_template, monkeypatch):
+    """RV-03: a write that failed once was never tried again."""
+    from app.core import engine as engine_module
+    cache = await _cache(a__x=50)
+    engine, rid = await _setup(db_session, make_rule, make_template, cache, condition_expr="a.x > 10", persist_n=5)
+    rt = engine._rules[rid]
+    real = engine_module.get_session_factory
+    calls = {"n": 0}
+
+    def flaky():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("database gone for a moment")
+        return real()
+    monkeypatch.setattr(engine_module, "get_session_factory", flaky)
+    await engine._eval_rule(rt, now=0.0)
+    assert await _states(db_session, rid) == []
+    assert len(rt.transition_times) == 0
+    await engine._eval_rule(rt, now=1.0)                       # same state: written now
+    assert await _states(db_session, rid) == [(None, "pending")]
+    assert await _db_state(db_session, rid) == "pending"
+
+
+async def test_a_new_condition_does_not_inherit_firing(db_engine, db_session, make_rule, make_template):
+    """RV-04: an edited rule kept the old expression's "firing"."""
+    from sqlalchemy import update
+    cache = await _cache(a__x=50)
+    engine, rid = await _setup(db_session, make_rule, make_template, cache, condition_expr="a.x > 10", persist_n=3)
+    for _ in range(3):
+        await engine._eval_rule(engine._rules[rid], now=0.0)
+    assert engine._rules[rid].run_state == "firing"
+    await db_session.execute(update(Rule).where(Rule.id == rid).values(condition_expr="a.x > 40", state_epoch=Rule.state_epoch + 1))
+    await db_session.commit()
+    await engine.reload_rules()
+    await engine._eval_rule(engine._rules[rid], now=1.0)
+    assert engine._rules[rid].run_state == "pending"
+    await fresh(db_session)
+    last = (await db_session.execute(select(RuleTransition).where(RuleTransition.rule_id == rid)
+                                      .order_by(RuleTransition.id.desc()).limit(1))).scalar_one()
+    assert (last.from_state, last.to_state, last.detail) == ("firing", "pending", "rule changed")
+
+
+async def test_an_open_incident_is_firing_again_after_a_gap_in_the_data(db_engine, db_session, make_rule, make_template):
+    """RV-05: the streak restarts after no_data, the incident is still open."""
+    cache = await _cache(a__x=50)
+    engine, rid = await _setup(db_session, make_rule, make_template, cache,
+                               condition_expr="a.x > 10", persist_n=3, incident_enabled=True)
+    rt = engine._rules[rid]
+    for _ in range(3):
+        await engine._eval_rule(rt, now=0.0)
+    assert rt.run_state == "firing"
+    await cache.set("a.x", None, source_kind="mqtt", stale_after_sec=300)
+    await engine._eval_rule(rt, now=1.0)
+    assert rt.run_state == "no_data"
+    await cache.set("a.x", 50, source_kind="mqtt", stale_after_sec=300)
+    await engine._eval_rule(rt, now=2.0)
+    assert rt.run_state == "firing"
+    assert rt.consecutive_match_count == 1

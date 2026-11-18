@@ -664,7 +664,10 @@ log.
 newest first: `{at, from_state, to_state, detail}` (`detail` = the error or
 missing input). One entry per change, never per evaluation, kept as long as
 the log (`ALERTD_LOG_RETENTION_DAYS`); a flapping rule records at most 60
-changes an hour, and the next entry's `detail` says how many were skipped.
+changes an hour, and the next entry's `detail` says how many were skipped
+(`run_state` itself is always current). An edit of the condition records
+the next state as a change with `detail: "rule changed"`, and the new
+condition goes through `pending` before `firing`.
 
 ### "What if": `POST /v1/rules/validate` with `context`
 
