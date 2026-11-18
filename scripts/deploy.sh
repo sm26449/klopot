@@ -35,7 +35,9 @@
 # Apart from KLOPOT_IMAGE in runtime-dir mode, it does NOT push, pull or change
 # .env. If a new release needs a new env var, add it to .env AND to the
 # `environment:` list in docker-compose.yml first — compose passes only the
-# variables listed there.
+# variables listed there. In runtime-dir mode the preflight warns when the
+# runtime's compose configuration does not pass a setting the checkout's does
+# (an old copy of docker-compose.yml there).
 set -euo pipefail
 
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
@@ -46,7 +48,7 @@ for a in "$@"; do
     --yes) YES=1 ;;
     --dry-run) DRY=1 ;;
     --runtime-dir=*) RT="${a#*=}" ;;
-    -h|--help) sed -n '2,38p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) echo "unknown option: $a" >&2; exit 2 ;;
     *) LABEL="$a" ;;
   esac
@@ -77,6 +79,8 @@ DB="${ALERTD_MYSQL_CONTAINER:-$(docker compose ps -q mysql 2>/dev/null || true)}
 . "$SRC/scripts/_klopot_url.sh"
 # shellcheck source=scripts/_docker_build.sh
 . "$SRC/scripts/_docker_build.sh"
+# shellcheck source=scripts/_compose_drift.sh
+. "$SRC/scripts/_compose_drift.sh"
 URL="$(klopot_url)"   # the port of the install in $PWD, from its .env
 READY_TIMEOUT_SEC="${READY_TIMEOUT_SEC:-180}"
 
@@ -115,6 +119,22 @@ echo "ready:    HTTP $(http /v1/health/ready)"
 echo "state:    $BEFORE"
 PENDING="$(ls "$SRC"/alembic/versions/*.py | sed -E 's/.*_([0-9]{4})_.*/\1/' | sort | tail -1)"
 echo "migrations: database at ${BEFORE%% *}, code head is $PENDING"
+if [ -n "$RT" ]; then
+  # A runtime dir keeps its own copy of docker-compose.yml. An old copy does
+  # not pass the settings added since: a value in .env for them never reaches
+  # the container (2026-11-18: ALERTD_LATITUDE and four older ones).
+  MISSING="$(docker compose config 2>/dev/null | compose_missing_settings "$SRC/docker-compose.yml" || true)"
+  if [ -n "$MISSING" ]; then
+    echo
+    echo "WARNING: $RT's compose configuration does not pass these settings into the container"
+    echo "         (its docker-compose.yml is older than the checkout's); a value in .env for them is ignored:"
+    printf '           %s\n' $MISSING
+    echo "         Update it (keep the old one):"
+    echo "           cp -p $RT/docker-compose.yml $RT/backups/docker-compose.yml-$LABEL && cp $SRC/docker-compose.yml $RT/"
+  elif ! cmp -s "$SRC/docker-compose.yml" docker-compose.yml; then
+    echo "note: $RT/docker-compose.yml differs from the checkout's (every setting is passed)"
+  fi
+fi
 
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
 OUT="backups/alertd-predeploy-$LABEL-$TS.sql.gz"

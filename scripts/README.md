@@ -11,6 +11,7 @@
 | `restore_drill.sh` | **Prove backups restore**: throwaway MySQL, restore the newest dump, verify revision + row counts, optionally report via `POST /v1/fire`. Suited to a monthly host cron. |
 | `version.py` | **The version in every file** (`app/__init__.py`, `pyproject.toml`, the SDKs): `set 1.3.0-rc.1` writes it (PEP 440 form for the Python packages), `check` compares them, `tag` / `prerelease` for CI. See `docs/RELEASING.md`. |
 | `_klopot_url.sh` | Sourced by the three scripts above: `klopot_url` = `$ALERTD_URL`, else `127.0.0.1` on `KLOPOT_HTTP_PORT` from `.env` (default 5090). |
+| `_compose_drift.sh` | Sourced by `deploy.sh`: `compose_missing_settings` names the `ALERTD_*` settings the checkout's `docker-compose.yml` passes but a runtime dir's compose configuration does not (an old copy there). |
 | `admin.py` | Admin-account break-glass inside the container: `reset-password`, `unlock`, `list-sessions`, `revoke-sessions`. |
 | `telegram_setup.py` | Discover chat and user IDs for a dedicated bot before enabling polling; run `python -m scripts.telegram_setup`. See `docs/TELEGRAM.md`. |
 | `alertd_cli.py` | Config export / validate / import over the HTTP API (`ALERTD_URL` + `ALERTD_API_KEY` env). Run `python scripts/alertd_cli.py …`. |

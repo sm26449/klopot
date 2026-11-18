@@ -642,6 +642,13 @@ With `compose.external-db.yml` there is no `mysql` compose service, so also set
 `ALERTD_MYSQL_CONTAINER=<mysql container name>` (the backup dumps only the
 Klopot database).
 
+The runtime directory keeps its own `docker-compose.yml`, which the script
+never changes. An old copy does not pass the settings added since, so a value
+in `.env` for them is silently ignored. The preflight compares the runtime's
+`docker compose config` with the checkout's `environment:` list
+(`scripts/_compose_drift.sh`) and names every setting the runtime would drop,
+with the command to update the copy.
+
 Before deploying a release that adds a setting: put the variable in `.env`
 **and** in the `environment:` list of `docker-compose.yml` — compose passes
 only the variables listed there, so a value that exists only in `.env` is
