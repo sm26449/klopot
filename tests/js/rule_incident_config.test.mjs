@@ -31,11 +31,16 @@ test("incident configuration is opt-in and saves recovery expression, confirmati
     tmpl.value = "overheat";
     tmpl.dispatchEvent(new Event("change", { bubbles: true }));
     for (const [id, value] of [["r-name", "thermal"], ["r-cond", "x > 80"],
-                               ["r-recovery", "x < 75"], ["r-recovery-n", "3"], ["r-resolved-tmpl", "normal"]]) {
+                               ["r-recovery", "x < 75"], ["r-recovery-n", "3"]]) {
       const element = document.getElementById(id);
       element.value = value;
       element.dispatchEvent(new Event("input", { bubbles: true }));
     }
+    // The recovery template is a select of existing templates too (RL-10).
+    const resolved = document.getElementById("r-resolved-tmpl");
+    assert.deepEqual([...resolved.options].map((o) => o.value), ["", "normal", "overheat"]);
+    resolved.value = "normal";
+    resolved.dispatchEvent(new Event("change", { bubbles: true }));
     await flush(30);
     [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Create").click();
     await flush(100);

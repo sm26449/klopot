@@ -32,6 +32,20 @@ function cheats() {
   ];
 }
 
+// Outcome of POST /v1/rules/validate under an expression field: ok / error,
+// the variables it reads (with live value and age) and the unknown ones.
+function ValidationResult({ validation }) {
+  if (!validation) return null;
+  return html`
+    <span>${validation.ok ? html`<span class="badge ok plain">${t("rules.validateOk", { result: JSON.stringify(validation.result) })}</span>`
+      : html`<span class="badge critical plain">${t("rules.badgeError")}</span> <span class="error small">${validation.error}</span>`}</span>
+    <div class="validation">
+      ${validation.referenced_vars?.length ? html`<div class="small"><b>${t("rules.referenced")}</b> ${validation.referenced_vars.map((v) => html`<span key=${v.name} class=${"chip " + (v.present ? (v.is_stale ? "warn" : "") : "crit")}
+        title=${v.present ? t("rules.varPresentTitle", { value: JSON.stringify(v.live_value), age: Math.round(v.age_sec), stale: v.is_stale ? t("rules.varStaleSuffix") : "" }) : t("rules.varUnknown")}>${v.name}</span>`)}</div>` : null}
+      ${validation.unknown_vars?.length ? html`<div class="small warn-text">${t("rules.unknownVars", { vars: validation.unknown_vars.join(", ") })}</div>` : null}
+    </div>`;
+}
+
 // One badge for the list: disabled rules show their last error as history
 // (audit V21); enabled ones distinguish a failing expression from a rule that
 // is only waiting for an input (eval_status).
@@ -202,7 +216,7 @@ export function RulesView({ query, params }) {
           selected=${selected} onSelect=${select} onOpen=${setEditing} />`)}
 
     ${editing ? html`<${RuleEditor} key=${editing.__new ? "new:" + (editing.name || "") : "id:" + editing.id}
-        rule=${editing} templates=${templates} templateRows=${templateRows} variables=${variables} rules=${allRules}
+        rule=${editing} templateRows=${templateRows} variables=${variables} rules=${allRules}
         onClose=${closeEditor} onSaved=${() => { closeEditor(); reload(); }}
         onDuplicate=${(r) => setEditing(r)} />` : null}
   </div>`;
@@ -270,7 +284,7 @@ const EMPTY_R = {
   enabled: true, sort_order: 100,
 };
 
-function RuleEditor({ rule, templates, templateRows = [], variables, rules, onClose, onSaved, onDuplicate }) {
+function RuleEditor({ rule, templateRows = [], variables, rules, onClose, onSaved, onDuplicate }) {
   const isNew = !!rule.__new;
   const [name, setName] = useState(rule.name || "");
   // A11: stripMeta on a bare {__new:true} yields undefined for every field,
@@ -280,6 +294,7 @@ function RuleEditor({ rule, templates, templateRows = [], variables, rules, onCl
     ? { ...EMPTY_R, ...Object.fromEntries(Object.entries(stripMeta(rule)).filter(([, v]) => v !== undefined)) }
     : { ...rule });
   const [validation, setValidation] = useState(null);
+  const [recValidation, setRecValidation] = useState(null);
   const [evalRes, setEvalRes] = useState(null);
   const [fireRes, setFireRes] = useState(null);
   const [ctxText, setCtxText] = useState("{}");
@@ -290,10 +305,12 @@ function RuleEditor({ rule, templates, templateRows = [], variables, rules, onCl
 
   function set(k, v) { setR((c) => ({ ...c, [k]: v })); }
 
-  async function validate() {
-    try { setValidation(await api.post("/v1/rules/validate", { condition_expr: r.condition_expr, vars_extract: r.vars_extract })); }
+  async function validateExpr(expr, setResult) {
+    if (!(expr || "").trim()) return;
+    try { setResult(await api.post("/v1/rules/validate", { condition_expr: expr, vars_extract: r.vars_extract })); }
     catch (e) { toast.error(e); }
   }
+  const validate = () => validateExpr(r.condition_expr, setValidation);
 
   async function save() {
     fieldErrs.clear();
@@ -351,6 +368,15 @@ function RuleEditor({ rule, templates, templateRows = [], variables, rules, onCl
   if (r.template_type && !tmplOptions.some((o) => o.type === r.template_type)) {
     tmplOptions.unshift({ type: r.template_type, label: `${r.template_type} — ${t("rules.missingTemplate")}` });
   }
+  // The recovery template: same list, keeping a value that is not a template
+  // (any more) so a save never drops it silently (review RL-10).
+  const resolvedOptions = tmplOptions.filter((o) => templateRows.some((tt) => tt.type === o.type));
+  if (r.resolved_template_type && !resolvedOptions.some((o) => o.type === r.resolved_template_type)) {
+    resolvedOptions.unshift({ type: r.resolved_template_type, label: `${r.resolved_template_type} — ${t("rules.missingTemplate")}` });
+  }
+  // Inhibitors that name no rule are ignored by the engine (review RL-11).
+  // Only once the list of rules has loaded, or every name would look unknown.
+  const unknownInhibitors = (rules || []).length ? (r.inhibited_by || []).filter((n) => !rules.includes(n)) : [];
   // How long after the condition starts holding the alert goes out (first
   // check counts), for the plain-language hint.
   const delaySec = (Math.max(1, Number(r.persist_n) || 1) - 1) * (Number(r.eval_interval_sec) || 0);
@@ -377,7 +403,6 @@ function RuleEditor({ rule, templates, templateRows = [], variables, rules, onCl
           <option value="">${t("rules.chooseTemplate")}</option>
           ${tmplOptions.map((o) => html`<option key=${o.type} value=${o.type}>${o.label}</option>`)}
         </select>
-        <datalist id="rule-tmpls">${templates.map((tt) => html`<option key=${tt} value=${tt}></option>`)}</datalist>
         <div id="r-tmpl-help" class="hint">${t("rules.templateHelp")} <a href="#/templates">${t("rules.manageTemplates")}</a></div>
         ${fieldErrs.msgFor("template_type") ? html`<div id=${fieldErrorId("template_type")} class="error small" role="alert">${fieldErrs.msgFor("template_type")}</div>` : null}</div>
 
@@ -388,13 +413,8 @@ function RuleEditor({ rule, templates, templateRows = [], variables, rules, onCl
           placeholder=${t("rules.conditionPlaceholder")} spellcheck="false"></textarea>
         ${fieldErrs.msgFor("condition_expr") ? html`<div id=${fieldErrorId("condition_expr")} class="error small" role="alert">${fieldErrs.msgFor("condition_expr")}</div>` : null}
         <div class="form-actions"><button type="button" class="btn sm" onClick=${validate}>${t("rules.validate")}</button>
-          ${validation ? (validation.ok ? html`<span class="badge ok plain">${t("rules.validateOk", { result: JSON.stringify(validation.result) })}</span>`
-            : html`<span class="badge critical plain">${t("rules.badgeError")}</span> <span class="error small">${validation.error}</span>`) : null}</div>
-        ${validation ? html`<div class="validation">
-          ${validation.referenced_vars?.length ? html`<div class="small"><b>${t("rules.referenced")}</b> ${validation.referenced_vars.map((v) => html`<span key=${v.name} class=${"chip " + (v.present ? (v.is_stale ? "warn" : "") : "crit")}
-            title=${v.present ? t("rules.varPresentTitle", { value: JSON.stringify(v.live_value), age: Math.round(v.age_sec), stale: v.is_stale ? t("rules.varStaleSuffix") : "" }) : t("rules.varUnknown")}>${v.name}</span>`)}</div>` : null}
-          ${validation.unknown_vars?.length ? html`<div class="small warn-text">${t("rules.unknownVars", { vars: validation.unknown_vars.join(", ") })}</div>` : null}
-        </div>` : null}
+        </div>
+        <${ValidationResult} validation=${validation} />
       </div>
 
       <details class="cheat"><summary>${t("rules.cheatSheet")}</summary>
@@ -413,30 +433,40 @@ function RuleEditor({ rule, templates, templateRows = [], variables, rules, onCl
         ${delaySec > 0 ? html`<p class="hint">${Number(r.persist_n) > 1 ? t("rules.timingDelay", { delay: fmtSeconds(delaySec) }) : t("rules.timingFirst")}</p>` : null}
       </fieldset>
 
-      <div class="field"><label for="r-summary">${t("rules.triggerSummary")}</label><input id="r-summary" value=${r.trigger_summary || ""} onInput=${(e) => set("trigger_summary", e.target.value)} /></div>
+      <div class="field"><label for="r-summary">${t("rules.triggerSummary")}</label><input id="r-summary" maxlength="500" value=${r.trigger_summary || ""} onInput=${(e) => set("trigger_summary", e.target.value)} /></div>
+      <div class="field"><label for="r-logic">${t("rules.triggerLogic")}</label>
+        <textarea id="r-logic" rows="4" value=${r.trigger_logic_md || ""} onInput=${(e) => set("trigger_logic_md", e.target.value)} aria-describedby="r-logic-help"></textarea>
+        <p id="r-logic-help" class="muted small">${t("rules.triggerLogicHelp")}</p></div>
       <div class="field"><label class="chk"><input type="checkbox" checked=${r.enabled} onChange=${(e) => set("enabled", e.target.checked)} /> ${t("rules.enabled")}</label></div>
 
       <details class="advanced" open=${advancedOpen}>
       <summary>${t("rules.advanced")}</summary>
       <div class="field"><label for="r-vars">${t("rules.varsCapture")}</label>
-        <${TagInput} inputId="r-vars" ariaLabel=${t("rules.varsCapture")} value=${r.vars_extract} onChange=${(v) => set("vars_extract", v)} options=${variables} placeholder=${t("rules.varNamePlaceholder")} /></div>
+        <${TagInput} inputId="r-vars" ariaLabel=${t("rules.varsCapture")} value=${r.vars_extract} onChange=${(v) => set("vars_extract", v)} options=${variables} placeholder=${t("rules.varNamePlaceholder")} />
+        <p class="muted small">${t("rules.varsHelp")}</p></div>
       <div class="field"><label class="chk"><input type="checkbox" checked=${!!r.incident_enabled} onChange=${(e) => set("incident_enabled", e.target.checked)} /> ${t("rules.incidentEnabled")}</label>
         <p class="muted small">${t("rules.incidentHelp")}</p></div>
       ${r.incident_enabled ? html`
         <div class="field"><label for="r-recovery">${t("rules.recoveryExpr")}</label>
-          <textarea id="r-recovery" class="mono" rows="2" value=${r.recovery_expr || ""} onInput=${(e) => set("recovery_expr", e.target.value)} placeholder="x < 75"
+          <textarea id="r-recovery" class="mono" rows="2" value=${r.recovery_expr || ""} onInput=${(e) => { set("recovery_expr", e.target.value); setRecValidation(null); }} placeholder="x < 75" spellcheck="false"
             aria-invalid=${!!fieldErrs.msgFor("recovery_expr") || undefined}
             aria-describedby=${fieldErrs.msgFor("recovery_expr") ? fieldErrorId("recovery_expr") : "r-recovery-help"}></textarea>
           ${fieldErrs.msgFor("recovery_expr") ? html`<div class="error small" id=${fieldErrorId("recovery_expr")} role="alert">${fieldErrs.msgFor("recovery_expr")}</div>` : null}
+          ${(r.recovery_expr || "").trim() ? html`<div class="form-actions"><button type="button" class="btn sm" onClick=${() => validateExpr(r.recovery_expr, setRecValidation)}>${t("rules.validate")}</button></div>
+            <${ValidationResult} validation=${recValidation} />` : null}
           <p id="r-recovery-help" class="muted small">${t("rules.recoveryHelp")}</p></div>
         <div class="field"><label for="r-recovery-n">${t("rules.recoveryPersist")}</label>
           <input id="r-recovery-n" type="number" min="1" max="10000" value=${r.recovery_persist_n || 1} onInput=${(e) => set("recovery_persist_n", e.target.value)} /></div>
         <div class="field"><label for="r-resolved-tmpl">${t("rules.resolvedTemplate")}</label>
-          <input id="r-resolved-tmpl" list="rule-tmpls" value=${r.resolved_template_type || ""} onInput=${(e) => set("resolved_template_type", e.target.value)} />
-          <p class="muted small">${t("rules.resolvedTemplateHelp")}</p></div>
+          <select id="r-resolved-tmpl" value=${r.resolved_template_type || ""} onChange=${(e) => set("resolved_template_type", e.target.value)} aria-describedby="r-resolved-help">
+            <option value="">${t("rules.resolvedSilent")}</option>
+            ${resolvedOptions.map((o) => html`<option key=${o.type} value=${o.type}>${o.label}</option>`)}
+          </select>
+          <p id="r-resolved-help" class="muted small">${t("rules.resolvedTemplateHelp")}</p></div>
       ` : null}
       <div class="field"><label for="r-inhib">${t("rules.inhibitedBy")}</label>
-        <${TagInput} inputId="r-inhib" ariaLabel=${t("rules.inhibitedByAria")} value=${r.inhibited_by} onChange=${(v) => set("inhibited_by", v)} options=${rules} placeholder=${t("rules.ruleNamePlaceholder")} /></div>
+        <${TagInput} inputId="r-inhib" ariaLabel=${t("rules.inhibitedByAria")} value=${r.inhibited_by} onChange=${(v) => set("inhibited_by", v)} options=${rules} placeholder=${t("rules.ruleNamePlaceholder")} />
+        ${unknownInhibitors.length ? html`<div class="small warn-text" role="status">${t("rules.unknownInhibitors", { names: unknownInhibitors.join(", ") })}</div>` : null}</div>
 
       <div class="field"><label for="r-sort">${t("rules.sortOrder")}</label><input id="r-sort" type="number" value=${r.sort_order} onInput=${(e) => set("sort_order", e.target.value)} /></div>
       </details>

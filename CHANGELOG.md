@@ -86,6 +86,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Rule editor: **Trigger logic** (the rule's Markdown notes, `trigger_logic_md`,
+  so far only settable through the API), **Validate** for the recovery
+  condition, the recovery template picked from the list of templates, and a
+  warning for an "inhibited by" name that is no rule. **Validate** evaluates
+  with the rule's `vars_extract` and no longer reports text inside quotes as
+  an unknown variable.
 - **Kurier watches Klopot** ([ADR-0003](docs/adr/0003-kurier-watchdog.md)).
   A new SMS provider, `kurier`, speaks the Kurier gateway's own API (severity,
   a per-recipient idempotency key, and optionally a `dedup_key` template such
