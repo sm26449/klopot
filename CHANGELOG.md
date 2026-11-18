@@ -96,6 +96,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **History functions in rule expressions** ([ADR-0004](docs/adr/0004-rule-history-functions.md)):
+  `avg_over("x", "10m")` (time-weighted), `min_over`, `max_over`,
+  `delta("x", "1h")`, `rate`, `changed` and `prev("x")`. The history is kept
+  in memory for exactly the variables and windows the enabled rules and
+  computed formulas use (at most 24 h, `ALERTD_HISTORY_MAX_VARS` variables,
+  default 200); until it covers the window — and after a restart — the rule
+  is `no_data`. Name and window must be literals, checked when saved.
 - **New expression functions** (rules review, stage 2; reference in
   docs/EXPRESSION_LANGUAGE.md):
   - `fresh("x", 120)` for `var_age("x") < 120`, `has("x")` (a value that is not
@@ -126,7 +133,7 @@ adheres to [Semantic Versioning](https://semver.org/).
   function names** (↑ / ↓, Enter or Tab, Escape closes the list only), and the
   expression cheat-sheet lists every function.
 - `scripts/rules_sim.sh`: the rule engine end to end over a real MQTT broker —
-  a throwaway install + Mosquitto, 25 scenarios (26 rules, 60 messages) checked
+  a throwaway install + Mosquitto, 28 scenarios (29 rules, 68 messages) checked
   through the API. Part of the release-candidate gate.
 - Rule editor: **Trigger logic** (the rule's Markdown notes, `trigger_logic_md`,
   so far only settable through the API), **Validate** for the recovery
