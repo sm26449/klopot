@@ -45,6 +45,7 @@ from ..db.models import (
     Incident,
     LoginAttempt,
     NotificationLog,
+    RuleTransition,
     ScheduleOccurrence,
     SystemEvent,
 )
@@ -198,6 +199,8 @@ class RetentionService:
                 r_req = await session.execute(delete(ApiRequest).where(ApiRequest.expires_at < utc_now()))
                 r_att = await session.execute(delete(DeliveryAttempt).where(DeliveryAttempt.started_at < log_cutoff))
                 r_evt = await session.execute(delete(SystemEvent).where(SystemEvent.ts < log_cutoff))
+                # Rule state history (0045, RL-32) follows the log window too.
+                await session.execute(delete(RuleTransition).where(RuleTransition.at < log_cutoff))
                 # Admin-UI auth history (migration 0008): old login
                 # attempts and dead sessions. Live sessions are never
                 # touched here — expiry is enforced at resolve time.

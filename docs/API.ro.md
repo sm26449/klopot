@@ -653,6 +653,31 @@ Filtre `GET /v1/rules`: `eval_status`, `has_error` (`true` = `error`),
 `enabled`, `template_type`, `category` (a template-ului regulii, fără să țină
 cont de majuscule; `__none__` = fără categorie), `never_fired`, `search`.
 
+### Starea de rulare a unei reguli și istoricul ei
+
+Pe lângă `eval_status`, o regulă spune unde se află în ciclul ei la ultima
+evaluare, `run_state`: `inactive` (condiția e falsă), `pending` (adevărată,
+`persist_n` încă neatins), `firing` (s-a declanșat și ține în continuare; o
+regulă cu incident: incidentul e deschis, inclusiv între cele două praguri),
+`no_data`, `error` — `null` până la prima evaluare. Împreună cu
+`run_state_since` și `last_true_at` (când condiția a devenit ultima dată
+adevărată).
+
+`GET /v1/rules/{id}/transitions?limit=100` (`read`) listează schimbările, cele
+mai noi primele: `{at, from_state, to_state, detail}`. O intrare la fiecare
+schimbare, niciodată la fiecare evaluare, păstrată cât logul
+(`ALERTD_LOG_RETENTION_DAYS`); o regulă care oscilează înregistrează cel mult
+60 de schimbări pe oră, iar `detail` din intrarea următoare spune câte au fost
+sărite.
+
+### „Ce-ar fi dacă”: `POST /v1/rules/validate` cu `context`
+
+`context` (opțional, cel mult 200 de chei / 64 KB) se pune peste valorile live
+doar pentru această evaluare: `{"condition_expr": "soc < 20", "context":
+{"soc": 12}}` → `result: true`; `null` face o intrare să lipsească.
+`var_age()`, `fresh()`, `has()` și ceasul citesc tot starea live. Nu se
+salvează și nu se trimite nimic.
+
 ### `POST /v1/rules/bulk/enabled` (scope `admin`)
 
 ```json
@@ -706,7 +731,8 @@ Citirile cer `read`. Schemele de câmpuri vin din `GET /v1/meta/kinds`.
 | Pushover | `kind=pushover`: `user_key`, `app_token` (ambele doar scriere), `device`, `priority_map` (implicit info -1 / warning 0 / critical 1), `admin_url`. **Urgența** (prioritate 2, repetă până la confirmare) doar pentru severitățile din `emergency_for` (implicit niciuna), cu `retry_sec` (≥ 30) și `expire_sec` (≤ 10800). Receipt-ul urgenței e `provider_ref`-ul livrării; confirmarea în Klopot îl anulează, confirmarea în aplicația Pushover confirmă alerta în Klopot (interogat la ~60 s, actor `pushover:<dispozitiv>`). Tip intruziv. |
 | Ieșire MQTT | `kind=mqtt`, topic_template, qos, retain, host/port, referințe credențiale, tls, payload_template, disponibilitate și heartbeat. [Referință](MQTT_OUTPUT.md). |
 | Acțiuni Telegram | Config: `inline_actions` (implicit false), `chat_id` numeric, `allowed_user_ids` (listă JSON), opțional `any_chat_member`, `actions_locale=en\|ro`, `admin_url`. Receptorul pornește automat la activare, fără endpoint public. [Configurare](TELEGRAM.md). |
-| `/v1/rules` | Expresie de condiție + `persist_n` + interval de evaluare + `inhibited_by` + sumar de declanșare vizibil operatorului. Plus `GET /by-name/{name}`, `POST /validate` (`read`, verifică o expresie), `POST /{id}/eval-now` (`read`, evaluează fără fire), `POST /{id}/test` (`admin`, fire de test) și [`POST /bulk/enabled`](#post-v1rulesbulkenabled-scope-admin). |
+| `/v1/rules` | Expresie de condiție + `persist_n` + interval de evaluare + `inhibited_by` + sumar de declanșare vizibil operatorului. Plus `GET /by-name/{name}`, `POST /validate` (`read`, verifică o expresie, opțional cu valori „ce-ar fi dacă”),
+`GET /{id}/transitions` (`read`, istoricul stării), `POST /{id}/eval-now` (`read`, evaluează fără fire), `POST /{id}/test` (`admin`, fire de test) și [`POST /bulk/enabled`](#post-v1rulesbulkenabled-scope-admin). |
 | `/v1/schedules` | Fire-uri conduse de cron pentru un tip de template. Plus `GET /preview?cron=…&n=…` (următoarele declanșări) și `POST /{id}/test` (declanșează o dată acum). |
 | `/v1/api_keys` | Autentificarea apelanților — vezi [Chei API](#chei-api). |
 

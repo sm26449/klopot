@@ -1199,6 +1199,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/rules/{rule_id}/transitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Run-state history of a rule, newest first
+         * @description One entry per change of the rule's run state (inactive, pending, firing, no_data, error), never per evaluation. Kept as long as the log (ALERTD_LOG_RETENTION_DAYS); a flapping rule records at most 60 changes an hour, and the next entry's detail says how many were skipped.
+         */
+        get: operations["rule_transitions_v1_rules__rule_id__transitions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/schedules": {
         parameters: {
             query?: never;
@@ -3319,6 +3339,11 @@ export interface components {
             last_evaluated_at?: string | null;
             /** Last Fired At */
             last_fired_at?: string | null;
+            /**
+             * Last True At
+             * @description When the condition last became true.
+             */
+            last_true_at?: string | null;
             /** Name */
             name: string;
             /**
@@ -3335,6 +3360,10 @@ export interface components {
             recovery_persist_n: number;
             /** Resolved Template Type */
             resolved_template_type?: string | null;
+            /** @description Where the rule is in its cycle at its last evaluation: inactive (condition false), pending (true, persist_n not reached), firing (fired and still true; an incident rule: its incident is open), no_data, error. null until its first evaluation. */
+            run_state?: components["schemas"]["RuleRunState"] | null;
+            /** Run State Since */
+            run_state_since?: string | null;
             /**
              * Sort Order
              * @default 100
@@ -3350,6 +3379,27 @@ export interface components {
             updated_at: string | null;
             /** Vars Extract */
             vars_extract?: string[];
+        };
+        /**
+         * RuleRunState
+         * @description Where a rule is in its cycle (rules review RL-32), as the engine saw
+         *     it at the last evaluation: ``pending`` = the condition holds but
+         *     ``persist_n`` is not reached yet; ``firing`` = it fired (an incident rule:
+         *     its incident is open) and still holds.
+         * @enum {string}
+         */
+        RuleRunState: "inactive" | "pending" | "firing" | "no_data" | "error";
+        /**
+         * RuleTransitionRead
+         * @description One change of a rule's run state (``GET /v1/rules/{id}/transitions``).
+         */
+        RuleTransitionRead: {
+            /** At */
+            at: string | null;
+            /** Detail */
+            detail?: string | null;
+            from_state?: components["schemas"]["RuleRunState"] | null;
+            to_state: components["schemas"]["RuleRunState"];
         };
         /** RuleUpdate */
         RuleUpdate: {
@@ -3794,6 +3844,10 @@ export interface components {
         ValidateRuleBody: {
             /** Condition Expr */
             condition_expr: string;
+            /** Context */
+            context?: {
+                [key: string]: unknown;
+            } | null;
             /** Vars Extract */
             vars_extract?: string[] | null;
         };
@@ -6508,6 +6562,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FireResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rule_transitions_v1_rules__rule_id__transitions_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                rule_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleTransitionRead"][];
                 };
             };
             /** @description Validation Error */

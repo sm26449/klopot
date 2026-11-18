@@ -77,4 +77,5 @@ async def test_an_idle_incident_rule_writes_rule_state_once(db_engine, db_sessio
     monkeypatch.setattr(engine_module, "get_session", counting)
     for i in range(5):
         await engine._eval_rule(rt, now=float(i))
-    assert len(calls) <= 1
+    # At most the state row and the first run-state transition (RL-32).
+    assert len(calls) <= 2

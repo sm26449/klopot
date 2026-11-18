@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_serializer, field_validator
 
 from ..core.eval import MISSING_INPUT_PREFIX
+from ..enums import RuleRunState
 from .log import _as_utc_iso
 
 
@@ -75,6 +76,14 @@ class RuleRead(RuleBase):
     fire_count_lifetime: int = 0
     last_eval_error: str | None = None
     consecutive_eval_errors: int = 0
+    run_state: RuleRunState | None = Field(
+        default=None,
+        description="Where the rule is in its cycle at its last evaluation: inactive (condition false), "
+                    "pending (true, persist_n not reached), firing (fired and still true; an incident rule: "
+                    "its incident is open), no_data, error. null until its first evaluation.",
+    )
+    run_state_since: datetime | None = None
+    last_true_at: datetime | None = Field(default=None, description="When the condition last became true.")
     created_at: datetime
     updated_at: datetime
 
@@ -88,10 +97,25 @@ class RuleRead(RuleBase):
         return eval_status_of(self.consecutive_eval_errors, self.last_eval_error)
 
     @field_serializer(
-        "last_evaluated_at", "last_fired_at", "created_at", "updated_at"
+        "last_evaluated_at", "last_fired_at", "created_at", "updated_at", "run_state_since", "last_true_at",
     )
     def _serialize_utc(self, value: datetime | None) -> str | None:
         # Z-suffixed UTC so timestamps aren't read as local (B-13).
+        return _as_utc_iso(value)
+
+
+class RuleTransitionRead(BaseModel):
+    """One change of a rule's run state (``GET /v1/rules/{id}/transitions``)."""
+
+    at: datetime
+    from_state: RuleRunState | None = None
+    to_state: RuleRunState
+    detail: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_serializer("at")
+    def _serialize_utc(self, value: datetime) -> str | None:
         return _as_utc_iso(value)
 
 

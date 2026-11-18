@@ -47,6 +47,7 @@ from ..enums import ChannelKind as ChannelKind
 from ..enums import DeliveryState as DeliveryState
 from ..enums import DeliveryStatus as DeliveryStatus
 from ..enums import InputKind as InputKind
+from ..enums import RuleRunState as RuleRunState
 from ..enums import Severity as Severity
 from ..enums import SnoozeScope as SnoozeScope
 from ..enums import SuppressedReason as SuppressedReason
@@ -221,6 +222,12 @@ class Rule(Base):
     # old epoch and ignored on cold start, and a stale in-flight runtime that
     # writes its old count back cannot resurrect it.
     state_epoch: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Where the rule is in its cycle (RuleRunState), since when, and when the
+    # condition last became true (rules review RL-32, migration 0045). Written
+    # by the engine on a change only; the history is rule_transitions.
+    run_state: Mapped[str | None] = mapped_column(String(16))
+    run_state_since: Mapped[datetime | None] = mapped_column(DateTime)
+    last_true_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.current_timestamp()
@@ -961,6 +968,27 @@ class ActivityRule(Base):
         DateTime, nullable=False, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
 
     __table_args__ = (Index("ix_activity_rules_position", "position"),)
+
+
+class RuleTransition(Base):
+    """A change of a rule's run state (rules review RL-32): one row per
+    change, never per tick; pruned with the log (ALERTD_LOG_RETENTION_DAYS)."""
+
+    __tablename__ = "rule_transitions"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    rule_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("rules.id", ondelete="CASCADE"), nullable=False,
+    )
+    at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    from_state: Mapped[str | None] = mapped_column(String(16))
+    to_state: Mapped[str] = mapped_column(String(16), nullable=False)
+    detail: Mapped[str | None] = mapped_column(String(255))
+
+    __table_args__ = (
+        Index("ix_rule_transitions_rule", "rule_id", "id"),
+        Index("ix_rule_transitions_at", "at"),
+    )
 
 
 class SystemEvent(Base):

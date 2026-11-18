@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import and_, func, not_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
@@ -21,7 +22,7 @@ from ...core.incidents import lifecycle_config
 from ...core.rule_state_ops import reset_streak_on_reconfig
 from ...core.state_cache import get_state_cache
 from ...db import get_session
-from ...db.models import Rule, RuleState, Template
+from ...db.models import Rule, RuleState, RuleTransition, Template
 from ...schemas.common import Page
 from ...schemas.fire import FireResponse
 from ...schemas.rule import (
@@ -30,6 +31,7 @@ from ...schemas.rule import (
     RuleBulkResult,
     RuleCreate,
     RuleRead,
+    RuleTransitionRead,
     RuleUpdate,
 )
 from ...utils.like import like_escape
@@ -78,6 +80,20 @@ class ValidateRuleBody(BaseModel):
     # amplifies a pathological regex (audit R08).
     condition_expr: str = Field(min_length=1, max_length=2000)
     vars_extract: list[str] | None = None
+    # "What if": values laid over the live ones for this evaluation only
+    # (review RL-31) — e.g. {"battery.soc": 12}; null = the input is missing.
+    # var_age / fresh / has and the clock still read the live state.
+    context: dict[str, Any] | None = Field(default=None, max_length=200)
+
+    @field_validator("context")
+    @classmethod
+    def _bounded_context(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
+        if v is not None and len(json.dumps(v, default=str)) > _MAX_CONTEXT_BYTES:
+            raise ValueError(f"context too large (> {_MAX_CONTEXT_BYTES} bytes)")
+        return v
+
+
+_MAX_CONTEXT_BYTES = 65536
 
 
 class ReferencedVar(BaseModel):
@@ -239,6 +255,31 @@ async def get_rule(
 ) -> RuleRead:
     obj = await crud_get_or_404(session, Rule, rule_id)
     return RuleRead.model_validate(obj)
+
+
+@router.get(
+    "/{rule_id}/transitions",
+    response_model=list[RuleTransitionRead],
+    summary="Run-state history of a rule, newest first",
+    description=(
+        "One entry per change of the rule's run state (inactive, pending, firing, "
+        "no_data, error), never per evaluation. Kept as long as the log "
+        "(ALERTD_LOG_RETENTION_DAYS); a flapping rule records at most 60 changes "
+        "an hour, and the next entry's detail says how many were skipped."
+    ),
+)
+async def rule_transitions(
+    rule_id: int,
+    limit: int = Query(default=100, ge=1, le=1000),
+    session: AsyncSession = Depends(get_session),
+    actor: Actor = Depends(require_scope("read")),
+) -> list[RuleTransitionRead]:
+    await crud_get_or_404(session, Rule, rule_id)
+    rows = (await session.execute(
+        select(RuleTransition).where(RuleTransition.rule_id == rule_id)
+        .order_by(RuleTransition.id.desc()).limit(limit)
+    )).scalars().all()
+    return [RuleTransitionRead.model_validate(r) for r in rows]
 
 
 @router.patch("/{rule_id}", response_model=RuleRead, summary="Update rule")
@@ -429,6 +470,8 @@ async def validate_rule(
     # The context the engine would build for a rule with this
     # ``vars_extract`` (review RL-02: it was ignored here).
     ctx = rule_context(cache, body.vars_extract, body.condition_expr)
+    if body.context:
+        ctx = {**ctx, **body.context}
 
     # User regexes compile under RE2 (audit V10), which matches in linear time,
     # so a catastrophic pattern can no longer block the loop. This off-thread

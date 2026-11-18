@@ -649,6 +649,31 @@ message. A disabled rule keeps its last message as history.
 `enabled`, `template_type`, `category` (of the rule's template,
 case-insensitive; `__none__` = uncategorized), `never_fired`, `search`.
 
+### Rule run state and history
+
+Next to `eval_status`, a rule carries where it is in its cycle at its last
+evaluation, `run_state`: `inactive` (condition false), `pending` (true,
+`persist_n` not reached yet), `firing` (it fired and still holds; an
+incident rule: its incident is open, between the two thresholds included),
+`no_data`, `error` — `null` until its first evaluation. With it
+`run_state_since` and `last_true_at` (when the condition last became true):
+"never true in 90 days" and "true but never fired" are visible without the
+log.
+
+`GET /v1/rules/{id}/transitions?limit=100` (`read`) lists the changes,
+newest first: `{at, from_state, to_state, detail}` (`detail` = the error or
+missing input). One entry per change, never per evaluation, kept as long as
+the log (`ALERTD_LOG_RETENTION_DAYS`); a flapping rule records at most 60
+changes an hour, and the next entry's `detail` says how many were skipped.
+
+### "What if": `POST /v1/rules/validate` with `context`
+
+`context` (optional, at most 200 keys / 64 KB) is laid over the live values
+for this evaluation only: `{"condition_expr": "soc < 20", "context": {"soc":
+12}}` → `result: true`; `null` makes an input missing. `var_age()`,
+`fresh()`, `has()` and the clock still read the live state;
+`referenced_vars` still reports the live values. Nothing is stored or sent.
+
 ### `POST /v1/rules/bulk/enabled` (scope `admin`)
 
 ```json
@@ -700,7 +725,8 @@ Each of these is a standard REST collection: `GET` (list, paginated),
 | Pushover | `kind=pushover`: `user_key`, `app_token` (both write-only), `device`, `priority_map` (default info -1 / warning 0 / critical 1), `admin_url`. **Emergency** (priority 2, repeat until acknowledged) only for the severities in `emergency_for` (default none), with `retry_sec` (≥ 30) and `expire_sec` (≤ 10800). The emergency receipt is the delivery's `provider_ref`; acknowledging in Klopot cancels it, acknowledging in the Pushover app acknowledges the alert in Klopot (polled every ~60 s, actor `pushover:<device>`). Intrusive kind. |
 | MQTT output | `kind=mqtt`, topic_template, qos, retain, host/port, credential refs, tls, payload_template, availability and heartbeat. [Reference](MQTT_OUTPUT.md). |
 | Telegram actions | Channel config: `inline_actions` (default false), numeric `chat_id`, `allowed_user_ids` (JSON list), optional explicit `any_chat_member`, `actions_locale=en\|ro`, `admin_url`. Polling starts automatically when enabled; no public callback endpoint. [Setup](TELEGRAM.md). |
-| `/v1/rules` | Condition expression + `persist_n` + eval interval + `inhibited_by` + operator-visible trigger summary. Plus `GET /by-name/{name}`, `POST /validate` (`read`, check an expression), `POST /{id}/eval-now` (`read`, evaluate without firing), `POST /{id}/test` (`admin`, test fire) and [`POST /bulk/enabled`](#post-v1rulesbulkenabled-scope-admin). |
+| `/v1/rules` | Condition expression + `persist_n` + eval interval + `inhibited_by` + operator-visible trigger summary. Plus `GET /by-name/{name}`, `POST /validate` (`read`, check an expression, optionally with "what if" values),
+`GET /{id}/transitions` (`read`, run-state history), `POST /{id}/eval-now` (`read`, evaluate without firing), `POST /{id}/test` (`admin`, test fire) and [`POST /bulk/enabled`](#post-v1rulesbulkenabled-scope-admin). |
 | `/v1/schedules` | Cron-driven fires of a template type. Plus `GET /preview?cron=…&n=…` (next firings) and `POST /{id}/test` (fire once now). |
 | `/v1/api_keys` | Caller authentication — see [API keys](#api-keys). |
 

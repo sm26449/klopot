@@ -29,8 +29,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import time as _time
+from collections import deque
 from contextlib import aclosing
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
@@ -38,7 +39,7 @@ from sqlalchemy import select, update
 
 from ..config import get_settings
 from ..db import get_session, get_session_factory
-from ..db.models import Incident, Rule, RuleState
+from ..db.models import Incident, Rule, RuleRunState, RuleState, RuleTransition
 from ..utils.time import utc_now
 from . import dispatcher as dispatcher_module
 from . import eval as eval_module
@@ -90,6 +91,13 @@ class _RuleRuntime:
     # that changes nothing writes nothing (review RL-12: incident rules wrote
     # the row on every evaluation). None = unknown, write on the next call.
     persisted: tuple[int, int, int] | None = None
+    # Where the rule is in its cycle (RuleRunState value; review RL-32), as
+    # last written to rules.run_state. None = unknown (never evaluated).
+    run_state: str | None = None
+    # Monotonic times of the transitions recorded in the last hour, and the
+    # changes not recorded past the budget (a flapping condition).
+    transition_times: deque[float] = field(default_factory=deque)
+    transitions_skipped: int = 0
 
 
 def rule_context(
@@ -136,6 +144,10 @@ class RuleEngine:
     # outbox.FIRST_ATTEMPT_BUDGET_SEC), so a few slow sends in one tick are
     # normal; four budgets are not. Health reports the engine down past it.
     STALL_SEC: float = 180.0
+
+    # Run-state changes recorded per rule per hour (rule_transitions); past
+    # it a flapping rule's changes are counted, not written (review RL-32).
+    TRANSITIONS_PER_HOUR: int = 60
 
     def __init__(self, *, base_tick_sec: float = 1.0) -> None:
         self._base_tick = base_tick_sec
@@ -295,6 +307,9 @@ class RuleEngine:
                         error_event_open=eeo,
                         state_epoch=r.state_epoch or 0,
                         persisted=persisted_row,
+                        run_state=prev.run_state if prev else r.run_state,
+                        transition_times=prev.transition_times if prev else deque(),
+                        transitions_skipped=prev.transitions_skipped if prev else 0,
                     )
                 self._rules = new
                 self._by_name = {rt.rule.name: rt for rt in new.values()}
@@ -451,11 +466,13 @@ class RuleEngine:
             # grace window covers a missed tick.
             await self._record_eval_error(rt, result.error, real=False)
             await self._reset_match_streak(rt)
+            await self._set_run_state(rt, RuleRunState.no_data, result.error)
             return
         if not result.ok:
             RULE_EVAL_ERRORS_TOTAL.labels(rule_id=str(rt.rule.id)).inc()
             rt.consecutive_eval_errors += 1
             await self._record_eval_error(rt, result.error or "unknown")
+            await self._set_run_state(rt, RuleRunState.error, result.error or "unknown")
             if rt.consecutive_eval_errors == 5:
                 # Rate-limited: only log once per early-warning point
                 # (recovery is logged below). Include the actual error
@@ -544,6 +561,7 @@ class RuleEngine:
             await self._reset_match_streak(rt)
             self._last_truthy.pop(rt.rule.name, None)
             rt.false_since_fire = True
+            await self._set_run_state(rt, RuleRunState.inactive)
             return
 
         # Match!
@@ -551,6 +569,7 @@ class RuleEngine:
         rt.consecutive_match_count += 1
         rt.last_match_at = now
         await self._persist_state(rt)
+        await self._set_run_state(rt, self._true_state(rt))
 
         if rt.consecutive_match_count >= rt.rule.persist_n:
             # Re-check liveness at the fire boundary: _eval_rule has awaited
@@ -625,6 +644,7 @@ class RuleEngine:
             rt.last_match_at = now
             rt.recovery_match_count = 0
             rt.consecutive_match_count += 1
+            await self._set_run_state(rt, self._true_state(rt))
             if rt.consecutive_match_count >= rt.rule.persist_n:
                 async for session in get_session():
                     await incidents.fire_rule(
@@ -639,6 +659,7 @@ class RuleEngine:
             return
 
         rt.consecutive_match_count = 0
+        still_open = active
         if not active:
             rt.recovery_match_count = 0
             self._last_truthy.pop(rt.rule.name, None)
@@ -656,7 +677,58 @@ class RuleEngine:
                     break
                 rt.recovery_match_count = 0
                 self._last_truthy.pop(rt.rule.name, None)
+                still_open = False
         await self._persist_state(rt)
+        # Between the two thresholds the incident is still open: firing.
+        await self._set_run_state(rt, RuleRunState.firing if still_open else RuleRunState.inactive)
+
+    @staticmethod
+    def _true_state(rt: _RuleRuntime) -> RuleRunState:
+        """The run state of a rule whose condition holds this tick: firing
+        once ``persist_n`` is reached (and while it keeps holding after the
+        fire, the streak counter restarting), pending before."""
+        if rt.consecutive_match_count >= rt.rule.persist_n or rt.run_state == RuleRunState.firing:
+            return RuleRunState.firing
+        return RuleRunState.pending
+
+    async def _set_run_state(self, rt: _RuleRuntime, state: RuleRunState, detail: str | None = None) -> None:
+        """Record a change of the rule's run state (review RL-32): one
+        ``rule_transitions`` row and ``rules.run_state`` / ``run_state_since``
+        (``last_true_at`` when it becomes true). Nothing is written while the
+        state stays the same; past TRANSITIONS_PER_HOUR in the last hour the
+        change is only counted, and the next recorded row says so."""
+        if rt.run_state == state:
+            return
+        previous = rt.run_state
+        rt.run_state = state
+        mono = _time.monotonic()
+        window = rt.transition_times
+        while window and mono - window[0] > 3600:
+            window.popleft()
+        if len(window) >= self.TRANSITIONS_PER_HOUR:
+            rt.transitions_skipped += 1
+            return
+        window.append(mono)
+        if rt.transitions_skipped:
+            note = f"{rt.transitions_skipped} changes not recorded (flapping)"
+            detail = f"{note}; {detail}" if detail else note
+            rt.transitions_skipped = 0
+        at = utc_now()
+        true_states = (RuleRunState.pending, RuleRunState.firing)
+        values: dict[str, Any] = {"run_state": state.value, "run_state_since": at,
+                                  # Engine bookkeeping is not an edit of the rule.
+                                  "updated_at": Rule.updated_at}
+        if state in true_states and previous not in true_states:
+            values["last_true_at"] = at
+        try:
+            async for s in get_session():
+                s.add(RuleTransition(rule_id=rt.rule.id, at=at, from_state=previous,
+                                     to_state=state.value, detail=detail[:255] if detail else None))
+                await s.execute(update(Rule).where(Rule.id == rt.rule.id).values(**values))
+                await s.commit()
+                break
+        except Exception:
+            logger.exception("recording the run state of rule %s", rt.rule.name)
 
     async def _template_throttled(self, template_type: str) -> bool:
         """True while the template's min_repeat window is still open."""

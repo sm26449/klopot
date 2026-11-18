@@ -21,6 +21,18 @@ class Severity(enum.StrEnum):
     critical = "critical"
 
 
+class RuleRunState(enum.StrEnum):
+    """Where a rule is in its cycle (rules review RL-32), as the engine saw
+    it at the last evaluation: ``pending`` = the condition holds but
+    ``persist_n`` is not reached yet; ``firing`` = it fired (an incident rule:
+    its incident is open) and still holds."""
+    inactive = "inactive"
+    pending = "pending"
+    firing = "firing"
+    no_data = "no_data"
+    error = "error"
+
+
 class InputKind(enum.StrEnum):
     mqtt = "mqtt"
     http_poll = "http_poll"

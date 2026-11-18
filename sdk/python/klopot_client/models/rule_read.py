@@ -9,6 +9,7 @@ from attrs import field as _attrs_field
 from ..types import UNSET, Unset
 
 from ..models.rule_read_eval_status import RuleReadEvalStatus
+from ..models.rule_run_state import RuleRunState
 from ..types import UNSET, Unset
 from typing import cast
 
@@ -42,10 +43,15 @@ class RuleRead:
             last_eval_error (None | str | Unset):
             last_evaluated_at (None | str | Unset):
             last_fired_at (None | str | Unset):
+            last_true_at (None | str | Unset): When the condition last became true.
             persist_n (int | Unset):  Default: 1.
             recovery_expr (None | str | Unset):
             recovery_persist_n (int | Unset):  Default: 1.
             resolved_template_type (None | str | Unset):
+            run_state (None | RuleRunState | Unset): Where the rule is in its cycle at its last evaluation: inactive
+                (condition false), pending (true, persist_n not reached), firing (fired and still true; an incident rule: its
+                incident is open), no_data, error. null until its first evaluation.
+            run_state_since (None | str | Unset):
             sort_order (int | Unset):  Default: 100.
             trigger_logic_md (None | str | Unset):
             trigger_summary (None | str | Unset):
@@ -68,10 +74,13 @@ class RuleRead:
     last_eval_error: None | str | Unset = UNSET
     last_evaluated_at: None | str | Unset = UNSET
     last_fired_at: None | str | Unset = UNSET
+    last_true_at: None | str | Unset = UNSET
     persist_n: int | Unset = 1
     recovery_expr: None | str | Unset = UNSET
     recovery_persist_n: int | Unset = 1
     resolved_template_type: None | str | Unset = UNSET
+    run_state: None | RuleRunState | Unset = UNSET
+    run_state_since: None | str | Unset = UNSET
     sort_order: int | Unset = 100
     trigger_logic_md: None | str | Unset = UNSET
     trigger_summary: None | str | Unset = UNSET
@@ -133,6 +142,12 @@ class RuleRead:
         else:
             last_fired_at = self.last_fired_at
 
+        last_true_at: None | str | Unset
+        if isinstance(self.last_true_at, Unset):
+            last_true_at = UNSET
+        else:
+            last_true_at = self.last_true_at
+
         persist_n = self.persist_n
 
         recovery_expr: None | str | Unset
@@ -148,6 +163,20 @@ class RuleRead:
             resolved_template_type = UNSET
         else:
             resolved_template_type = self.resolved_template_type
+
+        run_state: None | str | Unset
+        if isinstance(self.run_state, Unset):
+            run_state = UNSET
+        elif isinstance(self.run_state, RuleRunState):
+            run_state = self.run_state.value
+        else:
+            run_state = self.run_state
+
+        run_state_since: None | str | Unset
+        if isinstance(self.run_state_since, Unset):
+            run_state_since = UNSET
+        else:
+            run_state_since = self.run_state_since
 
         sort_order = self.sort_order
 
@@ -199,6 +228,8 @@ class RuleRead:
             field_dict["last_evaluated_at"] = last_evaluated_at
         if last_fired_at is not UNSET:
             field_dict["last_fired_at"] = last_fired_at
+        if last_true_at is not UNSET:
+            field_dict["last_true_at"] = last_true_at
         if persist_n is not UNSET:
             field_dict["persist_n"] = persist_n
         if recovery_expr is not UNSET:
@@ -207,6 +238,10 @@ class RuleRead:
             field_dict["recovery_persist_n"] = recovery_persist_n
         if resolved_template_type is not UNSET:
             field_dict["resolved_template_type"] = resolved_template_type
+        if run_state is not UNSET:
+            field_dict["run_state"] = run_state
+        if run_state_since is not UNSET:
+            field_dict["run_state_since"] = run_state_since
         if sort_order is not UNSET:
             field_dict["sort_order"] = sort_order
         if trigger_logic_md is not UNSET:
@@ -295,6 +330,16 @@ class RuleRead:
         last_fired_at = _parse_last_fired_at(d.pop("last_fired_at", UNSET))
 
 
+        def _parse_last_true_at(data: object) -> None | str | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(None | str | Unset, data)
+
+        last_true_at = _parse_last_true_at(d.pop("last_true_at", UNSET))
+
+
         persist_n = d.pop("persist_n", UNSET)
 
         def _parse_recovery_expr(data: object) -> None | str | Unset:
@@ -317,6 +362,36 @@ class RuleRead:
             return cast(None | str | Unset, data)
 
         resolved_template_type = _parse_resolved_template_type(d.pop("resolved_template_type", UNSET))
+
+
+        def _parse_run_state(data: object) -> None | RuleRunState | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            try:
+                if not isinstance(data, str):
+                    raise TypeError()
+                run_state_type_0 = RuleRunState(data)
+
+
+
+                return run_state_type_0
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
+            return cast(None | RuleRunState | Unset, data)
+
+        run_state = _parse_run_state(d.pop("run_state", UNSET))
+
+
+        def _parse_run_state_since(data: object) -> None | str | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(None | str | Unset, data)
+
+        run_state_since = _parse_run_state_since(d.pop("run_state_since", UNSET))
 
 
         sort_order = d.pop("sort_order", UNSET)
@@ -361,10 +436,13 @@ class RuleRead:
             last_eval_error=last_eval_error,
             last_evaluated_at=last_evaluated_at,
             last_fired_at=last_fired_at,
+            last_true_at=last_true_at,
             persist_n=persist_n,
             recovery_expr=recovery_expr,
             recovery_persist_n=recovery_persist_n,
             resolved_template_type=resolved_template_type,
+            run_state=run_state,
+            run_state_since=run_state_since,
             sort_order=sort_order,
             trigger_logic_md=trigger_logic_md,
             trigger_summary=trigger_summary,

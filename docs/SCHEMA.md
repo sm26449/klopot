@@ -207,6 +207,9 @@ CREATE TABLE rules (
     consecutive_eval_errors INT NOT NULL DEFAULT 0,
     inhibited_by JSON NOT NULL DEFAULT '[]',   -- rule names that suppress this one while active
     state_epoch INT NOT NULL DEFAULT 0,        -- bumped on reconfiguration (audit B-06)
+    run_state VARCHAR(16),                     -- inactive | pending | firing | no_data | error (0045)
+    run_state_since TIMESTAMP,
+    last_true_at TIMESTAMP,                    -- the condition last became true
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         ON UPDATE CURRENT_TIMESTAMP,
@@ -223,6 +226,34 @@ CREATE TABLE rules (
   [API.md](API.md#rule-evaluation-status).
 - `consecutive_eval_errors`: real expression failures in a row; at
   `ALERTD_EVAL_ERROR_DISABLE_THRESHOLD` the rule auto-disables.
+- `run_state` (`0045`, `app.enums.RuleRunState`): where the rule is in its
+  cycle at its last evaluation — `inactive` (condition false), `pending`
+  (true, `persist_n` not reached), `firing` (fired and still true; an incident
+  rule: its incident is open, hysteresis included), `no_data`, `error`. NULL
+  until the first evaluation after the migration. Written by the engine on a
+  change only, with `run_state_since`; `last_true_at` = when it last went from
+  not true to `pending` / `firing`. History: `rule_transitions`.
+
+### `rule_transitions`
+
+One row per change of a rule's `run_state` (`0045`), never per tick. At most
+60 rows per rule per hour: past that (a flapping condition) changes are not
+recorded and the next row's `detail` says how many were skipped. Pruned with
+the log (`ALERTD_LOG_RETENTION_DAYS`). `GET /v1/rules/{id}/transitions`.
+
+```sql
+CREATE TABLE rule_transitions (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    rule_id BIGINT NOT NULL,
+    at TIMESTAMP NOT NULL,
+    from_state VARCHAR(16),            -- NULL: first state recorded
+    to_state VARCHAR(16) NOT NULL,
+    detail VARCHAR(255),               -- the error / missing input, or skipped changes
+    FOREIGN KEY (rule_id) REFERENCES rules(id) ON DELETE CASCADE,
+    INDEX ix_rule_transitions_rule (rule_id, id),
+    INDEX ix_rule_transitions_at (at)
+);
+```
 
 ### `rule_state`
 
@@ -860,6 +891,8 @@ Expected row counts at v1:
 - `rules`, `templates`, `channels`, `inputs`, `variables` — 10²
   total, growing slowly.
 - `throttle_state`, `rule_state` — 1 row per type / rule.
+- `rule_transitions` — a few rows per rule per day (at most 60 per rule per
+  hour); pruned by retention.
 
 If `notifications_log` exceeds ~10⁷ rows, partitioning by
 `fired_at` (monthly) is the right next step. Out of scope for v1.

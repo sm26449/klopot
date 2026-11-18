@@ -4724,6 +4724,18 @@
             ],
             "title": "Last Fired At"
           },
+          "last_true_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the condition last became true.",
+            "title": "Last True At"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -4766,6 +4778,28 @@
               }
             ],
             "title": "Resolved Template Type"
+          },
+          "run_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RuleRunState"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where the rule is in its cycle at its last evaluation: inactive (condition false), pending (true, persist_n not reached), firing (fired and still true; an incident rule: its incident is open), no_data, error. null until its first evaluation."
+          },
+          "run_state_since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run State Since"
           },
           "sort_order": {
             "default": 100,
@@ -4830,6 +4864,64 @@
           "eval_status"
         ],
         "title": "RuleRead",
+        "type": "object"
+      },
+      "RuleRunState": {
+        "description": "Where a rule is in its cycle (rules review RL-32), as the engine saw\nit at the last evaluation: ``pending`` = the condition holds but\n``persist_n`` is not reached yet; ``firing`` = it fired (an incident rule:\nits incident is open) and still holds.",
+        "enum": [
+          "inactive",
+          "pending",
+          "firing",
+          "no_data",
+          "error"
+        ],
+        "title": "RuleRunState",
+        "type": "string"
+      },
+      "RuleTransitionRead": {
+        "description": "One change of a rule's run state (``GET /v1/rules/{id}/transitions``).",
+        "properties": {
+          "at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "from_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RuleRunState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "to_state": {
+            "$ref": "#/components/schemas/RuleRunState"
+          }
+        },
+        "required": [
+          "at",
+          "to_state"
+        ],
+        "title": "RuleTransitionRead",
         "type": "object"
       },
       "RuleUpdate": {
@@ -6204,6 +6296,19 @@
             "minLength": 1,
             "title": "Condition Expr",
             "type": "string"
+          },
+          "context": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "maxProperties": 200,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context"
           },
           "vars_extract": {
             "anyOf": [
@@ -11533,6 +11638,71 @@
           "rules"
         ],
         "x-required-scope": "admin"
+      }
+    },
+    "/v1/rules/{rule_id}/transitions": {
+      "get": {
+        "description": "One entry per change of the rule's run state (inactive, pending, firing, no_data, error), never per evaluation. Kept as long as the log (ALERTD_LOG_RETENTION_DAYS); a flapping rule records at most 60 changes an hour, and the next entry's detail says how many were skipped.",
+        "operationId": "rule_transitions_v1_rules__rule_id__transitions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "title": "Rule Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RuleTransitionRead"
+                  },
+                  "title": "Response Rule Transitions V1 Rules  Rule Id  Transitions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Run-state history of a rule, newest first",
+        "tags": [
+          "rules"
+        ],
+        "x-required-scope": "read"
       }
     },
     "/v1/schedules": {
