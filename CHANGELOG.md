@@ -96,6 +96,14 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Parametric rules** ([ADR-0005](docs/adr/0005-parametric-rules.md), migration
+  `0046`): `for_each: {"n": ["f1", "f2", "f3", "f4"]}` runs one rule once per
+  value, `{n}` replaced in the condition, recovery, captured variables and
+  template types, `n` in the template. Each instance has its own streak, run
+  state, incident and notifications; the rule shows the most urgent of them.
+  `GET /v1/rules/{id}/instances`; `instance` on eval-now, test fire, validate
+  and transitions; *For each* and an *Instances* table in the rule editor;
+  carried by config export / import. Existing rules are unchanged.
 - **History functions in rule expressions** ([ADR-0004](docs/adr/0004-rule-history-functions.md)):
   `avg_over("x", "10m")` (time-weighted), `min_over`, `max_over`,
   `delta("x", "1h")`, `rate`, `changed` and `prev("x")`. The history is kept
@@ -133,7 +141,7 @@ adheres to [Semantic Versioning](https://semver.org/).
   function names** (↑ / ↓, Enter or Tab, Escape closes the list only), and the
   expression cheat-sheet lists every function.
 - `scripts/rules_sim.sh`: the rule engine end to end over a real MQTT broker —
-  a throwaway install + Mosquitto, 28 scenarios (29 rules, 68 messages) checked
+  a throwaway install + Mosquitto, 29 scenarios (30 rules, 71 messages) checked
   through the API. Part of the release-candidate gate.
 - Rule editor: **Trigger logic** (the rule's Markdown notes, `trigger_logic_md`,
   so far only settable through the API), **Validate** for the recovery
