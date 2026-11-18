@@ -199,6 +199,34 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Fixes from the review of rc.9** (`.audit` RC-01 … RC-12):
+  - **History functions are exact** (ADR-0004 amended): the history keeps
+    every change point instead of merging samples, which gave a `max_over` of
+    1 for a peak of 100, missed a change and back, and weighted an average
+    wrongly when another rule watched the same variable over a longer window.
+    At most 10 000 changes per variable; a window they do not cover is
+    `no_data`, never an approximation.
+  - Saving a rule, computed formula, bulk enable or import that needs more
+    history than `ALERTD_HISTORY_MAX_VARS` is refused (`422` / an import
+    error); before, a new rule silently pushed an existing rule's variable out.
+  - The history starts over when an input is reconfigured (its values
+    invalidated), and `avg_over ("x", "5m")` with a space before the
+    parenthesis is tracked.
+  - **Parametric rules**: `for_each` values that differ only in case (`A`,
+    `a`) are refused (MySQL compares the instance key without case, so they
+    shared one stored state); the rule's message reads `missing input: … —
+    instance f4` (a real error first), so a silent instance is `no_data`, not
+    an error, in the API and its filter; the category filter and the rules
+    list follow the instances' templates (`audit_{n}`), and the editor no
+    longer offers to create the literal pattern.
+  - **Activity log**: a MySQL deadlock or lock wait while writing it is
+    retried (a batch was lost, uncounted); a lasting failure is counted in
+    `klopot_activity_dropped_total`.
+  - The rule engine writes its last `last_evaluated_at` stamps on shutdown.
+  - CI publishes an image only after the browser e2e **and** a new rules
+    simulation job (MQTT) pass; the pack catalog ships in the wheel;
+    `.dockerignore` keeps `private/`, `.audit/` and `node_modules/` out of the
+    build context.
 - **`scripts/deploy.sh` warns about an old runtime `docker-compose.yml`.** In
   runtime-dir mode the compose file is the runtime's own copy; an old one does
   not pass the settings added since, so a value in `.env` for them never
