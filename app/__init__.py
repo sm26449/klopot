@@ -1,3 +1,3 @@
 """alertd — notification microservice."""
 
-__version__ = "1.3.0-rc.3"
+__version__ = "1.3.0-rc.4"
