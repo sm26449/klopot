@@ -22,6 +22,11 @@ test("incident configuration is opt-in and saves recovery expression, confirmati
     [...document.querySelectorAll("button")].find((b) => /new rule/i.test(b.textContent)).click();
     await flush(100);
     assert.equal(document.querySelector("#r-recovery"), null, "legacy mode is the default");
+    // Incidents live on the Advanced tab (rules UI/UX review).
+    assert.equal(document.getElementById("r-panel-advanced").hidden, true);
+    document.getElementById("r-tab-advanced").click();
+    await flush(30);
+    assert.equal(document.getElementById("r-panel-advanced").hidden, false);
     const track = [...document.querySelectorAll("label")].find((l) => /Track as an incident/.test(l.textContent)).querySelector("input");
     track.click();
     await flush(50);
@@ -31,12 +36,18 @@ test("incident configuration is opt-in and saves recovery expression, confirmati
     tmpl.value = "overheat";
     tmpl.dispatchEvent(new Event("change", { bubbles: true }));
     for (const [id, value] of [["r-name", "thermal"], ["r-cond", "x > 80"],
-                               ["r-recovery", "x < 75"], ["r-recovery-n", "3"]]) {
+                               ["r-recovery", "x < 75"], ["r-rec-hold", "20"]]) {
       const element = document.getElementById(id);
       element.value = value;
       element.dispatchEvent(new Event("input", { bubbles: true }));
     }
     // The recovery template is a select of existing templates too (RL-10).
+    // The recovery is a duration too: 20 s at a 10 s interval = 3 checks (UX-R10).
+    await flush(30);                         // the typed value renders before the unit changes
+    const unit = document.getElementById("r-rec-hold-unit");
+    unit.value = "s";
+    unit.dispatchEvent(new Event("change", { bubbles: true }));
+    await flush(20);
     const resolved = document.getElementById("r-resolved-tmpl");
     assert.deepEqual([...resolved.options].map((o) => o.value), ["", "normal", "overheat"]);
     resolved.value = "normal";

@@ -69,6 +69,14 @@ function ValidationResult({ validation }) {
 // One badge for the list: disabled rules show their last error as history
 // (audit V21); enabled ones distinguish a failing expression from a rule that
 // is only waiting for an input (eval_status).
+/** The list's "when to send": the duration the condition must hold, and the
+ *  check interval (UX-R03 — "3× / 30s" said the same less plainly). */
+export function persistLabel(r) {
+  const delay = (Math.max(1, Number(r.persist_n) || 1) - 1) * (Number(r.eval_interval_sec) || 0);
+  return delay > 0 ? t("rules.persistHeld", { delay: fmtSeconds(delay), every: fmtSeconds(Number(r.eval_interval_sec) || 0) })
+    : t("rules.persistFirst", { every: fmtSeconds(Number(r.eval_interval_sec) || 0) });
+}
+
 const runSince = (r) => (r.run_state_since ? t("rules.stateSince", { when: fmtDateTime(r.run_state_since) }) : "");
 
 export function RuleStatusBadge({ rule: r }) {
@@ -284,7 +292,7 @@ function RuleGroup({ label, rules, open, onToggle, selected, onSelect, onOpen })
       <button class="group-toggle" aria-expanded=${open} aria-controls=${bodyId} onClick=${onToggle}>
         <span class="caret" aria-hidden="true">${open ? "▾" : "▸"}</span> ${label}
       </button>
-      <span class="muted small">${t("rules.groupSummary", { count: rules.length, on })}</span>
+      <span class="muted small">${t(rules.length === 1 ? "rules.groupSummaryOne" : "rules.groupSummary", { count: rules.length, on })}</span>
       ${issues ? html`<span class="badge warning plain small">${t("rules.groupIssues", { count: issues })}</span>` : null}
     </h2>
     ${open ? html`<div id=${bodyId} class="scroll-x"><table class="tbl">
@@ -305,12 +313,22 @@ function RuleGroup({ label, rules, open, onToggle, selected, onSelect, onOpen })
           ${r.trigger_summary ? html`<div class="muted small">${r.trigger_summary}</div>` : null}</td>
         <td class="mono small">${r.template_type}</td>
         <td><${RuleStatusBadge} rule=${r} /></td>
-        <td class="small">${r.persist_n}× / ${r.eval_interval_sec}s</td>
+        <td class="small" title=${t("rules.persistTitle", { count: r.persist_n, every: r.eval_interval_sec })}>${persistLabel(r)}</td>
         <td title=${fmtDateTime(r.last_true_at)}>${r.last_true_at ? fmtRelative(r.last_true_at) : "—"}</td>
         <td title=${fmtDateTime(r.last_fired_at)}>${r.last_fired_at ? fmtRelative(r.last_fired_at) : "—"}</td>
         <td class="num">${r.fire_count_lifetime}</td>
       </tr>`)}</tbody></table></div>` : null}
   </section>`;
+}
+
+// Fields on the Advanced tab (a server error on one opens it).
+const ADVANCED_FIELDS = ["incident_enabled", "recovery_expr", "recovery_persist_n", "resolved_template_type",
+  "for_each", "vars_extract", "inhibited_by", "sort_order"];
+
+/** How many advanced options a rule uses (the tab's counter). */
+export function advancedInUse(r) {
+  return [r.incident_enabled, r.for_each, (r.vars_extract || []).length, (r.inhibited_by || []).length,
+    Number(r.sort_order ?? 100) !== 100].filter(Boolean).length;
 }
 
 const EMPTY_R = {
@@ -352,10 +370,20 @@ function RuleEditor({ rule, templateRows = [], variables, rules, onClose, onSave
     lookup(api.get(`/v1/rules/${rule.id}/transitions`, { limit: 50 }), []).then((rows) => setHistory(Array.isArray(rows) ? rows : []));
     if (rule.for_each) lookup(api.get(`/v1/rules/${rule.id}/instances`), []).then((rows) => setInstanceRows(Array.isArray(rows) ? rows : []));
   }, []);
-  // How long the condition must hold, kept while the interval changes (RL-30).
+  // How long the condition must hold, kept while the interval changes (RL-30);
+  // the recovery the same way (UX-R10: it was a count of checks).
   const [hold, setHold] = useState(() => splitDuration(checksToHold(rule.persist_n ?? 1, rule.eval_interval_sec ?? 10)));
+  const [recHold, setRecHold] = useState(() => splitDuration(checksToHold(rule.recovery_persist_n ?? 1, rule.eval_interval_sec ?? 10)));
+  // Two tabs: what most rules need, and the rest (UX-R08).
+  const [tab, setTab] = useState("basic");
   const [busy, setBusy] = useState(false);
   const fieldErrs = useFieldErrors();
+  // A rejected field on the other tab takes you there.
+  useEffect(() => {
+    const fields = (fieldErrs.errors || []).map((e) => String(e.field || "").split(".").pop());
+    if (fields.some((f) => ADVANCED_FIELDS.includes(f))) setTab("advanced");
+    else if (fields.length) setTab("basic");
+  }, [fieldErrs.errors]);
   const [confirmDel, setConfirmDel] = useState(false);
   const nameOk = /^[a-z][a-z0-9_-]*$/.test(name);
 
@@ -393,9 +421,19 @@ function RuleEditor({ rule, templateRows = [], variables, rules, onClose, onSave
     setHold([value, unit]);
     set("persist_n", holdToChecks(Number(value) * unitSec(unit), r.eval_interval_sec));
   }
+  function setRecHoldPart(value, unit) {
+    setRecHold([value, unit]);
+    set("recovery_persist_n", holdToChecks(Number(value) * unitSec(unit), r.eval_interval_sec));
+  }
   function setInterval_(v) {
     set("eval_interval_sec", v);
     set("persist_n", holdToChecks(Number(hold[0]) * unitSec(hold[1]), v));
+    set("recovery_persist_n", holdToChecks(Number(recHold[0]) * unitSec(recHold[1]), v));
+  }
+  // Live values for the test fire (UX-R12), from what the engine would see.
+  async function fillTestContext() {
+    try { setCtxText(JSON.stringify((await api.post(`/v1/rules/${rule.id}/eval-now`)).context || {}, null, 2)); }
+    catch (e) { toast.error(e); }
   }
 
   async function save() {
@@ -451,6 +489,7 @@ function RuleEditor({ rule, templateRows = [], variables, rules, onClose, onSave
     const d = draft.recovered;
     setName(d.name); setR(d.r);
     setHold(splitDuration(checksToHold(d.r.persist_n, d.r.eval_interval_sec)));
+    setRecHold(splitDuration(checksToHold(d.r.recovery_persist_n ?? 1, d.r.eval_interval_sec)));
     draft.restore();
   };
   const closeDraft = () => { draft.clear(); onClose(); };
@@ -484,164 +523,217 @@ function RuleEditor({ rule, templateRows = [], variables, rules, onClose, onSave
   // How long after the condition starts holding the alert goes out (first
   // check counts), for the plain-language hint.
   const delaySec = (Math.max(1, Number(r.persist_n) || 1) - 1) * (Number(r.eval_interval_sec) || 0);
-  // Advanced options open by themselves when the rule uses one or has an error there.
-  const advancedOpen = !!((r.vars_extract || []).length || r.incident_enabled || (r.inhibited_by || []).length || r.for_each
-    || Number(r.sort_order) !== 100 || ["recovery_expr", "recovery_persist_n", "resolved_template_type"].some((f) => fieldErrs.msgFor(f)));
+  const recDelaySec = (Math.max(1, Number(r.recovery_persist_n) || 1) - 1) * (Number(r.eval_interval_sec) || 0);
+  const inUse = advancedInUse(r);
+  const advErrors = (fieldErrs.errors || []).some((e) => ADVANCED_FIELDS.includes(String(e.field || "").split(".").pop()));
+  // A help line under a field: what it does and when to use it (UX review).
+  const help = (id, key, params) => html`<p id=${id} class="muted small field-help">${t(key, params)}</p>`;
+  // "Held for [n] [unit]": the same control for the trigger and the recovery.
+  const durationInputs = (prefix, value, onPart, label, attrs = {}) => html`
+    <input id=${prefix} type="number" min="0" class="inline-num" value=${value[0]} aria-label=${label}
+      onInput=${(e) => onPart(e.target.value, value[1])} ...${attrs} />
+    <select id=${prefix + "-unit"} class="inline-unit" value=${value[1]} aria-label=${t("rules.holdUnit")}
+      onChange=${(e) => onPart(value[0], e.target.value)}>
+      ${UNITS.map(([u]) => html`<option key=${u} value=${u}>${t("rules.unit_" + u)}</option>`)}</select>`;
+  const roundingNote = (checks, wantSec, gotSec) => (Number(checks) >= MAX_CHECKS
+    ? html` <span class="warn-text">${t("rules.timingCapped", { max: MAX_CHECKS })}</span>`
+    : wantSec !== gotSec ? html` <span class="warn-text">${t("rules.timingRounded", { delay: fmtSeconds(gotSec) })}</span>` : null);
+  const tabButton = (key, label) => html`<button type="button" role="tab" id=${"r-tab-" + key} aria-controls=${"r-panel-" + key}
+      aria-selected=${tab === key ? "true" : "false"} tabindex=${tab === key ? 0 : -1} class=${"tab" + (tab === key ? " active" : "")}
+      onClick=${() => setTab(key)}
+      onKeyDown=${(e) => { if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); const next = key === "basic" ? "advanced" : "basic"; setTab(next); document.getElementById("r-tab-" + next)?.focus(); } }}>${label}</button>`;
+
   return html`<${Drawer} open=${true} width=${760} title=${isNew ? t("rules.newRule") : rule.name} onClose=${closeDraft} dirty=${dirty}>
       ${draft.recovered ? html`<${DraftBanner} onRestore=${restoreDraft} onDiscard=${draft.dismiss} />` : null}
       <${FieldErrorSummary} errors=${fieldErrs.errors}
-        idFor=${(f) => ({ name: "r-name", template_type: "r-tmpl", condition_expr: "r-cond", persist_n: "r-hold", eval_interval_sec: "r-evalint", recovery_expr: "r-recovery", recovery_persist_n: "r-recovery-n", resolved_template_type: "r-resolved-tmpl" }[f.split(".").pop()] || "r-cond")} />
+        idFor=${(f) => ({ name: "r-name", template_type: "r-tmpl", condition_expr: "r-cond", persist_n: "r-hold", eval_interval_sec: "r-evalint", recovery_expr: "r-recovery", recovery_persist_n: "r-rec-hold", resolved_template_type: "r-resolved-tmpl", for_each: "r-fe-values", vars_extract: "r-vars", inhibited_by: "r-inhib", sort_order: "r-sort" }[f.split(".").pop()] || "r-cond")} />
     <div class="editor">
-      ${isNew ? html`<div class="field"><label for="r-name">${t("rules.nameLabel")} <span class="req">*</span></label>
-        <input id="r-name" value=${name} onInput=${(e) => setName(e.target.value)}
-          aria-invalid=${(name && !nameOk) || !!fieldErrs.msgFor("name") || undefined}
-          aria-describedby=${fieldErrs.msgFor("name") ? fieldErrorId("name") : undefined} placeholder=${t("rules.namePlaceholder")} />
-        ${name && !nameOk ? html`<div class="error small">${t("rules.nameRule")}</div>` : null}
-        ${fieldErrs.msgFor("name") ? html`<div id=${fieldErrorId("name")} class="error small" role="alert">${fieldErrs.msgFor("name")}</div>` : null}</div>`
-        : html`<p class="muted small mono">${t("rules.idPrefix", { id: rule.id })}${rule.last_eval_error ? html` · <span class="warn-text">${rule.last_eval_error}</span>` : ""}</p>`}
+      ${isNew ? null : html`<div class="rule-status" role="group" aria-label=${t("rules.statusAria")}>
+        <${RuleStatusBadge} rule=${rule} />
+        <span class="muted small">${t("rules.colLastTrue")}: ${rule.last_true_at ? html`<span title=${fmtDateTime(rule.last_true_at)}>${fmtRelative(rule.last_true_at)}</span>` : "—"}</span>
+        <span class="muted small">${t("rules.colLastFired")}: ${rule.last_fired_at ? html`<span title=${fmtDateTime(rule.last_fired_at)}>${fmtRelative(rule.last_fired_at)}</span>` : "—"}</span>
+        <span class="muted small">${t("rules.firesCount", { count: rule.fire_count_lifetime || 0 })}</span>
+        <span class="muted small mono">${t("rules.idPrefix", { id: rule.id })}</span>
+        ${rule.last_eval_error ? html`<p class="small warn-text rule-status-msg">${rule.last_eval_error}</p>` : null}
+      </div>`}
 
-      <div class=${"field" + (fieldErrs.msgFor("template_type") ? " has-error" : "")}><label for="r-tmpl">${t("rules.templateTypeLabel")} <span class="req">*</span></label>
-        <select id="r-tmpl" value=${r.template_type} onChange=${(e) => set("template_type", e.target.value)}
-          aria-invalid=${fieldErrs.msgFor("template_type") ? "true" : undefined}
-          aria-describedby=${fieldErrs.msgFor("template_type") ? fieldErrorId("template_type") : "r-tmpl-help"}>
-          <option value="">${t("rules.chooseTemplate")}</option>
-          ${tmplOptions.map((o) => html`<option key=${o.type} value=${o.type}>${o.label}</option>`)}
-        </select>
-        <div id="r-tmpl-help" class="hint">${t("rules.templateHelp")} <a href="#/templates">${t("rules.manageTemplates")}</a></div>
-        ${fieldErrs.msgFor("template_type") ? html`<div id=${fieldErrorId("template_type")} class="error small" role="alert">${fieldErrs.msgFor("template_type")}</div>` : null}</div>
-
-      <div class=${"field" + (fieldErrs.msgFor("condition_expr") ? " has-error" : "")}><label for="r-cond">${t("rules.conditionLabel")} <span class="req">*</span></label>
-        <${ExprInput} id="r-cond" rows="3" value=${r.condition_expr} variables=${variables}
-          onChange=${(v) => { set("condition_expr", v); setValidation(null); }}
-          aria-invalid=${fieldErrs.msgFor("condition_expr") ? "true" : undefined}
-          aria-describedby=${fieldErrs.msgFor("condition_expr") ? fieldErrorId("condition_expr") : undefined}
-          placeholder=${t("rules.conditionPlaceholder")} />
-        ${fieldErrs.msgFor("condition_expr") ? html`<div id=${fieldErrorId("condition_expr")} class="error small" role="alert">${fieldErrs.msgFor("condition_expr")}</div>` : null}
-        <div class="form-actions"><button type="button" class="btn sm" onClick=${validate}>${t("rules.validate")}</button>
-          ${validation?.referenced_vars?.length && whatIfText === null ? html`<button type="button" class="btn sm" onClick=${openWhatIf}>${t("rules.whatIfOpen")}</button>` : null}
-        </div>
-        <${ValidationResult} validation=${validation} />
-        ${whatIfText !== null ? html`<div class="what-if">
-          <label for="r-whatif">${t("rules.whatIfLabel")}</label>
-          <textarea id="r-whatif" class="mono" rows=${Math.min(8, whatIfText.split("\n").length)} value=${whatIfText}
-            onInput=${(e) => { setWhatIfText(e.target.value); setWhatIf(null); }} aria-describedby="r-whatif-help" spellcheck="false"></textarea>
-          <p id="r-whatif-help" class="muted small">${t("rules.whatIfHelp")}</p>
-          <div class="form-actions"><button type="button" class="btn sm" onClick=${runWhatIf}>${t("rules.whatIfRun")}</button></div>
-          <${ValidationResult} validation=${whatIf} />
-        </div>` : null}
+      <div class="tabs" role="tablist" aria-label=${t("rules.tabsAria")}>
+        ${tabButton("basic", t("rules.tabBasic"))}
+        ${tabButton("advanced", html`${t("rules.tabAdvanced")}${inUse ? html` <span class="chip small">${inUse}</span>` : null}${advErrors ? html` <span class="badge critical plain small">!</span>` : null}`)}
       </div>
 
-      <details class="cheat"><summary>${t("rules.cheatSheet")}</summary>
-        <table class="tbl small">${cheatRows().map(([fn, d]) => html`<tr key=${fn}><td class="mono">${fn}</td><td class="muted">${d}</td></tr>`)}</table>
-      </details>
+      <div role="tabpanel" id="r-panel-basic" aria-labelledby="r-tab-basic" hidden=${tab !== "basic"}>
+        <p class="muted small">${t("rules.basicIntro")}</p>
+        ${isNew ? html`<div class="field"><label for="r-name">${t("rules.nameLabel")} <span class="req">*</span></label>
+          <input id="r-name" value=${name} onInput=${(e) => setName(e.target.value)}
+            aria-invalid=${(name && !nameOk) || !!fieldErrs.msgFor("name") || undefined}
+            aria-describedby=${fieldErrs.msgFor("name") ? fieldErrorId("name") : "r-name-help"} placeholder=${t("rules.namePlaceholder")} />
+          ${name && !nameOk ? html`<div class="error small">${t("rules.nameRule")}</div>` : null}
+          ${fieldErrs.msgFor("name") ? html`<div id=${fieldErrorId("name")} class="error small" role="alert">${fieldErrs.msgFor("name")}</div>` : null}
+          ${help("r-name-help", "rules.nameHelp")}</div>` : null}
 
-      <fieldset class="timing">
-        <legend>${t("rules.timingLegend")}</legend>
-        <p class="timing-sentence">${t("rules.timingHoldA")}
-          <input id="r-hold" type="number" min="0" class="inline-num" value=${hold[0]} aria-label=${t("rules.holdFor")}
-            onInput=${(e) => setHoldPart(e.target.value, hold[1])} ...${fieldErrs.attrs("persist_n")} />
-          <select id="r-hold-unit" class="inline-num" value=${hold[1]} aria-label=${t("rules.holdUnit")}
-            onChange=${(e) => setHoldPart(hold[0], e.target.value)}>
-            ${UNITS.map(([u]) => html`<option key=${u} value=${u}>${t("rules.unit_" + u)}</option>`)}</select>
-          ${t("rules.timingHoldB")}
-          <input id="r-evalint" type="number" min="1" class="inline-num" value=${r.eval_interval_sec} aria-label=${t("rules.evalInterval")}
-            onInput=${(e) => setInterval_(e.target.value)} ...${fieldErrs.attrs("eval_interval_sec")} />
-          ${t("rules.timingC")}</p>
-        <p class="hint">${Number(r.persist_n) > 1 ? t("rules.timingChecks", { count: r.persist_n, delay: fmtSeconds(delaySec) }) : t("rules.timingFirst")}
-          ${Number(r.persist_n) >= MAX_CHECKS ? html` <span class="warn-text">${t("rules.timingCapped", { max: MAX_CHECKS })}</span>`
-            : Number(hold[0]) * unitSec(hold[1]) !== delaySec ? html` <span class="warn-text">${t("rules.timingRounded", { delay: fmtSeconds(delaySec) })}</span>` : null}</p>
-      </fieldset>
+        <div class="field"><label for="r-summary">${t("rules.triggerSummary")}</label>
+          <input id="r-summary" maxlength="500" value=${r.trigger_summary || ""} placeholder=${t("rules.summaryPlaceholder")}
+            aria-describedby="r-summary-help" onInput=${(e) => set("trigger_summary", e.target.value)} />
+          ${help("r-summary-help", "rules.summaryHelp")}</div>
 
-      <div class="field"><label for="r-summary">${t("rules.triggerSummary")}</label><input id="r-summary" maxlength="500" value=${r.trigger_summary || ""} onInput=${(e) => set("trigger_summary", e.target.value)} /></div>
-      <div class="field"><label for="r-logic">${t("rules.triggerLogic")}</label>
-        <textarea id="r-logic" rows="4" value=${r.trigger_logic_md || ""} onInput=${(e) => set("trigger_logic_md", e.target.value)} aria-describedby="r-logic-help"></textarea>
-        <p id="r-logic-help" class="muted small">${t("rules.triggerLogicHelp")}</p></div>
-      <div class="field"><label class="chk"><input type="checkbox" checked=${r.enabled} onChange=${(e) => set("enabled", e.target.checked)} /> ${t("rules.enabled")}</label></div>
-
-      <details class="advanced" open=${advancedOpen}>
-      <summary>${t("rules.advanced")}</summary>
-      <fieldset class="for-each"><legend>${t("rules.forEach")}</legend>
-        <p class="timing-sentence">${t("rules.forEachA")}
-          <input id="r-fe-param" class="inline-num mono" value=${feParam} aria-label=${t("rules.forEachParam")} maxlength="32"
-            onInput=${(e) => setForEach(e.target.value, feValues)} />
-          ${t("rules.forEachB")}</p>
-        <${TagInput} inputId="r-fe-values" ariaLabel=${t("rules.forEachValues")} value=${feValues}
-          onChange=${(v) => setForEach(feParam, v)} placeholder=${t("rules.forEachValuesPlaceholder")} />
-        <p class="muted small">${t("rules.forEachHelp", { param: `{${feParam || "n"}}` })}</p>
-        ${feValues.length && !usesParam ? html`<p class="warn-text small">${t("rules.forEachUnused", { param: `{${feParam}}` })}</p>` : null}
-      </fieldset>
-      <div class="field"><label for="r-vars">${t("rules.varsCapture")}</label>
-        <${TagInput} inputId="r-vars" ariaLabel=${t("rules.varsCapture")} value=${r.vars_extract} onChange=${(v) => set("vars_extract", v)} options=${variables} placeholder=${t("rules.varNamePlaceholder")} />
-        <p class="muted small">${t("rules.varsHelp")}</p></div>
-      <div class="field"><label class="chk"><input type="checkbox" checked=${!!r.incident_enabled} onChange=${(e) => set("incident_enabled", e.target.checked)} /> ${t("rules.incidentEnabled")}</label>
-        <p class="muted small">${t("rules.incidentHelp")}</p></div>
-      ${r.incident_enabled ? html`
-        <div class="field"><label for="r-recovery">${t("rules.recoveryExpr")}</label>
-          <${ExprInput} id="r-recovery" rows="2" value=${r.recovery_expr || ""} variables=${variables}
-            onChange=${(v) => { set("recovery_expr", v); setRecValidation(null); }} placeholder="x < 75"
-            aria-invalid=${!!fieldErrs.msgFor("recovery_expr") || undefined}
-            aria-describedby=${fieldErrs.msgFor("recovery_expr") ? fieldErrorId("recovery_expr") : "r-recovery-help"} />
-          ${fieldErrs.msgFor("recovery_expr") ? html`<div class="error small" id=${fieldErrorId("recovery_expr")} role="alert">${fieldErrs.msgFor("recovery_expr")}</div>` : null}
-          ${(r.recovery_expr || "").trim() ? html`<div class="form-actions"><button type="button" class="btn sm" onClick=${() => validateExpr(r.recovery_expr, setRecValidation)}>${t("rules.validate")}</button></div>
-            <${ValidationResult} validation=${recValidation} />` : null}
-          ${!(r.recovery_expr || "").trim() && hysteresisFor(r.condition_expr) ? html`<div class="form-actions">
-            <button type="button" class="btn sm" onClick=${() => set("recovery_expr", hysteresisFor(r.condition_expr))}>
-              ${t("rules.recoverySuggest", { expr: hysteresisFor(r.condition_expr) })}</button></div>` : null}
-          <p id="r-recovery-help" class="muted small">${t("rules.recoveryHelp")}</p></div>
-        <div class="field"><label for="r-recovery-n">${t("rules.recoveryPersist")}</label>
-          <input id="r-recovery-n" type="number" min="1" max="10000" value=${r.recovery_persist_n || 1} onInput=${(e) => set("recovery_persist_n", e.target.value)} /></div>
-        <div class="field"><label for="r-resolved-tmpl">${t("rules.resolvedTemplate")}</label>
-          <select id="r-resolved-tmpl" value=${r.resolved_template_type || ""} onChange=${(e) => set("resolved_template_type", e.target.value)} aria-describedby="r-resolved-help">
-            <option value="">${t("rules.resolvedSilent")}</option>
-            ${resolvedOptions.map((o) => html`<option key=${o.type} value=${o.type}>${o.label}</option>`)}
+        <div class=${"field" + (fieldErrs.msgFor("template_type") ? " has-error" : "")}><label for="r-tmpl">${t("rules.templateTypeLabel")} <span class="req">*</span></label>
+          <select id="r-tmpl" value=${r.template_type} onChange=${(e) => set("template_type", e.target.value)}
+            aria-invalid=${fieldErrs.msgFor("template_type") ? "true" : undefined}
+            aria-describedby=${fieldErrs.msgFor("template_type") ? fieldErrorId("template_type") : "r-tmpl-help"}>
+            <option value="">${t("rules.chooseTemplate")}</option>
+            ${tmplOptions.map((o) => html`<option key=${o.type} value=${o.type}>${o.label}</option>`)}
           </select>
-          <p id="r-resolved-help" class="muted small">${t("rules.resolvedTemplateHelp")}</p></div>
-      ` : null}
-      <div class="field"><label for="r-inhib">${t("rules.inhibitedBy")}</label>
-        <${TagInput} inputId="r-inhib" ariaLabel=${t("rules.inhibitedByAria")} value=${r.inhibited_by} onChange=${(v) => set("inhibited_by", v)} options=${rules} placeholder=${t("rules.ruleNamePlaceholder")} />
-        ${unknownInhibitors.length ? html`<div class="small warn-text" role="status">${t("rules.unknownInhibitors", { names: unknownInhibitors.join(", ") })}</div>` : null}</div>
+          <div id="r-tmpl-help" class="hint">${t("rules.templateHelp")} <a href="#/templates">${t("rules.manageTemplates")}</a></div>
+          ${fieldErrs.msgFor("template_type") ? html`<div id=${fieldErrorId("template_type")} class="error small" role="alert">${fieldErrs.msgFor("template_type")}</div>` : null}</div>
 
-      <div class="field"><label for="r-sort">${t("rules.sortOrder")}</label><input id="r-sort" type="number" value=${r.sort_order} onInput=${(e) => set("sort_order", e.target.value)} /></div>
-      </details>
+        <div class=${"field" + (fieldErrs.msgFor("condition_expr") ? " has-error" : "")}><label for="r-cond">${t("rules.conditionLabel")} <span class="req">*</span></label>
+          <${ExprInput} id="r-cond" rows="3" value=${r.condition_expr} variables=${variables}
+            onChange=${(v) => { set("condition_expr", v); setValidation(null); }}
+            aria-invalid=${fieldErrs.msgFor("condition_expr") ? "true" : undefined}
+            aria-describedby=${fieldErrs.msgFor("condition_expr") ? fieldErrorId("condition_expr") : "r-cond-help"}
+            placeholder=${t("rules.conditionPlaceholder")} />
+          ${fieldErrs.msgFor("condition_expr") ? html`<div id=${fieldErrorId("condition_expr")} class="error small" role="alert">${fieldErrs.msgFor("condition_expr")}</div>` : null}
+          ${help("r-cond-help", "rules.conditionHelp")}
+          <div class="form-actions"><button type="button" class="btn sm" onClick=${validate}>${t("rules.validate")}</button>
+            ${validation?.referenced_vars?.length && whatIfText === null ? html`<button type="button" class="btn sm" onClick=${openWhatIf}>${t("rules.whatIfOpen")}</button>` : null}
+          </div>
+          <${ValidationResult} validation=${validation} />
+          ${whatIfText !== null ? html`<div class="what-if">
+            <label for="r-whatif">${t("rules.whatIfLabel")}</label>
+            <textarea id="r-whatif" class="mono" rows=${Math.min(8, whatIfText.split("\n").length)} value=${whatIfText}
+              onInput=${(e) => { setWhatIfText(e.target.value); setWhatIf(null); }} aria-describedby="r-whatif-help" spellcheck="false"></textarea>
+            <p id="r-whatif-help" class="muted small">${t("rules.whatIfHelp")}</p>
+            <div class="form-actions"><button type="button" class="btn sm" onClick=${runWhatIf}>${t("rules.whatIfRun")}</button></div>
+            <${ValidationResult} validation=${whatIf} />
+          </div>` : null}
+          <details class="cheat"><summary>${t("rules.cheatSheet")}</summary>
+            <table class="tbl small">${cheatRows().map(([fn, d]) => html`<tr key=${fn}><td class="mono">${fn}</td><td class="muted">${d}</td></tr>`)}</table>
+          </details>
+        </div>
+
+        <fieldset class="timing">
+          <legend>${t("rules.timingLegend")}</legend>
+          <p class="timing-sentence">${t("rules.timingHoldA")}
+            ${durationInputs("r-hold", hold, setHoldPart, t("rules.holdFor"), fieldErrs.attrs("persist_n"))}
+            ${t("rules.timingHoldB")}
+            <input id="r-evalint" type="number" min="1" class="inline-num" value=${r.eval_interval_sec} aria-label=${t("rules.evalInterval")}
+              onInput=${(e) => setInterval_(e.target.value)} ...${fieldErrs.attrs("eval_interval_sec")} />
+            ${t("rules.timingC")}</p>
+          <p class="hint">${Number(r.persist_n) > 1 ? t("rules.timingChecks", { count: r.persist_n, delay: fmtSeconds(delaySec) }) : t("rules.timingFirst")}
+            ${roundingNote(r.persist_n, Number(hold[0]) * unitSec(hold[1]), delaySec)}</p>
+          ${help("r-timing-help", "rules.timingHelp")}
+        </fieldset>
+
+        <div class="field"><label class="chk"><input type="checkbox" checked=${r.enabled} aria-describedby="r-enabled-help" onChange=${(e) => set("enabled", e.target.checked)} /> ${t("rules.enabled")}</label>
+          ${help("r-enabled-help", "rules.enabledHelp")}</div>
+
+        <div class="field"><label for="r-logic">${t("rules.triggerLogic")}</label>
+          <textarea id="r-logic" rows="4" value=${r.trigger_logic_md || ""} onInput=${(e) => set("trigger_logic_md", e.target.value)} aria-describedby="r-logic-help"></textarea>
+          ${help("r-logic-help", "rules.triggerLogicHelp")}</div>
+
+        ${!isNew ? html`<section class="rule-check" aria-labelledby="r-check-title">
+          <h3 id="r-check-title" class="section-title">${t("rules.checkTitle")}</h3>
+          <p class="muted small">${t("rules.checkIntro")}</p>
+          <div class="form-actions"><button type="button" class="btn sm" onClick=${evalNow} disabled=${busy}>${t("rules.evalNow")}</button></div>
+          ${evalRes ? html`<div class="result"><b>${t("rules.evalNowResult")}</b> ${evalRes.matched ? html`<span class="badge ok plain">${t("rules.matched")}</span>` : html`<span class="badge plain">${t("rules.noMatch")}</span>`}
+            ${evalRes.error ? html`<span class="error small">${evalRes.error}</span>` : null}
+            <div class="small muted">${t("rules.consecutiveMatches", { count: evalRes.consecutive_match_count })}</div><${Json} value=${evalRes.context} /></div>` : null}
+          <div class="field"><label for="r-testctx">${t("rules.testContextLabel")}</label>
+            <textarea id="r-testctx" rows="3" class="mono" value=${ctxText} onInput=${(e) => setCtxText(e.target.value)} aria-describedby="r-testctx-help"></textarea>
+            ${help("r-testctx-help", "rules.testFireHelp")}
+            <div class="form-actions"><button type="button" class="btn sm" onClick=${fillTestContext}>${t("rules.testFill")}</button>
+              <button type="button" class="btn sm" onClick=${testFire}>${t("rules.testFire")}</button></div></div>
+          ${fireRes ? html`<div class="result"><b>${t("rules.firedResult")}</b> ${fireRes.dispatched ? html`<span class="badge ok plain">${t("rules.dispatched")}</span>` : html`<span class="badge warning plain">${fireRes.suppressed_reason || t("rules.notDispatched")}</span>`}<${Json} value=${fireRes} /></div>` : null}
+
+          ${instanceRows?.length ? html`<details class="history" open><summary>${t("rules.instancesTitle", { count: instanceRows.length })}</summary>
+            <table class="tbl small"><thead><tr><th>${t("rules.instanceCol")}</th><th>${t("rules.colState")}</th><th>${t("rules.colLastTrue")}</th><th>${t("rules.historyDetail")}</th></tr></thead>
+              <tbody>${instanceRows.map((i) => html`<tr key=${i.instance}>
+                <td class="mono">${i.instance}</td>
+                <td>${i.run_state ? t("rules.state_" + i.run_state) : "—"}</td>
+                <td title=${fmtDateTime(i.last_true_at)}>${i.last_true_at ? fmtRelative(i.last_true_at) : "—"}</td>
+                <td class="muted small">${i.last_eval_error || ""}</td></tr>`)}</tbody></table>
+          </details>` : null}
+
+          <details class="history"><summary>${t("rules.historyTitle")}${rule.run_state ? html` · <span class="muted">${t("rules.state_" + rule.run_state)}</span>` : null}</summary>
+            ${history === null ? html`<p class="muted small">${t("common.loading")}</p>`
+              : history.length === 0 ? html`<p class="muted small">${t("rules.historyEmpty")}</p>`
+              : html`<table class="tbl small"><thead><tr><th>${t("rules.historyWhen")}</th><th>${t("rules.historyChange")}</th><th>${t("rules.historyDetail")}</th></tr></thead>
+                <tbody>${history.map((h, i) => html`<tr key=${i}>
+                  <td title=${fmtDateTime(h.at)}>${fmtRelative(h.at)}</td>
+                  <td>${h.instance ? html`<span class="mono">${h.instance}</span> · ` : null}${h.from_state ? t("rules.state_" + h.from_state) + " → " : ""}<b>${t("rules.state_" + h.to_state)}</b></td>
+                  <td class="muted small">${h.detail || ""}</td></tr>`)}</tbody></table>`}
+            <p class="muted small">${t("rules.historyHelp")}</p>
+          </details>
+        </section>` : null}
+      </div>
+
+      <div role="tabpanel" id="r-panel-advanced" aria-labelledby="r-tab-advanced" hidden=${tab !== "advanced"}>
+        <p class="muted small">${t("rules.advancedIntro")}</p>
+
+        <fieldset class="adv-group"><legend>${t("rules.incidentLegend")}</legend>
+          <div class="field"><label class="chk"><input type="checkbox" checked=${!!r.incident_enabled} aria-describedby="r-incident-help" onChange=${(e) => set("incident_enabled", e.target.checked)} /> ${t("rules.incidentEnabled")}</label>
+            ${help("r-incident-help", "rules.incidentHelp")}</div>
+          ${r.incident_enabled ? html`
+            <div class="field"><label for="r-recovery">${t("rules.recoveryExpr")}</label>
+              <${ExprInput} id="r-recovery" rows="2" value=${r.recovery_expr || ""} variables=${variables}
+                onChange=${(v) => { set("recovery_expr", v); setRecValidation(null); }} placeholder="x < 75"
+                aria-invalid=${!!fieldErrs.msgFor("recovery_expr") || undefined}
+                aria-describedby=${fieldErrs.msgFor("recovery_expr") ? fieldErrorId("recovery_expr") : "r-recovery-help"} />
+              ${fieldErrs.msgFor("recovery_expr") ? html`<div class="error small" id=${fieldErrorId("recovery_expr")} role="alert">${fieldErrs.msgFor("recovery_expr")}</div>` : null}
+              ${(r.recovery_expr || "").trim() ? html`<div class="form-actions"><button type="button" class="btn sm" onClick=${() => validateExpr(r.recovery_expr, setRecValidation)}>${t("rules.validate")}</button></div>
+                <${ValidationResult} validation=${recValidation} />` : null}
+              ${!(r.recovery_expr || "").trim() && hysteresisFor(r.condition_expr) ? html`<div class="form-actions">
+                <button type="button" class="btn sm" onClick=${() => set("recovery_expr", hysteresisFor(r.condition_expr))}>
+                  ${t("rules.recoverySuggest", { expr: hysteresisFor(r.condition_expr) })}</button></div>` : null}
+              ${help("r-recovery-help", "rules.recoveryHelp")}</div>
+            <div class="field"><span class="field-label" id="r-rec-hold-label">${t("rules.recoveryPersist")}</span>
+              <p class="timing-sentence" role="group" aria-labelledby="r-rec-hold-label">${t("rules.recoveryHoldA")}
+                ${durationInputs("r-rec-hold", recHold, setRecHoldPart, t("rules.recoveryPersist"), fieldErrs.attrs("recovery_persist_n"))}</p>
+              <p class="hint">${Number(r.recovery_persist_n) > 1 ? t("rules.recoveryChecks", { count: r.recovery_persist_n, delay: fmtSeconds(recDelaySec) }) : t("rules.recoveryFirst")}
+                ${roundingNote(r.recovery_persist_n, Number(recHold[0]) * unitSec(recHold[1]), recDelaySec)}</p></div>
+            <div class="field"><label for="r-resolved-tmpl">${t("rules.resolvedTemplate")}</label>
+              <select id="r-resolved-tmpl" value=${r.resolved_template_type || ""} onChange=${(e) => set("resolved_template_type", e.target.value)} aria-describedby="r-resolved-help">
+                <option value="">${t("rules.resolvedSilent")}</option>
+                ${resolvedOptions.map((o) => html`<option key=${o.type} value=${o.type}>${o.label}</option>`)}
+              </select>
+              ${help("r-resolved-help", "rules.resolvedTemplateHelp")}</div>
+          ` : null}
+        </fieldset>
+
+        <fieldset class="adv-group for-each"><legend>${t("rules.forEach")}</legend>
+          <p class="timing-sentence">${t("rules.forEachA")}
+            <input id="r-fe-param" class="inline-num mono" value=${feParam} aria-label=${t("rules.forEachParam")} maxlength="32"
+              onInput=${(e) => setForEach(e.target.value, feValues)} />
+            ${t("rules.forEachB")}</p>
+          <${TagInput} inputId="r-fe-values" ariaLabel=${t("rules.forEachValues")} value=${feValues}
+            onChange=${(v) => setForEach(feParam, v)} placeholder=${t("rules.forEachValuesPlaceholder")} />
+          ${help("r-fe-help", "rules.forEachHelp", { param: `{${feParam || "n"}}` })}
+          ${feValues.length && !usesParam ? html`<p class="warn-text small">${t("rules.forEachUnused", { param: `{${feParam}}` })}</p>` : null}
+        </fieldset>
+
+        <fieldset class="adv-group"><legend>${t("rules.moreLegend")}</legend>
+          <div class="field"><label for="r-vars">${t("rules.varsCapture")}</label>
+            <${TagInput} inputId="r-vars" ariaLabel=${t("rules.varsCapture")} value=${r.vars_extract} onChange=${(v) => set("vars_extract", v)} options=${variables} placeholder=${t("rules.varNamePlaceholder")} />
+            ${help("r-vars-help", "rules.varsHelp")}</div>
+          <div class="field"><label for="r-inhib">${t("rules.inhibitedBy")}</label>
+            <${TagInput} inputId="r-inhib" ariaLabel=${t("rules.inhibitedByAria")} value=${r.inhibited_by} onChange=${(v) => set("inhibited_by", v)} options=${rules} placeholder=${t("rules.ruleNamePlaceholder")} />
+            ${unknownInhibitors.length ? html`<div class="small warn-text" role="status">${t("rules.unknownInhibitors", { names: unknownInhibitors.join(", ") })}</div>` : null}
+            ${help("r-inhib-help", "rules.inhibitedHelp")}</div>
+          <div class="field"><label for="r-sort">${t("rules.sortOrder")}</label>
+            <input id="r-sort" type="number" value=${r.sort_order} aria-describedby="r-sort-help" onInput=${(e) => set("sort_order", e.target.value)} />
+            ${help("r-sort-help", "rules.sortHelp")}</div>
+        </fieldset>
+      </div>
 
       <div class="editor-actions">
         <button class="btn primary" onClick=${save} disabled=${busy}>${isNew ? t("rules.create") : t("rules.save")}</button>
         ${!isNew ? html`
-          <button class="btn" onClick=${evalNow} disabled=${busy}>${t("rules.evalNow")}</button>
           <button class="btn" onClick=${duplicate} disabled=${busy}>${t("rules.duplicate")}</button>
           <a class="btn" href=${`#/log?rule=${rule.id}`} onClick=${onClose}>${t("rules.history")}</a>
           <span class="spacer"></span>
           <button class="btn danger" onClick=${() => setConfirmDel(true)} disabled=${busy}>${t("rules.delete")}</button>` : null}
       </div>
-
-      ${!isNew ? html`<div class="field" style="margin-top:12px"><label for="r-testctx">${t("rules.testContextLabel")}</label>
-        <textarea id="r-testctx" rows="2" class="mono" value=${ctxText} onInput=${(e) => setCtxText(e.target.value)}></textarea>
-        <div class="form-actions"><button class="btn sm" onClick=${testFire}>${t("rules.testFire")}</button></div></div>` : null}
-
-      ${evalRes ? html`<div class="result"><b>${t("rules.evalNowResult")}</b> ${evalRes.matched ? html`<span class="badge ok plain">${t("rules.matched")}</span>` : html`<span class="badge plain">${t("rules.noMatch")}</span>`}
-        ${evalRes.error ? html`<span class="error small">${evalRes.error}</span>` : null}
-        <div class="small muted">${t("rules.consecutiveMatches", { count: evalRes.consecutive_match_count })}</div><${Json} value=${evalRes.context} /></div>` : null}
-      ${fireRes ? html`<div class="result"><b>${t("rules.firedResult")}</b> ${fireRes.dispatched ? html`<span class="badge ok plain">${t("rules.dispatched")}</span>` : html`<span class="badge warning plain">${fireRes.suppressed_reason || t("rules.notDispatched")}</span>`}<${Json} value=${fireRes} /></div>` : null}
-
-      ${instanceRows?.length ? html`<details class="history" open><summary>${t("rules.instancesTitle", { count: instanceRows.length })}</summary>
-        <table class="tbl small"><thead><tr><th>${t("rules.instanceCol")}</th><th>${t("rules.colState")}</th><th>${t("rules.colLastTrue")}</th><th>${t("rules.historyDetail")}</th></tr></thead>
-          <tbody>${instanceRows.map((i) => html`<tr key=${i.instance}>
-            <td class="mono">${i.instance}</td>
-            <td>${i.run_state ? t("rules.state_" + i.run_state) : "—"}</td>
-            <td title=${fmtDateTime(i.last_true_at)}>${i.last_true_at ? fmtRelative(i.last_true_at) : "—"}</td>
-            <td class="muted small">${i.last_eval_error || ""}</td></tr>`)}</tbody></table>
-      </details>` : null}
-
-      ${!isNew ? html`<details class="history"><summary>${t("rules.historyTitle")}${rule.run_state ? html` · <span class="muted">${t("rules.state_" + rule.run_state)}</span>` : null}</summary>
-        ${history === null ? html`<p class="muted small">${t("common.loading")}</p>`
-          : history.length === 0 ? html`<p class="muted small">${t("rules.historyEmpty")}</p>`
-          : html`<table class="tbl small"><thead><tr><th>${t("rules.historyWhen")}</th><th>${t("rules.historyChange")}</th><th>${t("rules.historyDetail")}</th></tr></thead>
-            <tbody>${history.map((h, i) => html`<tr key=${i}>
-              <td title=${fmtDateTime(h.at)}>${fmtRelative(h.at)}</td>
-              <td>${h.instance ? html`<span class="mono">${h.instance}</span> · ` : null}${h.from_state ? t("rules.state_" + h.from_state) + " → " : ""}<b>${t("rules.state_" + h.to_state)}</b></td>
-              <td class="muted small">${h.detail || ""}</td></tr>`)}</tbody></table>`}
-        <p class="muted small">${t("rules.historyHelp")}</p>
-      </details>` : null}
 
       <${KindHelp} help=${tnode("rules.help")} />
     </div>

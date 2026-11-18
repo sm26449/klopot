@@ -118,6 +118,21 @@ before touching `app/admin_ui/static/`.
 
 ### Rule editor
 
+- **Two tabs** (rules UI/UX review, `.audit/reports/2026-11-18-rules-ui-ux.md`):
+  **Basic** — name, short description (`trigger_summary`: the line under the
+  name in the list, searched), template, condition, when to send, enabled,
+  notes (`trigger_logic_md`) and, for a saved rule, **Check the rule** (Eval
+  now, Test fire with **Fill with live values**, instances, state history);
+  **Advanced** — incident and recovery, For each, captured values, inhibitors,
+  sort order. The Advanced tab counts the options in use (`advancedInUse`)
+  and opens by itself when the server rejects one of its fields (badge `!`).
+  Tabs are `role=tablist` with ← / → between them; both panels stay mounted
+  (`hidden`), so drafts and field errors survive a switch. Every field has a
+  help line (`aria-describedby`) saying what it does and when to use it.
+- A saved rule's header shows its state badge, last true, last fired and the
+  notification count; the raw evaluation message sits under it. The action
+  bar is Save / Duplicate / **Notifications** (the rule's log — "History"
+  before, confused with the state history) / Delete.
 - The template is a select of existing templates (icon, type, severity); a
   value that is not a template stays selectable, marked "not a template".
 - The condition and recovery fields are `ExprInput` (`lib/expr.js`): a list
@@ -144,13 +159,15 @@ before touching `app/admin_ui/static/`.
   rows carry the instance; the list shows `×N` next to the name. Validate and
   What-if send `for_each` (evaluated as the first value).
 - Incident mode stays opt-in; for a plain threshold (`x > 80`) the empty
-  recovery field offers a 5 % hysteresis (`x < 76`, `hysteresisFor`).
-- Timing reads as a sentence with the two numbers inline — "Send when the
-  condition holds for [N] checks in a row, checking every [S] seconds" — and a
-  hint with the resulting delay (`(N − 1) × S`).
-- Captured values, incidents / recovery, inhibitors and sort order sit in a
-  folded "More options"; it opens by itself when the rule uses one of them or
-  one has an error.
+  recovery field offers a 5 % hysteresis (`x < 76`, `hysteresisFor`). The
+  recovery confirmation is a duration like the trigger (`recovery_persist_n`
+  = `ceil(D / S) + 1`, same interval).
+- The list's **When to send** column reads "held 1m · every 30s" (`persistLabel`;
+  the title keeps the checks), the state column says `ok` for a rule that is
+  fine, and a one-rule group reads "1 rule".
+- Checkboxes and radios: 18 px, `accent-color: var(--accent)`, and every theme
+  sets `color-scheme`, so native controls follow light / dark (they were white
+  on the dark tables).
 
 ### Templates page
 

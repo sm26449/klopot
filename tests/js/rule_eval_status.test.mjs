@@ -25,7 +25,7 @@ test("rule badge separates a failing expression from a rule waiting for data", (
   assert.doesNotMatch(noData.cls, /warning/);
   assert.match(noData.title, /grid\.cc_power_w/);
 
-  assert.equal(badge({ enabled: true, eval_status: "ok" }).text, "on");
+  assert.equal(badge({ enabled: true, eval_status: "ok" }).text, "ok");   // "ok", not "on": one vocabulary with the run state (UX-R04)
   assert.equal(badge({ enabled: false, eval_status: "error", last_eval_error: "x" }).text, "off · last error");
   assert.equal(badge({ enabled: false, eval_status: "ok" }).text, "off");
 });
