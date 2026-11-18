@@ -110,6 +110,7 @@ pytest -k engine -m "not mysql"  # filter by name
 pytest -m "not mysql" --cov=app --cov-report=term-missing
 node --test tests/js/*.mjs      # admin-UI tests (after `npm ci`)
 scripts/e2e.sh                  # browser end-to-end tests (Docker + `npm ci`)
+scripts/rules_sim.sh            # rule engine end to end over a real MQTT broker (Docker)
 ```
 
 The browser tests in `tests/e2e/` run against a **fresh install** that
@@ -120,6 +121,15 @@ They check every page in English and Romanian (console errors, failed
 requests, leaked i18n keys, axe), a phone viewport (menu reachable, compact
 top bar, no sideways scroll, 44 px targets) and editor behaviour. See
 `docs/ADMIN_UI.md` "Testing the UI".
+
+`scripts/rules_sim.sh` starts the same kind of fresh install plus a Mosquitto
+broker, imports an MQTT input with variables, templates and rules, publishes
+messages in lock-step phases and checks every rule through the API: fires,
+`no_data`, staleness, computed and aggregate variables, incidents with
+hysteresis, inhibition, auto-disable, rendering. Run it after any change to
+the engine, the expression language, variables or the dispatcher; add a
+scenario (`SCENARIOS` in `scripts/rules_sim.py`) for every new rule feature.
+`SIM_ONLY=<substring>` narrows it, `--keep` leaves the stack up.
 
 The production daemon uses MySQL 8 only. SQLite is exclusively the fast,
 in-memory test harness; it is neither a runtime datastore nor a fallback.

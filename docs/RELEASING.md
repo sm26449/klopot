@@ -61,7 +61,7 @@ for `rc.2`+ what changed since the previous candidate. The admin UI's
 ## A release candidate
 
 ```bash
-scripts/check.sh --mysql && scripts/e2e.sh          # the full gate
+scripts/check.sh --mysql && scripts/e2e.sh && scripts/rules_sim.sh   # the full gate
 scripts/version.py set 1.3.0-rc.1
 .venv/bin/python scripts/dump_openapi.py && scripts/generate_sdks.sh
 scripts/check.sh --fast

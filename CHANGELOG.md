@@ -86,6 +86,9 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `scripts/rules_sim.sh`: the rule engine end to end over a real MQTT broker —
+  a throwaway install + Mosquitto, 19 scenarios (20 rules, 46 messages) checked
+  through the API. Part of the release-candidate gate.
 - Rule editor: **Trigger logic** (the rule's Markdown notes, `trigger_logic_md`,
   so far only settable through the API), **Validate** for the recovery
   condition, the recovery template picked from the list of templates, and a
