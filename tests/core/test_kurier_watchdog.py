@@ -22,10 +22,25 @@ MODEM_OK = {"kurier": "ok", "modem": {"registered": True, "signal_strength": -71
 
 @pytest.mark.parametrize(("channel", "name"), [
     ("sms_main", "klopot-sms_main"), ("SMS Kurier!", "klopot-sms-kurier"), ("---", "klopot-sms"),
-    ("x" * 80, "klopot-" + "x" * 57),
+    ("x" * 57, "klopot-" + "x" * 57),
 ])
 def test_watchdog_names_fit_kuriers_alphabet(channel, name):
     assert wd.watchdog_name(channel) == name
+
+
+def test_long_channel_names_never_share_a_watchdog():
+    """RV-08: both used to become klopot- + their first 57 characters."""
+    one, two = wd.watchdog_name("a" * 57 + "one"), wd.watchdog_name("a" * 57 + "two")
+    assert one != two
+    assert len(one) == len(two) == 64
+    assert one.startswith("klopot-" + "a" * 48)
+    assert wd.watchdog_name("a" * 57 + "one") == one, "stable"
+
+
+def test_modem_state_is_three_valued():
+    assert wd.modem_state({"registered": False}) == "down"
+    assert wd.modem_state({"registered": True}) == "up"
+    assert [wd.modem_state(m) for m in (None, {}, {"registered": None})] == ["unknown"] * 3
 
 
 def test_verdict_is_the_readiness_rule_plus_a_stuck_outbox():
@@ -147,3 +162,25 @@ async def test_a_validation_error_list_is_joined_by_its_messages(monkeypatch, ku
     FakeHTTP.install(monkeypatch, wd).will(reply(422, {"detail": detail}))
     result = await wd.ping(kurier.config, "klopot-sms_main", "ok", "")
     assert result.error == "HTTP 422: Input should be less than or equal to 604800; Field required"
+
+
+async def test_an_unknown_modem_state_does_not_close_the_episode(monkeypatch, db_session, kurier):
+    """RV-07: registered:null (or no modem block) resolved "modem offline"."""
+    off = {**MODEM_OK, "modem": {"registered": False}}
+    http = FakeHTTP.install(monkeypatch, wd).will(reply(200, off))
+    watchdog = wd.KurierWatchdog()
+    key = f"kurier:{kurier.id}:modem"
+    await watchdog.tick()
+    for unknown in ({**MODEM_OK, "modem": {"registered": None}}, {"kurier": "ok"}):
+        http.will(reply(200, unknown))
+        await watchdog.tick()
+        assert (await _incident(db_session, key)).resolved_at is None
+
+
+async def test_a_200_that_is_not_kuriers_json_is_a_failed_ping(monkeypatch, kurier):
+    """RV-07: a proxy page with 200 counted as reachable."""
+    import httpx
+    FakeHTTP.install(monkeypatch, wd).will(httpx.Response(200, text="<html>gateway</html>"))
+    result = await wd.ping(kurier.config, "klopot-sms_main", "ok", "")
+    assert not result.ok
+    assert "not JSON" in result.error

@@ -17,6 +17,7 @@ the network (IP-01), and its health — not its own pings — is what this sends
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import re
 from dataclasses import dataclass
@@ -44,9 +45,17 @@ SOURCE_KIND = "kurier"
 
 
 def watchdog_name(channel_name: str) -> str:
-    """``klopot-<channel>`` in Kurier's name alphabet ``[a-z0-9._-]``, ≤ 64."""
+    """``klopot-<channel>`` in Kurier's name alphabet ``[a-z0-9._-]``, ≤ 64.
+    A channel name too long for that is cut and ends in a hash of the whole
+    name, so two long names never share a watchdog (2026-11-18 review,
+    RV-08: both became ``klopot-`` + their first 57 characters). Names that
+    fit are unchanged, so existing watchdogs keep their identity."""
     slug = re.sub(r"[^a-z0-9._-]+", "-", channel_name.lower()).strip("-._") or "sms"
-    return f"klopot-{slug}"[:64]
+    name = f"klopot-{slug}"
+    if len(name) <= 64:
+        return name
+    digest = hashlib.sha256(channel_name.encode()).hexdigest()[:8]
+    return f"{name[:55].rstrip('-._')}-{digest}"
 
 
 def verdict(components: dict[str, ComponentHealth]) -> tuple[str, str]:
@@ -109,8 +118,12 @@ async def ping(config: dict[str, Any], name: str, status: str, detail: str) -> P
     try:
         body = r.json()
     except ValueError:
-        body = {}
-    modem = body.get("modem") if isinstance(body, dict) else None
+        body = None
+    if not isinstance(body, dict):
+        # A 200 that is not Kurier's JSON (a proxy's page): not an answer,
+        # so neither reachability nor the modem is confirmed (RV-07).
+        return PingResult(False, "HTTP 200 without a Kurier answer (not JSON)")
+    modem = body.get("modem")
     return PingResult(True, modem=modem if isinstance(modem, dict) else None)
 
 
@@ -122,9 +135,16 @@ def _detail_text(detail: Any) -> str:
     return str(detail or "")
 
 
-def modem_down(modem: dict[str, Any] | None) -> bool:
-    """Only an explicit ``registered: false`` — unknown is not down."""
-    return bool(modem) and modem.get("registered") is False   # type: ignore[union-attr]
+def modem_state(modem: dict[str, Any] | None) -> str:
+    """``down`` only for ``registered: false``, ``up`` only for ``true``;
+    anything else (no modem block, ``null``) is ``unknown`` and changes
+    nothing — before, unknown resolved an open "modem offline" (RV-07)."""
+    registered = (modem or {}).get("registered")
+    if registered is False:
+        return "down"
+    if registered is True:
+        return "up"
+    return "unknown"
 
 
 class KurierWatchdog:
@@ -188,11 +208,12 @@ class KurierWatchdog:
         self._failures[channel.id] = 0
         await fire_service.resolve_episode(session, source_key=unreachable, context=base)
         state = {**base, **{k: (result.modem or {}).get(k) for k in ("signal_strength", "sim_state", "operator")}}
-        if modem_down(result.modem):
+        modem_now = modem_state(result.modem)
+        if modem_now == "down":
             await fire_service.fire_episode(
                 session, source_kind=SOURCE_KIND, source_key=modem, name=f"Kurier modem offline ({channel.name})",
                 type="kurier_modem_down", context=state, source="klopot", resolved_type="kurier_modem_up")
-        else:
+        elif modem_now == "up":
             await fire_service.resolve_episode(session, source_key=modem, context=state)
 
 

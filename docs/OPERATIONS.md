@@ -83,7 +83,8 @@ channel ([Kurier](https://github.com/sm26449/kurier), the SMS gateway) whose
 the contract is Kurier's ADR-0001, Kurier 1.15+):
 
 - Every 60 s Klopot pings `POST {kurier_url}/api/watchdogs/klopot-<channel>/ping`
-  with `status: ok`, or `fail` and the reason when an essential component is
+  (a channel name too long for Kurier's 64 characters is cut and ends in a
+  hash of the whole name, so two channels never share a watchdog) with `status: ok`, or `fail` and the reason when an essential component is
   down — the database, the delivery worker, the rule engine — or the engine
   is stuck (`engine_stalled`), or the outbox is not draining. The ping runs in
   its own task, never in the rule engine.
@@ -95,8 +96,10 @@ the contract is Kurier's ADR-0001, Kurier 1.15+):
 - The answer carries Kurier's modem state. Klopot raises
   `kurier_unreachable` after three failed pings in a row (the error says why:
   `HTTP 401` wrong key, `HTTP 422` a bad setting, `HTTP 404` a Kurier without
-  watchdogs) and `kurier_modem_down` when the modem is not registered — or
-  when Kurier has not reached the router for three minutes. Both are episodes
+  watchdogs, or a `200` that is not Kurier's JSON) and `kurier_modem_down`
+  when the modem reports `registered: false` — or when Kurier has not reached
+  the router for three minutes. The modem episode closes only on
+  `registered: true`; an answer without the modem state changes nothing. Both are episodes
   with a recovery (`kurier_reachable`, `kurier_modem_up`), in the built-in
   self-monitoring templates, routed to `ui_default` on install. **Route them
   to Telegram or push too** — not only to SMS, the path they report broken.
