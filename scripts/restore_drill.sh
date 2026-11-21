@@ -75,10 +75,14 @@ docker run -d --name "$NAME" --rm \
     "$DRILL_IMAGE" >/dev/null
 
 for i in $(seq 1 60); do
-    # A real query with the password, not `mysqladmin ping`: ping also succeeds
-    # against the image's init-time server, before root's password exists, and
-    # the restore then fails with "Access denied" — reported as a corrupt dump.
-    if docker exec "$NAME" mysql -uroot -pdrill -e 'SELECT 1' >/dev/null 2>&1; then
+    # A real query with the password, over TCP. The image first runs a
+    # temporary init server (socket only, --skip-networking), sets root's
+    # password, then stops it and starts the real one: `mysqladmin ping` also
+    # answers the init server before the password exists ("Access denied"), and
+    # a socket query can reach the init server just before it stops ("Can't
+    # connect … mysqld.sock"). Both were reported as a corrupt dump
+    # (2026-09…11, 2026-11-22). Only the real server listens on TCP.
+    if docker exec "$NAME" mysql --protocol=TCP -h127.0.0.1 -uroot -pdrill -e 'SELECT 1' >/dev/null 2>&1; then
         break
     fi
     [ "$i" -lt 60 ] || fail "throwaway MySQL never became ready (120s)"
