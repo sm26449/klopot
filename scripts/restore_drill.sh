@@ -49,6 +49,9 @@ report() { # $1 = ok|failed, $2 = detail message
     fi
 }
 
+# One removal, by the trap: `docker run --rm` too meant two removals racing,
+# which breaks BuildKit's cache on this host's Docker (scripts/_docker_build.sh;
+# Codex review 2026-11-22, CW-11).
 cleanup() {
     docker rm -f "$NAME" >/dev/null 2>&1 || true
 }
@@ -68,7 +71,7 @@ echo "== drill backup: $LATEST (age ${AGE_H}h)"
 
 # ── 2. Throwaway MySQL ─────────────────────────────────────────────
 echo "== starting throwaway $DRILL_IMAGE container ($NAME)"
-docker run -d --name "$NAME" --rm \
+docker run -d --name "$NAME" \
     --network none \
     --tmpfs /var/lib/mysql \
     -e MYSQL_ROOT_PASSWORD=drill \
