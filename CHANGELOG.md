@@ -208,6 +208,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **The restore drill no longer reports a good dump as corrupt.** Its
+  readiness query could reach the mysql image's temporary init server just
+  before it stopped; the restore then failed with "Can't connect …
+  mysqld.sock" (the weekly drill failed this way from September to
+  November). It now waits for the real server over TCP, and removes its
+  throwaway container once.
 - **Checkboxes follow the theme**: every theme sets `color-scheme` and
   checkboxes / radios use the brand accent at 18 px — they were white squares
   on dark tables, and the text-field style (padding, full width) applied to
