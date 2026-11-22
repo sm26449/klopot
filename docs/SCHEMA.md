@@ -440,6 +440,7 @@ CREATE TABLE notifications_log (
     -- Audit / observability
     source VARCHAR(191),                 -- "node-red", "internal-engine", caller name
     trace_id VARCHAR(40),
+    explain JSON,                        -- the decision when it fired (0047): gates, channels, rule values
     FOREIGN KEY (template_id) REFERENCES templates(id) ON DELETE SET NULL,
     FOREIGN KEY (rule_id) REFERENCES rules(id) ON DELETE SET NULL,
     INDEX idx_log_fired (fired_at DESC),

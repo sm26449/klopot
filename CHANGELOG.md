@@ -55,6 +55,10 @@ adheres to [Semantic Versioning](https://semver.org/).
 - The image runs gunicorn with `uvicorn_worker.UvicornWorker` (the
   `uvicorn-worker` package): `uvicorn.workers` is deprecated. A custom command
   that names the old worker class still works, with a deprecation warning.
+- **Migration 0047** adds the nullable column `notifications_log.explain`
+  (since rc.12; ~1 s, no backfill). 1.3.0 does not use it: it is there so an
+  install upgraded to 1.4 — which records why each alert was sent or held in
+  it — can go back to 1.3.0 (a release only starts on a schema it knows).
 
 ### Changed
 

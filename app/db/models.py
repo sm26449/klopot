@@ -445,6 +445,10 @@ class NotificationLog(Base):
     # origin for a 64-char name can't overflow the column (audit F26).
     source: Mapped[str | None] = mapped_column(String(191))
     trace_id: Mapped[str | None] = mapped_column(String(40))
+    # The decision recorded when it fired (stage C2, migration 0047): gates
+    # and what each saw, channels routed / kept, the rule's condition and the
+    # values it read. NULL for rows before 0047. GET /v1/log/{id}/trace.
+    explain: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     # Canonical hash of the fire context — persisted and indexed so
     # idempotency dedup matches by context in SQL instead of scanning the
     # last few rows and missing an in-window duplicate (audit F24).
